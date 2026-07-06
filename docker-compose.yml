@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vabot-db
+    environment:
+      POSTGRES_USER: vabot
+      POSTGRES_PASSWORD: vabot123
+      POSTGRES_DB: vabot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vabot -d vabot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: vabot-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://vabot:vabot123@db:5432/vabot
+      SECRET_KEY: vabot-secret-key-change-in-production
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      UPLOAD_DIR: /app/uploads
+      FAISS_DIR: /app/faiss_data
+    volumes:
+      - upload_data:/app/uploads
+      - faiss_data:/app/faiss_data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    container_name: vabot-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  upload_data:
+  faiss_data:

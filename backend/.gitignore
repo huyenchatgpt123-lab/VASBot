@@ -1,0 +1,9 @@
+backend/
+__pycache__/
+*.py[cod]
+.env
+uploads/
+faiss_data/
+*.egg-info/
+dist/
+build/
