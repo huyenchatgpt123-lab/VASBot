@@ -128,6 +128,20 @@ def update_task(
     return {"message": "Cập nhật thành công"}
 
 
+@router.delete("/by-document")
+def delete_tasks_by_document(
+    document_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền xóa")
+
+    service = TaskService(db)
+    count = service.delete_tasks_by_document(document_id)
+    return {"message": f"Đã xóa {count} công việc", "count": count}
+
+
 @router.delete("/{task_id}")
 def delete_task(
     task_id: int,

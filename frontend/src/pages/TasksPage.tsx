@@ -150,10 +150,24 @@ export default function TasksPage() {
     }
   };
 
-  const handleDelete = async (taskId: number) => {
-    if (!confirm('Bạn có chắc muốn xóa công việc này?')) return;
+  const handleDelete = async (taskId: number, assigneeName?: string) => {
+    const msg = assigneeName
+      ? `Xóa công việc của ${assigneeName}?`
+      : 'Bạn có chắc muốn xóa công việc này?';
+    if (!confirm(msg)) return;
     try {
       await tasksApi.delete(taskId);
+      loadTasks();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Không thể xóa');
+    }
+  };
+
+  const handleDeleteDocument = async (docGroup: DocumentGroup) => {
+    const msg = `Bạn có chắc muốn xóa toàn bộ ${docGroup.totalCount} công việc trong "${docGroup.document_name}"?\nHành động không thể hoàn tác.`;
+    if (!confirm(msg)) return;
+    try {
+      await tasksApi.deleteByDocument(docGroup.document_id);
       loadTasks();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể xóa');
@@ -290,26 +304,37 @@ export default function TasksPage() {
           {documentGroups.map((docGroup) => (
             <div key={docGroup.document_name} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               {/* Document header (Tầng 1) */}
-              <button
-                onClick={() => toggleDoc(docGroup.document_name)}
-                className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-gray-400 text-xs">
-                    {expandedDocs.has(docGroup.document_name) ? '▼' : '▶'}
-                  </span>
-                  <span className="font-semibold text-gray-800 text-sm">📁 {docGroup.document_name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-green-500 rounded-full transition-all"
-                      style={{ width: `${docGroup.totalCount > 0 ? (docGroup.completedCount / docGroup.totalCount) * 100 : 0}%` }}
-                    />
+              <div className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                <button
+                  onClick={() => toggleDoc(docGroup.document_name)}
+                  className="flex-1 flex items-center justify-between min-w-0"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-gray-400 text-xs shrink-0">
+                      {expandedDocs.has(docGroup.document_name) ? '▼' : '▶'}
+                    </span>
+                    <span className="font-semibold text-gray-800 text-sm truncate">📁 {docGroup.document_name}</span>
                   </div>
-                  <span className="text-xs text-gray-500 w-10 text-right">{docGroup.completedCount}/{docGroup.totalCount}</span>
-                </div>
-              </button>
+                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                    <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-green-500 rounded-full transition-all"
+                        style={{ width: `${docGroup.totalCount > 0 ? (docGroup.completedCount / docGroup.totalCount) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-10 text-right">{docGroup.completedCount}/{docGroup.totalCount}</span>
+                  </div>
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleDeleteDocument(docGroup)}
+                    className="ml-3 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    title="Xóa toàn bộ kế hoạch"
+                  >
+                    🗑
+                  </button>
+                )}
+              </div>
 
               {/* Task groups (Tầng 2 + 3) */}
               {expandedDocs.has(docGroup.document_name) && (
@@ -346,13 +371,22 @@ export default function TasksPage() {
                               <span>{STATUS_ICONS[effectiveStatus] || '❌'}</span>
                               <span className="max-w-[120px] truncate">{item.assignee_name}</span>
                               {isAdmin && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setEditingTask({ ...item }); }}
-                                  className="ml-1 text-gray-400 hover:text-blue-600"
-                                  title="Sửa"
-                                >
-                                  ✏️
-                                </button>
+                                <>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditingTask({ ...item }); }}
+                                    className="ml-1 text-gray-400 hover:text-blue-600"
+                                    title="Sửa"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.assignee_name); }}
+                                    className="ml-0.5 text-gray-400 hover:text-red-600"
+                                    title="Xóa"
+                                  >
+                                    ×
+                                  </button>
+                                </>
                               )}
                               {changingStatus === item.id && (
                                 <span className="animate-spin text-xs">⟳</span>

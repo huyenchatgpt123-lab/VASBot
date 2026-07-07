@@ -175,6 +175,11 @@ class TaskService:
     def delete_task(self, task_id: int) -> bool:
         return self.repo.delete(task_id)
 
+    def delete_tasks_by_document(self, document_id: Optional[int]) -> int:
+        if document_id is not None:
+            return self.repo.delete_by_document(document_id)
+        return self.repo.delete_manual()
+
     def get_assignee_names(self) -> List[str]:
         return self.repo.get_all_assignee_names()
 

@@ -55,6 +55,11 @@ class TaskRepository:
         self.db.commit()
         return count
 
+    def delete_manual(self) -> int:
+        count = self.db.query(Task).filter(Task.document_id.is_(None)).delete()
+        self.db.commit()
+        return count
+
     def count_by_document(self, document_id: int) -> int:
         return self.db.query(Task).filter(Task.document_id == document_id).count()
 

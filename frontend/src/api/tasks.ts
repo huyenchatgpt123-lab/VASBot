@@ -83,4 +83,11 @@ export const tasksApi = {
     const res = await api.delete(`/tasks/${taskId}`);
     return res.data;
   },
+
+  deleteByDocument: async (documentId: number | null) => {
+    const res = await api.delete('/tasks/by-document', {
+      params: { document_id: documentId },
+    });
+    return res.data;
+  },
 };
