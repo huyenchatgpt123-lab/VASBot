@@ -131,3 +131,6 @@ class TaskRepository:
     def get_all_assignee_names(self) -> List[str]:
         results = self.db.query(Task.assignee_name).distinct().all()
         return [r[0] for r in results if r[0]]
+
+    def get_unassigned(self) -> List[Task]:
+        return self.db.query(Task).filter(Task.assignee_id.is_(None)).all()

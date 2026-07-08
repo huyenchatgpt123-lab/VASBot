@@ -54,7 +54,9 @@ export default function TasksPage() {
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
-  const [newTask, setNewTask] = useState({ title: '', assignee_name: '', deadline: '', note: '' });
+  const [newTask, setNewTask] = useState({ title: '', assignee_name: '', deadline: '', note: '', document_id: null as number | null });
+  const [isAddingPerson, setIsAddingPerson] = useState(false);
+  const [rematching, setRematching] = useState(false);
   const [newTaskCount, setNewTaskCount] = useState(0);
   const [showNotif, setShowNotif] = useState(true);
   const [changingStatus, setChangingStatus] = useState<number | null>(null);
@@ -185,13 +187,47 @@ export default function TasksPage() {
         assignee_name: newTask.assignee_name,
         deadline: newTask.deadline || undefined,
         note: newTask.note || undefined,
+        document_id: newTask.document_id ?? undefined,
       });
       setShowCreateModal(false);
-      setNewTask({ title: '', assignee_name: '', deadline: '', note: '' });
+      setIsAddingPerson(false);
+      setNewTask({ title: '', assignee_name: '', deadline: '', note: '', document_id: null });
       loadTasks();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể tạo');
     }
+  };
+
+  const handleRematch = async () => {
+    if (!confirm('Cập nhật phân công cho các công việc chưa gán tài khoản?')) return;
+    setRematching(true);
+    try {
+      const res = await tasksApi.rematchAssignees();
+      alert(`Đã gán ${res.matched}/${res.total_unassigned} công việc chưa phân công`);
+      loadTasks();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Không thể cập nhật phân công');
+    } finally {
+      setRematching(false);
+    }
+  };
+
+  const openCreateModal = (documentId: number | null = null) => {
+    setIsAddingPerson(false);
+    setNewTask({ title: '', assignee_name: '', deadline: '', note: '', document_id: documentId });
+    setShowCreateModal(true);
+  };
+
+  const openAddPersonModal = (taskGroup: TaskGroup, documentId: number | null) => {
+    setIsAddingPerson(true);
+    setNewTask({
+      title: taskGroup.title,
+      assignee_name: '',
+      deadline: taskGroup.deadline ? taskGroup.deadline.split('T')[0] : '',
+      note: '',
+      document_id: documentId,
+    });
+    setShowCreateModal(true);
   };
 
   const handleEditSave = async () => {
@@ -235,8 +271,8 @@ export default function TasksPage() {
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Công việc</h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -245,8 +281,8 @@ export default function TasksPage() {
         </div>
         {isAdmin && (
           <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            onClick={() => openCreateModal(null)}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium w-full sm:w-auto"
           >
             + Thêm công việc
           </button>
@@ -271,7 +307,7 @@ export default function TasksPage() {
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         >
           {STATUS_OPTIONS.map((s) => (
             <option key={s.value} value={s.value}>{s.label}</option>
@@ -282,7 +318,7 @@ export default function TasksPage() {
           <select
             value={assigneeFilter}
             onChange={(e) => { setAssigneeFilter(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           >
             <option value="">Tất cả người nhận</option>
             {assignees.map((name) => (
@@ -292,6 +328,16 @@ export default function TasksPage() {
         )}
 
         <span className="px-3 py-2 text-sm text-gray-500">Tổng: {total} công việc</span>
+
+        {isAdmin && (
+          <button
+            onClick={handleRematch}
+            disabled={rematching}
+            className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            {rematching ? 'Đang cập nhật...' : 'Cập nhật phân công'}
+          </button>
+        )}
       </div>
 
       {/* Task list grouped */}
@@ -398,15 +444,7 @@ export default function TasksPage() {
                         {/* Admin: add person to this task */}
                         {isAdmin && (
                           <button
-                            onClick={() => {
-                              setNewTask({
-                                title: taskGroup.title,
-                                assignee_name: '',
-                                deadline: taskGroup.deadline ? taskGroup.deadline.split('T')[0] : '',
-                                note: '',
-                              });
-                              setShowCreateModal(true);
-                            }}
+                            onClick={() => openAddPersonModal(taskGroup, docGroup.document_id)}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-xs text-gray-400 hover:text-primary-600 hover:border-primary-400 transition-colors"
                             title="Thêm người"
                           >
@@ -436,13 +474,20 @@ export default function TasksPage() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h2 className="text-lg font-bold mb-4">Thêm công việc</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-md shadow-xl mx-auto">
+            <h2 className="text-lg font-bold mb-4">{isAddingPerson ? 'Thêm người' : 'Thêm công việc'}</h2>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tên công việc *</label>
-                <input type="text" value={newTask.title} onChange={(e) => setNewTask({ ...newTask, title: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" placeholder="Nhập tên công việc" />
+                <input
+                  type="text"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                  readOnly={isAddingPerson}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 ${isAddingPerson ? 'bg-gray-50 text-gray-600' : ''}`}
+                  placeholder="Nhập tên công việc"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Người được giao *</label>
@@ -458,8 +503,8 @@ export default function TasksPage() {
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-5">
-              <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Hủy</button>
-              <button onClick={handleCreate} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium">Tạo</button>
+              <button onClick={() => { setShowCreateModal(false); setIsAddingPerson(false); }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Hủy</button>
+              <button onClick={handleCreate} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium">{isAddingPerson ? 'Thêm' : 'Tạo'}</button>
             </div>
           </div>
         </div>
@@ -467,8 +512,8 @@ export default function TasksPage() {
 
       {/* Edit Modal */}
       {editingTask && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-md shadow-xl mx-auto">
             <h2 className="text-lg font-bold mb-4">Chỉnh sửa</h2>
             <div className="space-y-3">
               <div>

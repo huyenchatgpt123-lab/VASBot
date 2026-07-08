@@ -167,8 +167,8 @@ export default function DocumentsPage() {
   const hasFilters = filterDept || filterMonth || filterYear || search;
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Tài liệu</h1>
           <p className="text-gray-500 mt-1">Quản lý tài liệu nội bộ ({total} tài liệu)</p>
@@ -177,7 +177,7 @@ export default function DocumentsPage() {
           <button
             onClick={openUploadModal}
             disabled={uploading}
-            className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
+            className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 w-full sm:w-auto"
           >
             {uploading ? 'Đang upload...' : '+ Upload tài liệu'}
           </button>
@@ -191,7 +191,7 @@ export default function DocumentsPage() {
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Tìm kiếm theo tên..."
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none w-56"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none w-full sm:w-56"
         />
         <select
           value={filterDept}
@@ -246,7 +246,49 @@ export default function DocumentsPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile card view */}
+          <div className="md:hidden divide-y divide-gray-200">
+            {documents.map((doc) => (
+              <div key={doc.id} className="p-4">
+                <p className="text-sm font-medium text-gray-900 break-words mb-2">{doc.filename}</p>
+                <div className="grid grid-cols-2 gap-1 text-xs text-gray-500 mb-3">
+                  <span>Tổ: {doc.department || '—'}</span>
+                  <span>Tháng: {doc.month || '—'}</span>
+                  <span>Năm học: {doc.school_year || '—'}</span>
+                  <span>Trang: {doc.page_count}</span>
+                  <span className="col-span-2">
+                    {new Date(doc.created_at).toLocaleDateString('vi-VN')} · {doc.uploader_name || '—'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handlePreview(doc.id)}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    Xem
+                  </button>
+                  <button
+                    onClick={() => handleDownload(doc.id)}
+                    className="text-sm text-green-600 hover:text-green-700 font-medium"
+                  >
+                    Tải
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      className="text-sm text-red-600 hover:text-red-700 font-medium"
+                    >
+                      Xóa
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -314,11 +356,12 @@ export default function DocumentsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50">
             <p className="text-sm text-gray-500">
               Trang {page} / {totalPages} ({total} tài liệu)
             </p>
@@ -344,8 +387,8 @@ export default function DocumentsPage() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 mx-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-4 sm:p-6 mx-auto">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload tài liệu</h2>
 
             <div className="space-y-4">

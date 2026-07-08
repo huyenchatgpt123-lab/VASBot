@@ -4,13 +4,13 @@ export default function SettingsPage() {
   const { user } = useAuth();
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Cài đặt</h1>
         <p className="text-gray-500 mt-1">Thông tin tài khoản</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm max-w-lg">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 shadow-sm max-w-lg w-full">
         <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold text-2xl">
             {user?.name?.charAt(0).toUpperCase()}

@@ -92,22 +92,22 @@ export default function DashboardPage() {
 
   if (loading && !stats) {
     return (
-      <div className="p-6 flex items-center justify-center h-full">
+      <div className="p-4 sm:p-6 flex items-center justify-center h-full">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
       </div>
     );
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-500 mt-1">Thống kê hoạt động hệ thống</p>
       </div>
 
       {/* Time Filter */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="flex gap-1.5">
+      <div className="mb-6 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+        <div className="flex flex-wrap gap-1.5">
           {PRESETS.map((p) => (
             <button
               key={p.key}
@@ -122,7 +122,7 @@ export default function DashboardPage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 ml-2">
+        <div className="flex flex-wrap items-center gap-2 sm:ml-2">
           <span className="text-sm text-gray-500">Từ:</span>
           <input
             type="date"

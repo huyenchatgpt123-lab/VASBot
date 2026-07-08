@@ -11,6 +11,7 @@ from app.schemas.auth import UserResponse, UserCreate, UserUpdate
 from app.schemas.dashboard import DashboardResponse
 from app.services.dashboard_service import DashboardService
 from app.services.auth_service import AuthService
+from app.services.task_service import TaskService
 from app.repositories.user_repository import UserRepository
 from app.utils.auth import require_admin, hash_password
 from app.models.user import User
@@ -50,6 +51,7 @@ def create_user(
     service = AuthService(db)
     try:
         user = service.create_user(data)
+        TaskService(db).rematch_assignees(user_id=user.id)
         return UserResponse.model_validate(user)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -151,7 +153,8 @@ async def import_users_excel(
 
         try:
             user_data = UserCreate(name=name, email=email, password=password, role=role, department=department)
-            service.create_user(user_data)
+            new_user = service.create_user(user_data)
+            TaskService(db).rematch_assignees(user_id=new_user.id)
             created += 1
         except Exception as e:
             errors.append(f"Dòng {i}: {str(e)}")

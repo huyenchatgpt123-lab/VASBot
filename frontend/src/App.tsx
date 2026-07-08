@@ -10,6 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
 import TasksPage from './pages/TasksPage';
+import FeedbackPage from './pages/FeedbackPage';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/feedback" element={<FeedbackPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route
               path="/dashboard"

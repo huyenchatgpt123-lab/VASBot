@@ -56,6 +56,18 @@ def get_assignees(
     return {"assignees": names}
 
 
+@router.post("/rematch-assignees")
+def rematch_assignees(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền cập nhật phân công")
+
+    service = TaskService(db)
+    return service.rematch_assignees()
+
+
 @router.patch("/{task_id}/status")
 def update_task_status(
     task_id: int,

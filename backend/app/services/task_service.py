@@ -183,6 +183,16 @@ class TaskService:
     def get_assignee_names(self) -> List[str]:
         return self.repo.get_all_assignee_names()
 
+    def rematch_assignees(self, user_id: Optional[int] = None) -> Dict[str, int]:
+        tasks = self.repo.get_unassigned()
+        matched = 0
+        for task in tasks:
+            uid = self._match_user(task.assignee_name)
+            if uid and (user_id is None or uid == user_id):
+                self.repo.update(task.id, assignee_id=uid)
+                matched += 1
+        return {"matched": matched, "total_unassigned": len(tasks)}
+
     def _format_tasks(self, tasks: List[Task]) -> List[Dict]:
         result = []
         for task in tasks:

@@ -90,4 +90,9 @@ export const tasksApi = {
     });
     return res.data;
   },
+
+  rematchAssignees: async (): Promise<{ matched: number; total_unassigned: number }> => {
+    const res = await api.post('/tasks/rematch-assignees');
+    return res.data;
+  },
 };
