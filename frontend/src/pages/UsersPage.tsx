@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { adminApi } from '../api/admin';
+import { useAuth } from '../context/AuthContext';
 import { User } from '../types';
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -11,9 +13,44 @@ export default function UsersPage() {
   const [importResult, setImportResult] = useState<{ message: string; errors: string[] } | null>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   useEffect(() => {
     loadUsers();
   }, []);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search, roleFilter, deptFilter]);
+
+  const departments = useMemo(
+    () => [...new Set(users.map((u) => u.department).filter(Boolean) as string[])].sort(),
+    [users],
+  );
+
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return users.filter((u) => {
+      const matchSearch =
+        !q ||
+        [u.name, u.email, u.nickname].some((v) => v?.toLowerCase().includes(q));
+      const matchRole = !roleFilter || u.role === roleFilter;
+      const matchDept = !deptFilter || u.department === deptFilter;
+      return matchSearch && matchRole && matchDept;
+    });
+  }, [users, search, roleFilter, deptFilter]);
+
+  const selectableUsers = useMemo(
+    () => filteredUsers.filter((u) => u.id !== currentUser?.id),
+    [filteredUsers, currentUser?.id],
+  );
+
+  const allSelectableSelected =
+    selectableUsers.length > 0 && selectableUsers.every((u) => selectedIds.has(u.id));
 
   const loadUsers = async () => {
     try {
@@ -30,6 +67,29 @@ export default function UsersPage() {
     setForm({ name: '', nickname: '', email: '', password: '', role: 'user', department: '' });
     setEditingUser(null);
     setShowForm(false);
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setRoleFilter('');
+    setDeptFilter('');
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelectableSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableUsers.map((u) => u.id)));
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -94,9 +154,44 @@ export default function UsersPage() {
     if (!confirm('Bạn có chắc muốn xóa người dùng này?')) return;
     try {
       await adminApi.deleteUser(id);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       loadUsers();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Xóa thất bại.');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+
+    const names = users
+      .filter((u) => ids.includes(u.id))
+      .map((u) => u.name)
+      .join(', ');
+
+    if (!confirm(`Xóa ${ids.length} người dùng đã chọn?\n\n${names}`)) return;
+
+    setBulkDeleting(true);
+    const failed: string[] = [];
+    for (const id of ids) {
+      const u = users.find((user) => user.id === id);
+      try {
+        await adminApi.deleteUser(id);
+      } catch (err: any) {
+        failed.push(`${u?.name || `ID ${id}`}: ${err.response?.data?.detail || 'Lỗi không xác định'}`);
+      }
+    }
+    setBulkDeleting(false);
+    setSelectedIds(new Set());
+    loadUsers();
+
+    if (failed.length) {
+      alert(`Một số người dùng không xóa được:\n${failed.join('\n')}`);
     }
   };
 
@@ -114,6 +209,8 @@ export default function UsersPage() {
       if (excelInputRef.current) excelInputRef.current.value = '';
     }
   };
+
+  const hasActiveFilters = search || roleFilter || deptFilter;
 
   return (
     <div className="p-4 sm:p-6">
@@ -145,7 +242,6 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {/* Import result notification */}
       {importResult && (
         <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
           <p className="text-sm font-medium text-green-800">{importResult.message}</p>
@@ -162,7 +258,6 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Create / Edit form */}
       {showForm && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
           <h2 className="text-lg font-semibold mb-4">
@@ -229,72 +324,173 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Excel format hint */}
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
         File Excel cần có các cột theo thứ tự: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh</strong>. Dòng đầu tiên là tiêu đề.
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      {/* Filters */}
+      <div className="mb-4 flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center">
+        <input
+          type="text"
+          placeholder="Tìm theo tên, email, biệt danh..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full sm:w-64 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+        />
+        <select
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+          className="w-full sm:w-auto px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+        >
+          <option value="">Tất cả vai trò</option>
+          <option value="admin">Admin</option>
+          <option value="user">User</option>
+        </select>
+        <select
+          value={deptFilter}
+          onChange={(e) => setDeptFilter(e.target.value)}
+          className="w-full sm:w-auto px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+        >
+          <option value="">Tất cả phòng ban</option>
+          {departments.map((dept) => (
+            <option key={dept} value={dept}>{dept}</option>
+          ))}
+        </select>
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Xóa bộ lọc
+          </button>
+        )}
+        {!loading && (
+          <span className="text-sm text-gray-500 sm:ml-auto">
+            Hiển thị {filteredUsers.length} / {users.length} người dùng
+          </span>
+        )}
+      </div>
+
+      {/* Bulk actions */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <span className="text-sm font-medium text-red-800">
+            Đã chọn: {selectedIds.size}
+          </span>
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkDeleting}
+            className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg font-medium hover:bg-red-700 disabled:opacity-50"
+          >
+            {bulkDeleting ? 'Đang xóa...' : 'Xóa đã chọn'}
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-sm text-red-600 hover:underline"
+          >
+            Bỏ chọn
+          </button>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
         {loading ? (
           <div className="p-12 text-center text-gray-500">Đang tải...</div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="p-12 text-center text-gray-500">
+            {hasActiveFilters ? 'Không tìm thấy người dùng phù hợp.' : 'Chưa có người dùng.'}
+          </div>
         ) : (
-          <table className="w-full">
+          <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Họ tên</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Biệt danh</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Vai trò</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Phòng ban</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Ngày tạo</th>
-                <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase">Thao tác</th>
+                <th className="w-10 px-4 py-3">
+                  {selectableUsers.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={allSelectableSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      title="Chọn tất cả"
+                    />
+                  )}
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Họ tên</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Biệt danh</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Vai trò</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Phòng ban</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Ngày tạo</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{user.name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {user.nickname ? (
-                      user.nickname
-                    ) : (
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        Chưa có biệt danh
+              {filteredUsers.map((user) => {
+                const isSelf = user.id === currentUser?.id;
+                return (
+                  <tr key={user.id} className={`hover:bg-gray-50 ${selectedIds.has(user.id) ? 'bg-primary-50/40' : ''}`}>
+                    <td className="px-4 py-4">
+                      {isSelf ? (
+                        <span className="text-xs text-gray-400" title="Không thể xóa tài khoản của bạn">—</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(user.id)}
+                          onChange={() => toggleSelect(user.id)}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-sm font-medium text-gray-900">
+                      {user.name}
+                      {isSelf && (
+                        <span className="ml-2 text-xs text-primary-600">(Bạn)</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-500">
+                      {user.nickname ? (
+                        user.nickname
+                      ) : (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          Chưa có biệt danh
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-500">{user.email}</td>
+                    <td className="px-4 py-4">
+                      <span
+                        className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          user.role === 'admin'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {user.role}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.role === 'admin'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}
-                    >
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{user.department || '—'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(user.created_at).toLocaleDateString('vi-VN')}
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-3">
-                    <button
-                      onClick={() => handleEdit(user)}
-                      className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                    >
-                      Sửa
-                    </button>
-                    <button
-                      onClick={() => handleDelete(user.id)}
-                      className="text-sm text-red-600 hover:text-red-700 font-medium"
-                    >
-                      Xóa
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-500">{user.department || '—'}</td>
+                    <td className="px-4 py-4 text-sm text-gray-500">
+                      {new Date(user.created_at).toLocaleDateString('vi-VN')}
+                    </td>
+                    <td className="px-4 py-4 text-right space-x-3">
+                      <button
+                        onClick={() => handleEdit(user)}
+                        className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                      >
+                        Sửa
+                      </button>
+                      {!isSelf && (
+                        <button
+                          onClick={() => handleDelete(user.id)}
+                          className="text-sm text-red-600 hover:text-red-700 font-medium"
+                        >
+                          Xóa
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
