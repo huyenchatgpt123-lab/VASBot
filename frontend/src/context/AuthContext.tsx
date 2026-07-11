@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await authApi.login(email, password);
     localStorage.setItem('token', data.access_token);
     localStorage.setItem('user', JSON.stringify(data.user));
+    sessionStorage.setItem('showTaskWelcome', '1');
     setUser(data.user);
   };
 
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await authApi.register(name, email, password);
     localStorage.setItem('token', data.access_token);
     localStorage.setItem('user', JSON.stringify(data.user));
+    sessionStorage.setItem('showTaskWelcome', '1');
     setUser(data.user);
   };
 
