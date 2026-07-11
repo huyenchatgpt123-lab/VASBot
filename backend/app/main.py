@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base, SessionLocal
-from app.routers import auth, documents, search, chat, admin, tasks, feedback
+from app.routers import auth, documents, search, admin, tasks, feedback
 from app.models.user import User, UserRole
 from app.utils.auth import hash_password
 
@@ -23,7 +23,6 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(search.router)
-app.include_router(chat.router)
 app.include_router(admin.router)
 app.include_router(tasks.router)
 app.include_router(feedback.router)

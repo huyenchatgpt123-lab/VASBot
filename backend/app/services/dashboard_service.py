@@ -6,7 +6,6 @@ from sqlalchemy import func
 
 from app.models.user import User
 from app.models.document import Document
-from app.models.conversation import Conversation, Message, MessageRole
 from app.models.usage import OpenAIUsage
 
 
@@ -21,8 +20,6 @@ class DashboardService:
             "total_documents": self._count_documents(start_dt, end_dt),
             "total_pages": self._total_pages(start_dt, end_dt),
             "total_users": self.db.query(User).count(),
-            "total_conversations": self._count_conversations(start_dt, end_dt),
-            "total_ai_questions": self._count_questions(start_dt, end_dt),
             "openai_cost_this_month": self._get_cost(start_dt, end_dt),
         }
         activity = self._get_activity(start_dt, end_dt)
@@ -62,24 +59,6 @@ class DashboardService:
         )
         return int(result or 0)
 
-    def _count_conversations(self, start_dt: datetime, end_dt: datetime) -> int:
-        return (
-            self.db.query(Conversation)
-            .filter(Conversation.created_at >= start_dt, Conversation.created_at <= end_dt)
-            .count()
-        )
-
-    def _count_questions(self, start_dt: datetime, end_dt: datetime) -> int:
-        return (
-            self.db.query(Message)
-            .filter(
-                Message.role == MessageRole.user,
-                Message.created_at >= start_dt,
-                Message.created_at <= end_dt,
-            )
-            .count()
-        )
-
     def _get_cost(self, start_dt: datetime, end_dt: datetime) -> float:
         result = (
             self.db.query(func.sum(OpenAIUsage.cost_usd))
@@ -89,41 +68,17 @@ class DashboardService:
         return float(result or 0.0)
 
     def _get_activity(self, start_dt: datetime, end_dt: datetime) -> list:
-        conv_activity = (
+        doc_activity = (
             self.db.query(
-                func.date(Conversation.created_at).label("date"),
-                func.count(Conversation.id).label("conversations"),
+                func.date(Document.created_at).label("date"),
+                func.count(Document.id).label("documents"),
             )
-            .filter(Conversation.created_at >= start_dt, Conversation.created_at <= end_dt)
-            .group_by(func.date(Conversation.created_at))
+            .filter(Document.created_at >= start_dt, Document.created_at <= end_dt)
+            .group_by(func.date(Document.created_at))
             .all()
         )
-
-        msg_activity = (
-            self.db.query(
-                func.date(Message.created_at).label("date"),
-                func.count(Message.id).label("questions"),
-            )
-            .filter(
-                Message.role == MessageRole.user,
-                Message.created_at >= start_dt,
-                Message.created_at <= end_dt,
-            )
-            .group_by(func.date(Message.created_at))
-            .all()
-        )
-
-        activity_map = {}
-        for row in conv_activity:
-            activity_map[str(row.date)] = {"conversations": row.conversations, "questions": 0}
-        for row in msg_activity:
-            date_str = str(row.date)
-            if date_str in activity_map:
-                activity_map[date_str]["questions"] = row.questions
-            else:
-                activity_map[date_str] = {"conversations": 0, "questions": row.questions}
 
         return [
-            {"date": date, "conversations": data["conversations"], "questions": data["questions"]}
-            for date, data in sorted(activity_map.items())
+            {"date": str(row.date), "documents": row.documents}
+            for row in sorted(doc_activity, key=lambda r: r.date)
         ]

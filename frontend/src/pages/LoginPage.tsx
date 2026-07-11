@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/chat');
+      navigate('/tasks');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(message || 'Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.');

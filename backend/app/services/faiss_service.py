@@ -14,8 +14,6 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 EMBEDDING_COST_PER_1M = 0.13  # text-embedding-3-large
-CHAT_INPUT_COST_PER_1M = 2.00  # gpt-4.1
-CHAT_OUTPUT_COST_PER_1M = 8.00  # gpt-4.1
 
 
 class BM25:

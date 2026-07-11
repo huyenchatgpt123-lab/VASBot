@@ -4,7 +4,6 @@ import { ProtectedRoute, AdminRoute } from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import ChatPage from './pages/ChatPage';
 import DocumentsPage from './pages/DocumentsPage';
 import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
@@ -26,7 +25,6 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/chat" element={<ChatPage />} />
             <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/feedback" element={<FeedbackPage />} />
@@ -48,7 +46,8 @@ function App() {
               }
             />
           </Route>
-          <Route path="*" element={<Navigate to="/chat" replace />} />
+          <Route path="/chat" element={<Navigate to="/tasks" replace />} />
+          <Route path="*" element={<Navigate to="/tasks" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

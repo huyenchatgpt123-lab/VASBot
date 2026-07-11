@@ -6,7 +6,6 @@ import { feedbackApi } from '../api/feedback';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
-  { path: '/chat', label: 'Chat AI', icon: '💬' },
   { path: '/documents', label: 'Tài liệu', icon: '📄' },
   { path: '/tasks', label: 'Công việc', icon: '✅', showBadge: true },
   { path: '/feedback', label: 'Feedback', icon: '💡', showFeedbackBadge: true },

@@ -20,38 +20,16 @@ export interface Document {
   created_at: string;
 }
 
-export interface Source {
-  document_name: string;
-  page_number: number;
-}
-
-export interface ChatMessage {
-  id?: number;
-  role: 'user' | 'assistant';
-  content: string;
-  sources?: Source[];
-  created_at?: string;
-}
-
-export interface Conversation {
-  id: number;
-  title: string;
-  created_at: string;
-}
-
 export interface DashboardStats {
   total_documents: number;
   total_pages: number;
   total_users: number;
-  total_conversations: number;
-  total_ai_questions: number;
   openai_cost_this_month: number;
 }
 
 export interface ActivityData {
   date: string;
-  conversations: number;
-  questions: number;
+  documents: number;
 }
 
 export interface SearchResult {

@@ -1,9 +1,6 @@
 from sqlalchemy.orm import Session
 
 from app.repositories.user_repository import UserRepository
-from app.repositories.document_repository import DocumentRepository
-from app.repositories.conversation_repository import ConversationRepository
-from app.repositories.usage_repository import UsageRepository
 from app.utils.auth import hash_password, verify_password, create_access_token
 from app.schemas.auth import UserCreate, RegisterRequest
 

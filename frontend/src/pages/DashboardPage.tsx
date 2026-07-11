@@ -141,12 +141,10 @@ export default function DashboardPage() {
         {loading && <span className="text-xs text-gray-400 ml-2">Đang tải...</span>}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Tài liệu" value={stats?.total_documents ?? 0} icon="📄" color="bg-blue-100" />
         <StatCard label="Tổng số trang" value={stats?.total_pages ?? 0} icon="📑" color="bg-indigo-100" />
         <StatCard label="Người dùng" value={stats?.total_users ?? 0} icon="👥" color="bg-green-100" />
-        <StatCard label="Cuộc trò chuyện" value={stats?.total_conversations ?? 0} icon="💬" color="bg-purple-100" />
-        <StatCard label="Câu hỏi AI" value={stats?.total_ai_questions ?? 0} icon="🤖" color="bg-orange-100" />
         <StatCard
           label="Chi phí OpenAI"
           value={`$${(stats?.openai_cost_this_month ?? 0).toFixed(4)}`}
@@ -156,7 +154,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Hoạt động theo ngày</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Tài liệu tải lên theo ngày</h2>
         {activity.length > 0 ? (
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={activity}>
@@ -165,8 +163,7 @@ export default function DashboardPage() {
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="conversations" name="Cuộc trò chuyện" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="questions" name="Câu hỏi" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="documents" name="Tài liệu" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (

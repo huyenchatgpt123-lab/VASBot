@@ -35,7 +35,7 @@ export function AdminRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate to="/tasks" replace />;
   }
 
   return <>{children}</>;
