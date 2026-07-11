@@ -162,24 +162,25 @@ async def import_users_excel(
         name = parsed["name"] or ""
         email = parsed["email"] or ""
         password = parsed["password"] or ""
-        nickname = parsed["nickname"] or ""
+        nickname = (parsed["nickname"] or "").strip()
 
         if not name or not email or not password:
             errors.append(f"Dòng {i}: thiếu họ tên, email hoặc mật khẩu")
             skipped += 1
             continue
 
-        if not nickname:
-            errors.append(f"Dòng {i}: thiếu biệt danh (cột F)")
-            skipped += 1
-            continue
+        if nickname:
+            nickname_key = nickname.lower()
+            if nickname_key in seen_nicknames:
+                errors.append(f"Dòng {i}: biệt danh '{nickname}' bị trùng trong file")
+                skipped += 1
+                continue
+            seen_nicknames.add(nickname_key)
 
-        nickname_key = nickname.lower()
-        if nickname_key in seen_nicknames:
-            errors.append(f"Dòng {i}: biệt danh '{nickname}' bị trùng trong file")
-            skipped += 1
-            continue
-        seen_nicknames.add(nickname_key)
+            if repo.nickname_exists(nickname):
+                errors.append(f"Dòng {i}: biệt danh '{nickname}' đã tồn tại")
+                skipped += 1
+                continue
 
         existing = repo.get_by_email(email)
         if existing:
@@ -187,22 +188,17 @@ async def import_users_excel(
             skipped += 1
             continue
 
-        if repo.nickname_exists(nickname):
-            errors.append(f"Dòng {i}: biệt danh '{nickname}' đã tồn tại")
-            skipped += 1
-            continue
-
         try:
             user_data = UserCreate(
                 name=name,
-                nickname=nickname,
+                nickname=nickname or None,
                 email=email,
                 password=password,
                 role=parsed["role"] or "user",
                 department=parsed["department"],
                 position=parsed["position"],
             )
-            new_user = service.create_user(user_data)
+            new_user = service.create_user(user_data, require_nickname=False)
             TaskService(db).rematch_assignees(user_id=new_user.id)
             created += 1
         except Exception as e:

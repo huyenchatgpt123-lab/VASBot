@@ -41,16 +41,19 @@ class AuthService:
             "user": user,
         }
 
-    def create_user(self, data: UserCreate) -> dict:
+    def create_user(self, data: UserCreate, *, require_nickname: bool = True) -> dict:
         existing = self.user_repo.get_by_email(data.email)
         if existing:
             raise ValueError("Email đã được sử dụng")
 
         nickname = (data.nickname or "").strip()
-        if not nickname:
+        if require_nickname and not nickname:
             raise ValueError("Biệt danh không được để trống")
-        if self.user_repo.nickname_exists(nickname):
+        if nickname and self.user_repo.nickname_exists(nickname):
             raise ValueError(f"Biệt danh '{nickname}' đã được sử dụng")
+
+        if not nickname:
+            data = data.model_copy(update={"nickname": None})
 
         user = self.user_repo.create(data, hash_password(data.password))
         return user

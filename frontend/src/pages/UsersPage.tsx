@@ -334,7 +334,7 @@ export default function UsersPage() {
       )}
 
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-        File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Dòng đầu tiên là tiêu đề (thứ tự cột linh hoạt theo tên cột).
+        File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Dòng đầu tiên là tiêu đề. <strong>Biệt danh</strong> có thể để trống khi import — admin bổ sung sau trên trang Người dùng.
       </div>
 
       {/* Filters */}
