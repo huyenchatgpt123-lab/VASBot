@@ -41,6 +41,14 @@ def startup():
             db.execute(text("ALTER TABLE users ADD COLUMN department VARCHAR(255)"))
             db.commit()
 
+        if "nickname" not in user_columns:
+            db.execute(text("ALTER TABLE users ADD COLUMN nickname VARCHAR(100)"))
+            db.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_nickname "
+                "ON users (nickname) WHERE nickname IS NOT NULL"
+            ))
+            db.commit()
+
         doc_columns = [c["name"] for c in inspector.get_columns("documents")]
         if "department" not in doc_columns:
             db.execute(text("ALTER TABLE documents ADD COLUMN department VARCHAR(255)"))
@@ -52,11 +60,15 @@ def startup():
         if not admin_user:
             admin_user = User(
                 name="Admin",
+                nickname="Admin",
                 email="admin@vietanh.edu.vn",
                 password_hash=hash_password("admin123"),
                 role=UserRole.admin,
             )
             db.add(admin_user)
+            db.commit()
+        elif admin_user.nickname is None:
+            admin_user.nickname = "Admin"
             db.commit()
     finally:
         db.close()

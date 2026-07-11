@@ -47,6 +47,11 @@ export const tasksApi = {
     return res.data;
   },
 
+  getUsers: async (): Promise<{ id: number; name: string; nickname: string | null }[]> => {
+    const res = await api.get('/tasks/users');
+    return res.data;
+  },
+
   updateStatus: async (taskId: number, status: string) => {
     const res = await api.patch(`/tasks/${taskId}/status`, { status });
     return res.data;
@@ -65,6 +70,7 @@ export const tasksApi = {
   create: async (task: {
     title: string;
     assignee_name: string;
+    assignee_id?: number;
     deadline?: string;
     status?: string;
     document_id?: number;

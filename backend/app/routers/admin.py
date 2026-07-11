@@ -83,8 +83,23 @@ def update_user(
         update_fields["role"] = data.role
     if data.department is not None:
         update_fields["department"] = data.department
+    if data.nickname is not None:
+        nickname = data.nickname.strip()
+        if not nickname:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Biệt danh không được để trống",
+            )
+        if repo.nickname_exists(nickname, exclude_id=user_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Biệt danh '{nickname}' đã được sử dụng",
+            )
+        update_fields["nickname"] = nickname
 
     updated = repo.update(user_id, **update_fields)
+    if "nickname" in update_fields:
+        TaskService(db).rematch_assignees(user_id=user_id)
     return UserResponse.model_validate(updated)
 
 
@@ -136,9 +151,15 @@ async def import_users_excel(
         password = str(row[2]).strip() if row[2] else ""
         role = str(row[3]).strip().lower() if len(row) > 3 and row[3] else "user"
         department = str(row[4]).strip() if len(row) > 4 and row[4] else None
+        nickname = str(row[5]).strip() if len(row) > 5 and row[5] else ""
 
         if not name or not email or not password:
             errors.append(f"Dòng {i}: thiếu thông tin bắt buộc")
+            skipped += 1
+            continue
+
+        if not nickname:
+            errors.append(f"Dòng {i}: thiếu biệt danh")
             skipped += 1
             continue
 
@@ -151,8 +172,20 @@ async def import_users_excel(
             skipped += 1
             continue
 
+        if repo.nickname_exists(nickname):
+            errors.append(f"Dòng {i}: biệt danh '{nickname}' đã tồn tại")
+            skipped += 1
+            continue
+
         try:
-            user_data = UserCreate(name=name, email=email, password=password, role=role, department=department)
+            user_data = UserCreate(
+                name=name,
+                nickname=nickname,
+                email=email,
+                password=password,
+                role=role,
+                department=department,
+            )
             new_user = service.create_user(user_data)
             TaskService(db).rematch_assignees(user_id=new_user.id)
             created += 1

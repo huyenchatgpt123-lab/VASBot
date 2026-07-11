@@ -20,29 +20,8 @@ class TaskService:
         self.repo = TaskRepository(db)
 
     def _match_user(self, name: str) -> Optional[int]:
-        """Match assignee name to user: exact → ilike → contains → partial last-name."""
-        if not name:
-            return None
-        user = self.db.query(User).filter(User.name == name).first()
-        if user:
-            return user.id
-        user = self.db.query(User).filter(User.name.ilike(name)).first()
-        if user:
-            return user.id
-        user = self.db.query(User).filter(User.name.ilike(f"%{name}%")).first()
-        if user:
-            return user.id
-        all_users = self.db.query(User).all()
-        for u in all_users:
-            if u.name and u.name.lower() in name.lower():
-                return u.id
-        name_parts = name.strip().split()
-        if len(name_parts) >= 2:
-            short_name = name_parts[-1].lower()
-            matches = [u for u in all_users if u.name and u.name.strip().split()[-1].lower() == short_name]
-            if len(matches) == 1:
-                return matches[0].id
-        return None
+        from app.utils.name_matcher import match_user_by_name
+        return match_user_by_name(self.db, name)
 
     def extract_tasks_from_document(self, document_id: int) -> Dict[str, Any]:
         """Extract tasks from document using GPT and return preview."""
@@ -168,7 +147,9 @@ class TaskService:
                 kwargs["deadline"] = datetime.fromisoformat(kwargs["deadline"].replace("Z", "+00:00"))
             except (ValueError, TypeError):
                 kwargs.pop("deadline", None)
-        if "assignee_name" in kwargs and kwargs["assignee_name"]:
+        if "assignee_id" in kwargs and kwargs["assignee_id"]:
+            pass
+        elif "assignee_name" in kwargs and kwargs["assignee_name"]:
             kwargs["assignee_id"] = self._match_user(kwargs["assignee_name"])
         return self.repo.update(task_id, **kwargs)
 

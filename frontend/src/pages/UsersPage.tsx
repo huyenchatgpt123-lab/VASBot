@@ -7,7 +7,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'user', department: '' });
+  const [form, setForm] = useState({ name: '', nickname: '', email: '', password: '', role: 'user', department: '' });
   const [importResult, setImportResult] = useState<{ message: string; errors: string[] } | null>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
@@ -27,7 +27,7 @@ export default function UsersPage() {
   };
 
   const resetForm = () => {
-    setForm({ name: '', email: '', password: '', role: 'user', department: '' });
+    setForm({ name: '', nickname: '', email: '', password: '', role: 'user', department: '' });
     setEditingUser(null);
     setShowForm(false);
   };
@@ -37,6 +37,7 @@ export default function UsersPage() {
     try {
       await adminApi.createUser({
         name: form.name,
+        nickname: form.nickname,
         email: form.email,
         password: form.password,
         role: form.role,
@@ -44,8 +45,8 @@ export default function UsersPage() {
       });
       resetForm();
       loadUsers();
-    } catch {
-      alert('Tạo người dùng thất bại.');
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Tạo người dùng thất bại.');
     }
   };
 
@@ -53,6 +54,7 @@ export default function UsersPage() {
     setEditingUser(user);
     setForm({
       name: user.name,
+      nickname: user.nickname || '',
       email: user.email,
       password: '',
       role: user.role,
@@ -70,14 +72,21 @@ export default function UsersPage() {
     if (form.email !== editingUser.email) data.email = form.email;
     if (form.password) data.password = form.password;
     if (form.role !== editingUser.role) data.role = form.role;
+    if (form.nickname !== (editingUser.nickname || '')) data.nickname = form.nickname;
+
     if (form.department !== (editingUser.department || '')) data.department = form.department;
+
+    if (!editingUser.nickname && !form.nickname.trim()) {
+      alert('Vui lòng nhập biệt danh.');
+      return;
+    }
 
     try {
       await adminApi.updateUser(editingUser.id, data);
       resetForm();
       loadUsers();
-    } catch {
-      alert('Cập nhật thất bại.');
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Cập nhật thất bại.');
     }
   };
 
@@ -168,6 +177,13 @@ export default function UsersPage() {
               required
             />
             <input
+              placeholder="Biệt danh (VD: An Tin, Nguyệt K1)"
+              value={form.nickname}
+              onChange={(e) => setForm({ ...form, nickname: e.target.value })}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              required={!editingUser || !editingUser.nickname}
+            />
+            <input
               type="email"
               placeholder="Email"
               value={form.email}
@@ -215,7 +231,7 @@ export default function UsersPage() {
 
       {/* Excel format hint */}
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-        File Excel cần có các cột theo thứ tự: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban</strong>. Dòng đầu tiên là tiêu đề.
+        File Excel cần có các cột theo thứ tự: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh</strong>. Dòng đầu tiên là tiêu đề.
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -226,6 +242,7 @@ export default function UsersPage() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Họ tên</th>
+                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Biệt danh</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Vai trò</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Phòng ban</th>
@@ -237,6 +254,15 @@ export default function UsersPage() {
               {users.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{user.name}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {user.nickname ? (
+                      user.nickname
+                    ) : (
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        Chưa có biệt danh
+                      </span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
                   <td className="px-6 py-4">
                     <span

@@ -56,6 +56,22 @@ def get_assignees(
     return {"assignees": names}
 
 
+@router.get("/users")
+def get_task_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền xem")
+
+    from app.repositories.user_repository import UserRepository
+    users = UserRepository(db).get_all()
+    return [
+        {"id": u.id, "name": u.name, "nickname": u.nickname}
+        for u in users
+    ]
+
+
 @router.post("/rematch-assignees")
 def rematch_assignees(
     db: Session = Depends(get_db),

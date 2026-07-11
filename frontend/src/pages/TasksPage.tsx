@@ -50,11 +50,12 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [assignees, setAssignees] = useState<string[]>([]);
+  const [taskUsers, setTaskUsers] = useState<{ id: number; name: string; nickname: string | null }[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
-  const [newTask, setNewTask] = useState({ title: '', assignee_name: '', deadline: '', note: '', document_id: null as number | null });
+  const [newTask, setNewTask] = useState({ title: '', assignee_name: '', assignee_id: null as number | null, deadline: '', note: '', document_id: null as number | null });
   const [isAddingPerson, setIsAddingPerson] = useState(false);
   const [rematching, setRematching] = useState(false);
   const [newTaskCount, setNewTaskCount] = useState(0);
@@ -68,6 +69,7 @@ export default function TasksPage() {
   useEffect(() => {
     if (isAdmin) {
       tasksApi.getAssignees().then((res) => setAssignees(res.assignees));
+      tasksApi.getUsers().then(setTaskUsers).catch(() => {});
     }
   }, [isAdmin]);
 
@@ -177,21 +179,27 @@ export default function TasksPage() {
   };
 
   const handleCreate = async () => {
-    if (!newTask.title || !newTask.assignee_name) {
-      alert('Vui lòng nhập tên công việc và người được giao');
+    if (!newTask.title || !newTask.assignee_id) {
+      alert('Vui lòng nhập tên công việc và chọn người được giao');
+      return;
+    }
+    const selectedUser = taskUsers.find((u) => u.id === newTask.assignee_id);
+    if (!selectedUser) {
+      alert('Người được giao không hợp lệ');
       return;
     }
     try {
       await tasksApi.create({
         title: newTask.title,
-        assignee_name: newTask.assignee_name,
+        assignee_name: selectedUser.name,
+        assignee_id: selectedUser.id,
         deadline: newTask.deadline || undefined,
         note: newTask.note || undefined,
         document_id: newTask.document_id ?? undefined,
       });
       setShowCreateModal(false);
       setIsAddingPerson(false);
-      setNewTask({ title: '', assignee_name: '', deadline: '', note: '', document_id: null });
+      setNewTask({ title: '', assignee_name: '', assignee_id: null, deadline: '', note: '', document_id: null });
       loadTasks();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể tạo');
@@ -214,7 +222,7 @@ export default function TasksPage() {
 
   const openCreateModal = (documentId: number | null = null) => {
     setIsAddingPerson(false);
-    setNewTask({ title: '', assignee_name: '', deadline: '', note: '', document_id: documentId });
+    setNewTask({ title: '', assignee_name: '', assignee_id: null, deadline: '', note: '', document_id: documentId });
     setShowCreateModal(true);
   };
 
@@ -223,6 +231,7 @@ export default function TasksPage() {
     setNewTask({
       title: taskGroup.title,
       assignee_name: '',
+      assignee_id: null,
       deadline: taskGroup.deadline ? taskGroup.deadline.split('T')[0] : '',
       note: '',
       document_id: documentId,
@@ -230,12 +239,27 @@ export default function TasksPage() {
     setShowCreateModal(true);
   };
 
+  const handleUserSelect = (userId: number, target: 'new' | 'edit') => {
+    const user = taskUsers.find((u) => u.id === userId);
+    if (!user) return;
+    if (target === 'new') {
+      setNewTask({ ...newTask, assignee_id: user.id, assignee_name: user.name });
+    } else if (editingTask) {
+      setEditingTask({ ...editingTask, assignee_id: user.id, assignee_name: user.name });
+    }
+  };
+
   const handleEditSave = async () => {
     if (!editingTask) return;
+    if (!editingTask.assignee_id) {
+      alert('Vui lòng chọn người phụ trách');
+      return;
+    }
     try {
       await tasksApi.update(editingTask.id, {
         title: editingTask.title,
         assignee_name: editingTask.assignee_name,
+        assignee_id: editingTask.assignee_id,
         deadline: editingTask.deadline || null,
         note: editingTask.note || null,
       });
@@ -404,18 +428,23 @@ export default function TasksPage() {
                       <div className="flex flex-wrap gap-2 ml-6">
                         {taskGroup.items.map((item) => {
                           const effectiveStatus = isOverdue(item) && item.status === 'pending' ? 'overdue' : item.status;
+                          const isUnassigned = item.assignee_id === null;
+                          const tagLabel = isUnassigned ? 'Chưa gán' : item.assignee_name;
+                          const tagClass = isUnassigned
+                            ? 'bg-yellow-50 text-yellow-800 border-yellow-300'
+                            : (STATUS_TAG_COLORS[effectiveStatus] || STATUS_TAG_COLORS.pending);
                           return (
                             <div
                               key={item.id}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium cursor-pointer transition-all hover:shadow-sm ${STATUS_TAG_COLORS[effectiveStatus] || STATUS_TAG_COLORS.pending}`}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium cursor-pointer transition-all hover:shadow-sm ${tagClass}`}
                               onClick={() => {
-                                if (!isAdmin && item.assignee_id === null) return;
+                                if (!isAdmin && isUnassigned) return;
                                 handleStatusChange(item.id, nextStatus(item.status));
                               }}
-                              title={`Bấm để đổi trạng thái | ${item.assignee_name}`}
+                              title={isUnassigned ? `Chưa gán: ${item.assignee_name}` : `Bấm để đổi trạng thái | ${item.assignee_name}`}
                             >
-                              <span>{STATUS_ICONS[effectiveStatus] || '❌'}</span>
-                              <span className="max-w-[120px] truncate">{item.assignee_name}</span>
+                              <span>{isUnassigned ? '⚠️' : (STATUS_ICONS[effectiveStatus] || '❌')}</span>
+                              <span className="max-w-[120px] truncate">{tagLabel}</span>
                               {isAdmin && (
                                 <>
                                   <button
@@ -491,7 +520,18 @@ export default function TasksPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Người được giao *</label>
-                <input type="text" value={newTask.assignee_name} onChange={(e) => setNewTask({ ...newTask, assignee_name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" placeholder="Họ tên" />
+                <select
+                  value={newTask.assignee_id ?? ''}
+                  onChange={(e) => handleUserSelect(Number(e.target.value), 'new')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">-- Chọn người --</option>
+                  {taskUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}{u.nickname ? ` · ${u.nickname}` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Deadline</label>
@@ -522,7 +562,23 @@ export default function TasksPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Người phụ trách</label>
-                <input type="text" value={editingTask.assignee_name} onChange={(e) => setEditingTask({ ...editingTask, assignee_name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+                {editingTask.assignee_id === null && (
+                  <p className="text-xs text-yellow-700 mb-1">
+                    Tên trong kế hoạch: <strong>{editingTask.assignee_name}</strong>
+                  </p>
+                )}
+                <select
+                  value={editingTask.assignee_id ?? ''}
+                  onChange={(e) => handleUserSelect(Number(e.target.value), 'edit')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">-- Chọn người --</option>
+                  {taskUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}{u.nickname ? ` · ${u.nickname}` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Deadline</label>

@@ -49,5 +49,11 @@ class AuthService:
         if existing:
             raise ValueError("Email đã được sử dụng")
 
+        nickname = (data.nickname or "").strip()
+        if not nickname:
+            raise ValueError("Biệt danh không được để trống")
+        if self.user_repo.nickname_exists(nickname):
+            raise ValueError(f"Biệt danh '{nickname}' đã được sử dụng")
+
         user = self.user_repo.create(data, hash_password(data.password))
         return user
