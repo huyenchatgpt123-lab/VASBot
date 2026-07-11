@@ -95,8 +95,8 @@ export default function UsersPage() {
     try {
       await adminApi.deleteUser(id);
       loadUsers();
-    } catch {
-      alert('Xóa thất bại.');
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Xóa thất bại.');
     }
   };
 

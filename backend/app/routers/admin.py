@@ -113,8 +113,11 @@ def delete_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Không thể xóa tài khoản của bạn")
 
     repo = UserRepository(db)
-    if not repo.delete(user_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại")
+    try:
+        if not repo.delete(user_id, reassign_documents_to=current_user.id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return {"message": "Người dùng đã được xóa"}
 
 

@@ -2,8 +2,13 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from app.models.user import User, UserRole
+from app.models.task import Task
+from app.models.document import Document
+from app.models.feedback import Feedback
+from app.models.conversation import Conversation, Message
 from app.schemas.auth import UserCreate
 
 
@@ -75,10 +80,44 @@ class UserRepository:
     def count(self) -> int:
         return self.db.query(User).count()
 
-    def delete(self, user_id: int) -> bool:
+    def delete(self, user_id: int, reassign_documents_to: Optional[int] = None) -> bool:
         user = self.get_by_id(user_id)
         if not user:
             return False
-        self.db.delete(user)
-        self.db.commit()
+
+        doc_count = self.db.query(Document).filter(Document.uploaded_by == user_id).count()
+        if doc_count > 0 and reassign_documents_to:
+            self.db.query(Document).filter(Document.uploaded_by == user_id).update(
+                {Document.uploaded_by: reassign_documents_to},
+                synchronize_session=False,
+            )
+
+        self.db.query(Task).filter(Task.assignee_id == user_id).update(
+            {Task.assignee_id: None},
+            synchronize_session=False,
+        )
+
+        self.db.query(Feedback).filter(Feedback.user_id == user_id).delete(
+            synchronize_session=False,
+        )
+
+        conv_ids = [
+            c.id for c in self.db.query(Conversation).filter(Conversation.user_id == user_id).all()
+        ]
+        if conv_ids:
+            self.db.query(Message).filter(Message.conversation_id.in_(conv_ids)).delete(
+                synchronize_session=False,
+            )
+            self.db.query(Conversation).filter(Conversation.id.in_(conv_ids)).delete(
+                synchronize_session=False,
+            )
+
+        try:
+            self.db.delete(user)
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise ValueError(
+                "Không thể xóa người dùng vì còn dữ liệu liên quan trong hệ thống."
+            )
         return True
