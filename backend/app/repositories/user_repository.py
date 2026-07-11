@@ -57,6 +57,7 @@ class UserRepository:
             password_hash=password_hash,
             role=UserRole(user_data.role),
             department=user_data.department,
+            position=user_data.position,
         )
         self.db.add(user)
         self.db.commit()

@@ -10,6 +10,7 @@ class UserCreate(BaseModel):
     password: str
     role: str = "user"
     department: Optional[str] = None
+    position: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -19,6 +20,7 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[str] = None
     department: Optional[str] = None
+    position: Optional[str] = None
 
 
 class UserResponse(BaseModel):
@@ -28,6 +30,7 @@ class UserResponse(BaseModel):
     email: str
     role: str
     department: Optional[str] = None
+    position: Optional[str] = None
     created_at: datetime
 
     class Config:

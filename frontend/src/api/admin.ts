@@ -13,11 +13,11 @@ export const adminApi = {
     const res = await api.get('/admin/users');
     return res.data;
   },
-  createUser: async (data: { name: string; nickname: string; email: string; password: string; role: string; department?: string }) => {
+  createUser: async (data: { name: string; nickname: string; email: string; password: string; role: string; department?: string; position?: string }) => {
     const res = await api.post('/admin/users', data);
     return res.data;
   },
-  updateUser: async (id: number, data: { name?: string; nickname?: string; email?: string; password?: string; role?: string; department?: string }) => {
+  updateUser: async (id: number, data: { name?: string; nickname?: string; email?: string; password?: string; role?: string; department?: string; position?: string }) => {
     const res = await api.put(`/admin/users/${id}`, data);
     return res.data;
   },

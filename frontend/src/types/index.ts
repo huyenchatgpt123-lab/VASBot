@@ -5,6 +5,7 @@ export interface User {
   email: string;
   role: 'admin' | 'user';
   department?: string;
+  position?: string;
   created_at: string;
 }
 

@@ -48,6 +48,10 @@ def startup():
             ))
             db.commit()
 
+        if "position" not in user_columns:
+            db.execute(text("ALTER TABLE users ADD COLUMN position VARCHAR(255)"))
+            db.commit()
+
         doc_columns = [c["name"] for c in inspector.get_columns("documents")]
         if "department" not in doc_columns:
             db.execute(text("ALTER TABLE documents ADD COLUMN department VARCHAR(255)"))

@@ -14,6 +14,7 @@ from app.services.auth_service import AuthService
 from app.services.task_service import TaskService
 from app.repositories.user_repository import UserRepository
 from app.utils.auth import require_admin, hash_password
+from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,9 @@ def update_user(
     if data.role is not None:
         update_fields["role"] = data.role
     if data.department is not None:
-        update_fields["department"] = data.department
+        update_fields["department"] = data.department or None
+    if data.position is not None:
+        update_fields["position"] = data.position or None
     if data.nickname is not None:
         nickname = data.nickname.strip()
         if not nickname:
@@ -143,31 +146,40 @@ async def import_users_excel(
     skipped = 0
     errors = []
 
-    rows = list(ws.iter_rows(min_row=2, values_only=True))
-    for i, row in enumerate(rows, start=2):
-        if not row or len(row) < 3:
-            skipped += 1
+    all_rows = list(ws.iter_rows(values_only=True))
+    if not all_rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File Excel trống")
+
+    column_map = build_column_map(all_rows[0])
+    data_rows = all_rows[1:]
+    seen_nicknames: set[str] = set()
+
+    for i, row in enumerate(data_rows, start=2):
+        if is_empty_row(row):
             continue
 
-        name = str(row[0]).strip() if row[0] else ""
-        email = str(row[1]).strip() if row[1] else ""
-        password = str(row[2]).strip() if row[2] else ""
-        role = str(row[3]).strip().lower() if len(row) > 3 and row[3] else "user"
-        department = str(row[4]).strip() if len(row) > 4 and row[4] else None
-        nickname = str(row[5]).strip() if len(row) > 5 and row[5] else ""
+        parsed = parse_user_row(row, column_map)
+        name = parsed["name"] or ""
+        email = parsed["email"] or ""
+        password = parsed["password"] or ""
+        nickname = parsed["nickname"] or ""
 
         if not name or not email or not password:
-            errors.append(f"Dòng {i}: thiếu thông tin bắt buộc")
+            errors.append(f"Dòng {i}: thiếu họ tên, email hoặc mật khẩu")
             skipped += 1
             continue
 
         if not nickname:
-            errors.append(f"Dòng {i}: thiếu biệt danh")
+            errors.append(f"Dòng {i}: thiếu biệt danh (cột F)")
             skipped += 1
             continue
 
-        if role not in ("admin", "user"):
-            role = "user"
+        nickname_key = nickname.lower()
+        if nickname_key in seen_nicknames:
+            errors.append(f"Dòng {i}: biệt danh '{nickname}' bị trùng trong file")
+            skipped += 1
+            continue
+        seen_nicknames.add(nickname_key)
 
         existing = repo.get_by_email(email)
         if existing:
@@ -186,8 +198,9 @@ async def import_users_excel(
                 nickname=nickname,
                 email=email,
                 password=password,
-                role=role,
-                department=department,
+                role=parsed["role"] or "user",
+                department=parsed["department"],
+                position=parsed["position"],
             )
             new_user = service.create_user(user_data)
             TaskService(db).rematch_assignees(user_id=new_user.id)
@@ -200,5 +213,5 @@ async def import_users_excel(
         "message": f"Import hoàn tất: {created} người dùng được tạo, {skipped} bị bỏ qua",
         "created": created,
         "skipped": skipped,
-        "errors": errors[:20],
+        "errors": errors[:50],
     }

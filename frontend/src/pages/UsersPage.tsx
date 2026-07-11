@@ -9,7 +9,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [form, setForm] = useState({ name: '', nickname: '', email: '', password: '', role: 'user', department: '' });
+  const [form, setForm] = useState({ name: '', nickname: '', email: '', password: '', role: 'user', department: '', position: '' });
   const [importResult, setImportResult] = useState<{ message: string; errors: string[] } | null>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,7 +37,7 @@ export default function UsersPage() {
     return users.filter((u) => {
       const matchSearch =
         !q ||
-        [u.name, u.email, u.nickname].some((v) => v?.toLowerCase().includes(q));
+        [u.name, u.email, u.nickname, u.position].some((v) => v?.toLowerCase().includes(q));
       const matchRole = !roleFilter || u.role === roleFilter;
       const matchDept = !deptFilter || u.department === deptFilter;
       return matchSearch && matchRole && matchDept;
@@ -64,7 +64,7 @@ export default function UsersPage() {
   };
 
   const resetForm = () => {
-    setForm({ name: '', nickname: '', email: '', password: '', role: 'user', department: '' });
+    setForm({ name: '', nickname: '', email: '', password: '', role: 'user', department: '', position: '' });
     setEditingUser(null);
     setShowForm(false);
   };
@@ -102,6 +102,7 @@ export default function UsersPage() {
         password: form.password,
         role: form.role,
         department: form.department || undefined,
+        position: form.position || undefined,
       });
       resetForm();
       loadUsers();
@@ -119,6 +120,7 @@ export default function UsersPage() {
       password: '',
       role: user.role,
       department: user.department || '',
+      position: user.position || '',
     });
     setShowForm(true);
   };
@@ -135,6 +137,7 @@ export default function UsersPage() {
     if (form.nickname !== (editingUser.nickname || '')) data.nickname = form.nickname;
 
     if (form.department !== (editingUser.department || '')) data.department = form.department;
+    if (form.position !== (editingUser.position || '')) data.position = form.position;
 
     if (!editingUser.nickname && !form.nickname.trim()) {
       alert('Vui lòng nhập biệt danh.');
@@ -246,7 +249,7 @@ export default function UsersPage() {
         <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
           <p className="text-sm font-medium text-green-800">{importResult.message}</p>
           {importResult.errors.length > 0 && (
-            <ul className="mt-2 text-xs text-green-700 space-y-1">
+            <ul className="mt-2 text-xs text-green-700 space-y-1 max-h-48 overflow-y-auto">
               {importResult.errors.map((err, i) => (
                 <li key={i}>{err}</li>
               ))}
@@ -308,6 +311,12 @@ export default function UsersPage() {
               onChange={(e) => setForm({ ...form, department: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
             />
+            <input
+              placeholder="Chức vụ"
+              value={form.position}
+              onChange={(e) => setForm({ ...form, position: e.target.value })}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+            />
             <div className="md:col-span-2 flex gap-3">
               <button type="submit" className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700">
                 {editingUser ? 'Cập nhật' : 'Tạo'}
@@ -325,7 +334,7 @@ export default function UsersPage() {
       )}
 
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-        File Excel cần có các cột theo thứ tự: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh</strong>. Dòng đầu tiên là tiêu đề.
+        File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Dòng đầu tiên là tiêu đề (thứ tự cột linh hoạt theo tên cột).
       </div>
 
       {/* Filters */}
@@ -420,6 +429,7 @@ export default function UsersPage() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Vai trò</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Phòng ban</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Chức vụ</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Ngày tạo</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase">Thao tác</th>
               </tr>
@@ -469,6 +479,7 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-500">{user.department || '—'}</td>
+                    <td className="px-4 py-4 text-sm text-gray-500">{user.position || '—'}</td>
                     <td className="px-4 py-4 text-sm text-gray-500">
                       {new Date(user.created_at).toLocaleDateString('vi-VN')}
                     </td>
