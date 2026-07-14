@@ -406,9 +406,9 @@ export default function TasksPage() {
                   onClick={() => handlePreviewPlan(docGroup.document_id)}
                   disabled={!docGroup.document_id}
                   title={docGroup.document_id ? 'Xem kế hoạch' : 'Không có kế hoạch'}
-                  className="ml-3 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 border-primary-200 text-primary-700 hover:bg-primary-50"
+                  className="ml-3 p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-400 disabled:hover:bg-transparent"
                 >
-                  Xem kế hoạch
+                  👁
                 </button>
                 {isAdmin && (
                   <button
