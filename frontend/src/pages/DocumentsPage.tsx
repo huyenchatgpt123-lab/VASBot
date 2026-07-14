@@ -261,18 +261,20 @@ export default function DocumentsPage() {
                     {new Date(doc.created_at).toLocaleDateString('vi-VN')} · {doc.uploader_name || '—'}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1">
                   <button
                     onClick={() => handlePreview(doc.id)}
-                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                    title="Xem"
+                    className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                   >
-                    Xem
+                    👁
                   </button>
                   <button
                     onClick={() => handleDownload(doc.id)}
-                    className="text-sm text-green-600 hover:text-green-700 font-medium"
+                    title="Tải xuống"
+                    className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                   >
-                    Tải
+                    📥
                   </button>
                   {isAdmin && (
                     <button
@@ -329,18 +331,21 @@ export default function DocumentsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.uploader_name || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.page_count}</td>
-                    <td className="px-4 py-3 text-right space-x-2">
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
                       <button
                         onClick={() => handlePreview(doc.id)}
-                        className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                        title="Xem"
+                        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                       >
-                        Xem
+                        👁
                       </button>
                       <button
                         onClick={() => handleDownload(doc.id)}
-                        className="text-sm text-green-600 hover:text-green-700 font-medium"
+                        title="Tải xuống"
+                        className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                       >
-                        Tải
+                        📥
                       </button>
                       {isAdmin && (
                         <button
@@ -350,6 +355,7 @@ export default function DocumentsPage() {
                           Xóa
                         </button>
                       )}
+                      </div>
                     </td>
                   </tr>
                 ))}
