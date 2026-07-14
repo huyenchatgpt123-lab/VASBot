@@ -1,16 +1,21 @@
 import logging
-import os
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional
 from openai import AuthenticationError, APIConnectionError, RateLimitError
 
 from app.database import get_db
-from app.schemas.document import DocumentResponse, DocumentUploadResponse, DocumentListResponse
+from app.schemas.document import DocumentUploadResponse, DocumentListResponse
 from app.services.document_service import DocumentService
 from app.repositories.document_repository import DocumentRepository
+from app.services.storage_service import (
+    parse_storage_ref,
+    file_exists,
+    get_preview_url,
+    get_download_url,
+)
 from app.utils.auth import get_current_user, require_admin
 from app.models.user import User
 from app.models.document import DEPARTMENTS
@@ -115,7 +120,7 @@ def get_documents(
     )
 
 
-def _get_document_file(doc_id: int, token: Optional[str], db: Session):
+def _get_authenticated_document(doc_id: int, token: Optional[str], db: Session):
     from app.utils.auth import get_current_user_from_token
     user = get_current_user_from_token(token, db)
     if not user:
@@ -125,7 +130,7 @@ def _get_document_file(doc_id: int, token: Optional[str], db: Session):
     doc = repo.get_by_id(doc_id)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
-    if not os.path.exists(doc.filepath):
+    if not file_exists(doc.filepath):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File không tồn tại trên server")
     return doc
 
@@ -136,7 +141,13 @@ def preview_document(
     token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    doc = _get_document_file(doc_id, token, db)
+    doc = _get_authenticated_document(doc_id, token, db)
+    kind, _, _ = parse_storage_ref(doc.filepath)
+
+    if kind == "cloudinary":
+        url = get_preview_url(doc.filepath, doc.filename)
+        return RedirectResponse(url=url)
+
     media_type = "application/pdf" if doc.filename.lower().endswith(".pdf") else \
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -154,7 +165,13 @@ def download_document(
     token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    doc = _get_document_file(doc_id, token, db)
+    doc = _get_authenticated_document(doc_id, token, db)
+    kind, _, _ = parse_storage_ref(doc.filepath)
+
+    if kind == "cloudinary":
+        url = get_download_url(doc.filepath, doc.filename)
+        return RedirectResponse(url=url)
+
     media_type = "application/pdf" if doc.filename.lower().endswith(".pdf") else \
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 

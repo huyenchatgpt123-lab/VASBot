@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     UPLOAD_DIR: str = "./uploads"
     FAISS_DIR: str = "./faiss_data"
+    STORAGE_BACKEND: str = "local"
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
     CHUNK_SIZE: int = 1200
     CHUNK_OVERLAP: int = 250
     EMBEDDING_MODEL: str = "text-embedding-3-large"
