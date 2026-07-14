@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { tasksApi, TaskItem } from '../api/tasks';
+import { documentsApi } from '../api/documents';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
@@ -270,6 +271,12 @@ export default function TasksPage() {
     }
   };
 
+  const handlePreviewPlan = (documentId: number | null) => {
+    if (!documentId) return;
+    const url = documentsApi.getPreviewUrl(documentId);
+    window.open(url, '_blank');
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -395,10 +402,18 @@ export default function TasksPage() {
                     <span className="text-xs text-gray-500 w-10 text-right">{docGroup.completedCount}/{docGroup.totalCount}</span>
                   </div>
                 </button>
+                <button
+                  onClick={() => handlePreviewPlan(docGroup.document_id)}
+                  disabled={!docGroup.document_id}
+                  title={docGroup.document_id ? 'Xem kế hoạch' : 'Không có kế hoạch'}
+                  className="ml-3 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 border-primary-200 text-primary-700 hover:bg-primary-50"
+                >
+                  Xem kế hoạch
+                </button>
                 {isAdmin && (
                   <button
                     onClick={() => handleDeleteDocument(docGroup)}
-                    className="ml-3 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    className="ml-2 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
                     title="Xóa toàn bộ kế hoạch"
                   >
                     🗑
