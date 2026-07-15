@@ -21,7 +21,7 @@ class UserRepository:
     def get_by_id(self, user_id: int) -> Optional[User]:
         return (
             self.db.query(User)
-            .options(joinedload(User.position_obj))
+            .options(joinedload(User.position_obj), joinedload(User.department_obj))
             .filter(User.id == user_id)
             .first()
         )
@@ -56,7 +56,7 @@ class UserRepository:
     def get_all(self) -> List[User]:
         return (
             self.db.query(User)
-            .options(joinedload(User.position_obj))
+            .options(joinedload(User.position_obj), joinedload(User.department_obj))
             .order_by(User.created_at.desc())
             .all()
         )

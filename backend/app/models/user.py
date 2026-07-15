@@ -27,3 +27,4 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     position_obj = relationship("Position", backref="users")
+    department_obj = relationship("Department", foreign_keys=[department_id])

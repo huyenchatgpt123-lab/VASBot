@@ -3,6 +3,12 @@ import { adminApi } from '../api/admin';
 import { useAuth } from '../context/AuthContext';
 import { User, Position, Department } from '../types';
 
+function resolveDepartmentId(user: User, departments: Department[]): number | undefined {
+  if (user.department_id) return user.department_id;
+  if (!user.department) return undefined;
+  return departments.find((d) => d.name === user.department)?.id;
+}
+
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -62,11 +68,6 @@ export default function UsersPage() {
     setSelectedIds(new Set());
   }, [search, roleFilter, deptFilter]);
 
-  const filterDepartments = useMemo(
-    () => departmentList.map((d) => d.name),
-    [departmentList],
-  );
-
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
     return users.filter((u) => {
@@ -74,10 +75,11 @@ export default function UsersPage() {
         !q ||
         [u.name, u.email, u.nickname, u.position].some((v) => v?.toLowerCase().includes(q));
       const matchRole = !roleFilter || u.role === roleFilter;
-      const matchDept = !deptFilter || u.department === deptFilter;
+      const userDeptId = resolveDepartmentId(u, departmentList);
+      const matchDept = !deptFilter || String(userDeptId) === deptFilter;
       return matchSearch && matchRole && matchDept;
     });
-  }, [users, search, roleFilter, deptFilter]);
+  }, [users, search, roleFilter, deptFilter, departmentList]);
 
   const selectableUsers = useMemo(
     () => filteredUsers.filter((u) => u.id !== currentUser?.id),
@@ -155,6 +157,7 @@ export default function UsersPage() {
   };
 
   const handleEdit = (user: User) => {
+    const deptId = resolveDepartmentId(user, departmentList);
     setEditingUser(user);
     setForm({
       name: user.name,
@@ -162,7 +165,7 @@ export default function UsersPage() {
       email: user.email,
       password: '',
       role: user.role,
-      department_id: user.department_id ? String(user.department_id) : '',
+      department_id: deptId ? String(deptId) : '',
       position_id: user.position_id ? String(user.position_id) : '',
     });
     setShowForm(true);
@@ -188,7 +191,8 @@ export default function UsersPage() {
     }
 
     const newDeptId = parseInt(form.department_id);
-    if (newDeptId !== editingUser.department_id) data.department_id = newDeptId;
+    const currentDeptId = resolveDepartmentId(editingUser, departmentList);
+    if (newDeptId !== currentDeptId) data.department_id = newDeptId;
 
     const newPositionId = form.position_id ? parseInt(form.position_id) : undefined;
     if (newPositionId !== editingUser.position_id) data.position_id = newPositionId;
@@ -702,8 +706,8 @@ export default function UsersPage() {
           className="w-full sm:w-auto px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
         >
           <option value="">Tất cả phòng ban</option>
-          {filterDepartments.map((dept) => (
-            <option key={dept} value={dept}>{dept}</option>
+          {departmentList.map((dept) => (
+            <option key={dept.id} value={String(dept.id)}>{dept.name}</option>
           ))}
         </select>
         {hasActiveFilters && (
