@@ -509,8 +509,6 @@ export default function UsersPage() {
         File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Chức vụ phải khớp tên trong danh sách bên dưới.
       </div>
 
-      </div>
-
       {/* Quản lý phòng ban */}
       <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
