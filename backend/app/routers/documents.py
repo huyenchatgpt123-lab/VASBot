@@ -19,7 +19,7 @@ from app.services.storage_service import (
 from app.utils.auth import get_current_user, require_admin
 from app.utils.permissions import can_upload, can_upload_to_department, can_delete_document, has_scope_all_departments, is_admin
 from app.models.user import User
-from app.models.document import DEPARTMENTS
+from app.repositories.department_repository import DepartmentRepository
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -29,8 +29,9 @@ ALLOWED_EXTENSIONS = (".pdf", ".docx")
 
 
 @router.get("/departments")
-def get_departments(current_user: User = Depends(get_current_user)):
-    return {"departments": DEPARTMENTS}
+def get_departments(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    dept_repo = DepartmentRepository(db)
+    return {"departments": dept_repo.get_names()}
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -44,6 +45,10 @@ async def upload_document(
 ):
     if not can_upload(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền upload tài liệu")
+
+    dept_repo = DepartmentRepository(db)
+    if not dept_repo.get_by_name(department):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phòng ban không hợp lệ")
 
     upload_department = department
     if not is_admin(current_user) and not has_scope_all_departments(current_user):

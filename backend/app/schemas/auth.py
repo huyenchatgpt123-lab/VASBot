@@ -17,6 +17,7 @@ class UserCreate(BaseModel):
     password: str
     role: str = "user"
     department: Optional[str] = None
+    department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
 
@@ -28,6 +29,7 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[str] = None
     department: Optional[str] = None
+    department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
 
@@ -39,6 +41,7 @@ class UserResponse(BaseModel):
     email: str
     role: str
     department: Optional[str] = None
+    department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
     permissions: UserPermissions = UserPermissions()

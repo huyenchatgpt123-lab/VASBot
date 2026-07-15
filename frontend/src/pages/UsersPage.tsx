@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { adminApi } from '../api/admin';
 import { useAuth } from '../context/AuthContext';
-import { User, Position } from '../types';
+import { User, Position, Department } from '../types';
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
@@ -9,8 +9,12 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [form, setForm] = useState({ name: '', nickname: '', email: '', password: '', role: 'user', department: '', position_id: '' });
+  const [form, setForm] = useState({ name: '', nickname: '', email: '', password: '', role: 'user', department_id: '', position_id: '' });
   const [positions, setPositions] = useState<Position[]>([]);
+  const [departmentList, setDepartmentList] = useState<Department[]>([]);
+  const [showDeptForm, setShowDeptForm] = useState(false);
+  const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [deptForm, setDeptForm] = useState({ name: '', sort_order: 0 });
   const [showPositionForm, setShowPositionForm] = useState(false);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
   const [positionForm, setPositionForm] = useState({
@@ -33,7 +37,17 @@ export default function UsersPage() {
   useEffect(() => {
     loadUsers();
     loadPositions();
+    loadDepartments();
   }, []);
+
+  const loadDepartments = async () => {
+    try {
+      const data = await adminApi.getDepartments();
+      setDepartmentList(data);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const loadPositions = async () => {
     try {
@@ -48,9 +62,9 @@ export default function UsersPage() {
     setSelectedIds(new Set());
   }, [search, roleFilter, deptFilter]);
 
-  const departments = useMemo(
-    () => [...new Set(users.map((u) => u.department).filter(Boolean) as string[])].sort(),
-    [users],
+  const filterDepartments = useMemo(
+    () => departmentList.map((d) => d.name),
+    [departmentList],
   );
 
   const filteredUsers = useMemo(() => {
@@ -87,7 +101,7 @@ export default function UsersPage() {
   const resetForm = () => {
     const defaultPosition = positions.find((p) => p.name === 'Giáo viên');
     setForm({
-      name: '', nickname: '', email: '', password: '', role: 'user', department: '',
+      name: '', nickname: '', email: '', password: '', role: 'user', department_id: '',
       position_id: defaultPosition ? String(defaultPosition.id) : '',
     });
     setEditingUser(null);
@@ -119,14 +133,18 @@ export default function UsersPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.department_id) {
+      alert('Vui lòng chọn phòng ban.');
+      return;
+    }
     try {
       await adminApi.createUser({
         name: form.name,
-        nickname: form.nickname,
+        nickname: form.nickname.trim() || undefined,
         email: form.email,
         password: form.password,
         role: form.role,
-        department: form.department || undefined,
+        department_id: parseInt(form.department_id),
         position_id: form.position_id ? parseInt(form.position_id) : undefined,
       });
       resetForm();
@@ -144,7 +162,7 @@ export default function UsersPage() {
       email: user.email,
       password: '',
       role: user.role,
-      department: user.department || '',
+      department_id: user.department_id ? String(user.department_id) : '',
       position_id: user.position_id ? String(user.position_id) : '',
     });
     setShowForm(true);
@@ -153,22 +171,27 @@ export default function UsersPage() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+    if (!form.department_id) {
+      alert('Vui lòng chọn phòng ban.');
+      return;
+    }
 
-    const data: Record<string, string | number | undefined> = {};
+    const data: Record<string, string | number | null | undefined> = {};
     if (form.name !== editingUser.name) data.name = form.name;
     if (form.email !== editingUser.email) data.email = form.email;
     if (form.password) data.password = form.password;
     if (form.role !== editingUser.role) data.role = form.role;
-    if (form.nickname !== (editingUser.nickname || '')) data.nickname = form.nickname;
 
-    if (form.department !== (editingUser.department || '')) data.department = form.department;
+    const newNickname = form.nickname.trim();
+    if (newNickname !== (editingUser.nickname || '')) {
+      data.nickname = newNickname || null;
+    }
+
+    const newDeptId = parseInt(form.department_id);
+    if (newDeptId !== editingUser.department_id) data.department_id = newDeptId;
+
     const newPositionId = form.position_id ? parseInt(form.position_id) : undefined;
     if (newPositionId !== editingUser.position_id) data.position_id = newPositionId;
-
-    if (!editingUser.nickname && !form.nickname.trim()) {
-      alert('Vui lòng nhập biệt danh.');
-      return;
-    }
 
     try {
       await adminApi.updateUser(editingUser.id, data);
@@ -294,6 +317,48 @@ export default function UsersPage() {
     }
   };
 
+  const resetDeptForm = () => {
+    setDeptForm({ name: '', sort_order: departmentList.length + 1 });
+    setEditingDept(null);
+    setShowDeptForm(false);
+  };
+
+  const handleEditDept = (dept: Department) => {
+    setEditingDept(dept);
+    setDeptForm({ name: dept.name, sort_order: dept.sort_order });
+    setShowDeptForm(true);
+  };
+
+  const handleSaveDept = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deptForm.name.trim()) {
+      alert('Vui lòng nhập tên phòng ban');
+      return;
+    }
+    try {
+      if (editingDept) {
+        await adminApi.updateDepartment(editingDept.id, deptForm);
+      } else {
+        await adminApi.createDepartment(deptForm);
+      }
+      resetDeptForm();
+      loadDepartments();
+      loadUsers();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Lưu phòng ban thất bại');
+    }
+  };
+
+  const handleDeleteDept = async (dept: Department) => {
+    if (!confirm(`Xóa phòng ban "${dept.name}"?`)) return;
+    try {
+      await adminApi.deleteDepartment(dept.id);
+      loadDepartments();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Không thể xóa phòng ban');
+    }
+  };
+
   const hasActiveFilters = search || roleFilter || deptFilter;
 
   return (
@@ -373,11 +438,10 @@ export default function UsersPage() {
               required
             />
             <input
-              placeholder="Biệt danh (VD: An Tin, Nguyệt K1)"
+              placeholder="Biệt danh (tùy chọn)"
               value={form.nickname}
               onChange={(e) => setForm({ ...form, nickname: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-              required={!editingUser || !editingUser.nickname}
             />
             <input
               type="email"
@@ -403,12 +467,17 @@ export default function UsersPage() {
               <option value="user">User</option>
               <option value="admin">Admin</option>
             </select>
-            <input
-              placeholder="Phòng ban"
-              value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
+            <select
+              value={form.department_id}
+              onChange={(e) => setForm({ ...form, department_id: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-            />
+              required
+            >
+              <option value="">-- Chọn phòng ban --</option>
+              {departmentList.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
             <select
               value={form.position_id}
               onChange={(e) => setForm({ ...form, position_id: e.target.value })}
@@ -438,6 +507,78 @@ export default function UsersPage() {
 
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
         File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Chức vụ phải khớp tên trong danh sách bên dưới.
+      </div>
+
+      </div>
+
+      {/* Quản lý phòng ban */}
+      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">Tổ / Phòng ban</h2>
+          <button
+            onClick={() => {
+              setEditingDept(null);
+              setDeptForm({ name: '', sort_order: departmentList.length + 1 });
+              setShowDeptForm(true);
+            }}
+            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            + Thêm phòng ban
+          </button>
+        </div>
+
+        {showDeptForm && (
+          <form onSubmit={handleSaveDept} className="mb-4 p-4 bg-gray-50 rounded-lg flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs text-gray-500 mb-1">Tên phòng ban</label>
+              <input
+                value={deptForm.name}
+                onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                required
+              />
+            </div>
+            <div className="w-24">
+              <label className="block text-xs text-gray-500 mb-1">Thứ tự</label>
+              <input
+                type="number"
+                value={deptForm.sort_order}
+                onChange={(e) => setDeptForm({ ...deptForm, sort_order: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+            <button type="submit" className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">
+              {editingDept ? 'Cập nhật' : 'Tạo'}
+            </button>
+            <button type="button" onClick={resetDeptForm} className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
+              Hủy
+            </button>
+          </form>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                <th className="py-2 pr-3">Phòng ban</th>
+                <th className="py-2 pr-3">Users</th>
+                <th className="py-2 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {departmentList.map((d) => (
+                <tr key={d.id} className="border-b border-gray-100">
+                  <td className="py-2 pr-3 font-medium">{d.name}</td>
+                  <td className="py-2 pr-3">{d.user_count}</td>
+                  <td className="py-2 text-right space-x-2">
+                    <button onClick={() => handleEditDept(d)} className="text-primary-600 hover:underline">Sửa</button>
+                    <button onClick={() => handleDeleteDept(d)} className="text-red-600 hover:underline">Xóa</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Quản lý chức vụ */}
@@ -563,7 +704,7 @@ export default function UsersPage() {
           className="w-full sm:w-auto px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
         >
           <option value="">Tất cả phòng ban</option>
-          {departments.map((dept) => (
+          {filterDepartments.map((dept) => (
             <option key={dept} value={dept}>{dept}</option>
           ))}
         </select>

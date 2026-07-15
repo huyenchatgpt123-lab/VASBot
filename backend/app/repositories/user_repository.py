@@ -10,6 +10,7 @@ from app.models.document import Document
 from app.models.feedback import Feedback
 from app.models.conversation import Conversation, Message
 from app.repositories.position_repository import PositionRepository
+from app.repositories.department_repository import DepartmentRepository
 from app.schemas.auth import UserCreate
 
 
@@ -69,6 +70,14 @@ class UserRepository:
             .all()
         )
 
+    def _resolve_department(self, user_data: UserCreate):
+        dept_repo = DepartmentRepository(self.db)
+        if getattr(user_data, "department_id", None):
+            return dept_repo.get_by_id(user_data.department_id)
+        if user_data.department:
+            return dept_repo.resolve_by_name(user_data.department)
+        return None
+
     def _resolve_position(self, user_data: UserCreate):
         pos_repo = PositionRepository(self.db)
         if user_data.position_id:
@@ -79,13 +88,15 @@ class UserRepository:
 
     def create(self, user_data: UserCreate, password_hash: str) -> User:
         position = self._resolve_position(user_data)
+        department = self._resolve_department(user_data)
         user = User(
             name=user_data.name,
             nickname=user_data.nickname.strip() if user_data.nickname else None,
             email=user_data.email,
             password_hash=password_hash,
             role=UserRole(user_data.role),
-            department=user_data.department,
+            department=department.name if department else user_data.department,
+            department_id=department.id if department else None,
             position=position.name if position else user_data.position,
             position_id=position.id if position else None,
         )

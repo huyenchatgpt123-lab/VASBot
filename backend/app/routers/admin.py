@@ -14,11 +14,13 @@ from app.services.auth_service import AuthService
 from app.services.task_service import TaskService
 from app.repositories.user_repository import UserRepository
 from app.repositories.position_repository import PositionRepository
+from app.repositories.department_repository import DepartmentRepository
 from app.utils.auth import require_admin, hash_password
 from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
 from app.utils.user_serializer import serialize_user
 from app.models.user import User
 from app.schemas.position import PositionCreate, PositionUpdate, PositionResponse
+from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -53,8 +55,10 @@ def create_user(
     current_user: User = Depends(require_admin),
 ):
     service = AuthService(db)
+    if not data.department_id and not data.department:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phòng ban là bắt buộc")
     try:
-        user = service.create_user(data)
+        user = service.create_user(data, require_nickname=False)
         TaskService(db).rematch_assignees(user_id=user.id)
         return serialize_user(user)
     except ValueError as e:
@@ -85,8 +89,18 @@ def update_user(
         update_fields["password_hash"] = hash_password(data.password)
     if data.role is not None:
         update_fields["role"] = data.role
-    if data.department is not None:
-        update_fields["department"] = data.department or None
+    if data.department_id is not None:
+        dept_repo = DepartmentRepository(db)
+        dept = dept_repo.get_by_id(data.department_id)
+        if not dept:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phòng ban không tồn tại")
+        update_fields["department_id"] = dept.id
+        update_fields["department"] = dept.name
+    elif data.department is not None:
+        dept_repo = DepartmentRepository(db)
+        dept = dept_repo.resolve_by_name(data.department) if data.department else None
+        update_fields["department_id"] = dept.id if dept else None
+        update_fields["department"] = dept.name if dept else None
     if data.position_id is not None:
         pos_repo = PositionRepository(db)
         pos = pos_repo.get_by_id(data.position_id)
@@ -102,16 +116,14 @@ def update_user(
     if data.nickname is not None:
         nickname = data.nickname.strip()
         if not nickname:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Biệt danh không được để trống",
-            )
-        if repo.nickname_exists(nickname, exclude_id=user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Biệt danh '{nickname}' đã được sử dụng",
-            )
-        update_fields["nickname"] = nickname
+            update_fields["nickname"] = None
+        else:
+            if repo.nickname_exists(nickname, exclude_id=user_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Biệt danh '{nickname}' đã được sử dụng",
+                )
+            update_fields["nickname"] = nickname
 
     updated = repo.update(user_id, **update_fields)
     if "nickname" in update_fields:
@@ -207,6 +219,77 @@ def delete_position(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return {"message": "Chức vụ đã được xóa"}
+
+
+@router.get("/departments", response_model=List[DepartmentResponse])
+def get_departments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    dept_repo = DepartmentRepository(db)
+    departments = dept_repo.get_all()
+    return [
+        DepartmentResponse(
+            id=d.id,
+            name=d.name,
+            sort_order=d.sort_order,
+            user_count=dept_repo.count_users(d.id),
+        )
+        for d in departments
+    ]
+
+
+@router.post("/departments", response_model=DepartmentResponse)
+def create_department(
+    data: DepartmentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    dept_repo = DepartmentRepository(db)
+    if dept_repo.get_by_name(data.name):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phòng ban đã tồn tại")
+    dept = dept_repo.create(**data.model_dump())
+    return DepartmentResponse(
+        id=dept.id, name=dept.name, sort_order=dept.sort_order, user_count=0,
+    )
+
+
+@router.put("/departments/{department_id}", response_model=DepartmentResponse)
+def update_department(
+    department_id: int,
+    data: DepartmentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    dept_repo = DepartmentRepository(db)
+    if data.name:
+        existing = dept_repo.get_by_name(data.name)
+        if existing and existing.id != department_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phòng ban đã tồn tại")
+    dept = dept_repo.update(department_id, **data.model_dump(exclude_unset=True))
+    if not dept:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phòng ban không tồn tại")
+    return DepartmentResponse(
+        id=dept.id,
+        name=dept.name,
+        sort_order=dept.sort_order,
+        user_count=dept_repo.count_users(dept.id),
+    )
+
+
+@router.delete("/departments/{department_id}")
+def delete_department(
+    department_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    dept_repo = DepartmentRepository(db)
+    try:
+        if not dept_repo.delete(department_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phòng ban không tồn tại")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return {"message": "Phòng ban đã được xóa"}
 
 
 @router.delete("/users/{user_id}")

@@ -3,17 +3,6 @@ import { documentsApi, UploadMetadata } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import { Document } from '../types';
 
-const DEPARTMENTS = [
-  'Tổ Toán',
-  'Tổ Xã hội 1',
-  'Tổ Xã hội 2',
-  'Tổ Tự Nhiên',
-  'Tổ Tin học',
-  'Tổ Tiếng Anh',
-  'Tổ Ngữ Văn',
-  'Nhà Trường',
-];
-
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 function getSchoolYearOptions() {
@@ -49,10 +38,15 @@ export default function DocumentsPage() {
   const [uploadDept, setUploadDept] = useState('');
   const [uploadMonth, setUploadMonth] = useState('');
   const [uploadYear, setUploadYear] = useState('');
+  const [departments, setDepartments] = useState<string[]>([]);
 
   useEffect(() => {
     loadDocuments();
   }, [search, sortBy, order, page, filterDept, filterMonth, filterYear]);
+
+  useEffect(() => {
+    documentsApi.getDepartments().then((res) => setDepartments(res.departments)).catch(() => {});
+  }, []);
 
   const loadDocuments = async () => {
     setLoading(true);
@@ -205,7 +199,7 @@ export default function DocumentsPage() {
           className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
         >
           <option value="">Tất cả Tổ</option>
-          {DEPARTMENTS.map((d) => (
+          {departments.map((d) => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
@@ -413,7 +407,7 @@ export default function DocumentsPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100"
                 >
                   <option value="">-- Chọn Tổ --</option>
-                  {DEPARTMENTS.map((d) => (
+                  {departments.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>

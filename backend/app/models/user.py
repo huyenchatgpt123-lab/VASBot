@@ -21,6 +21,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.user, nullable=False)
     department = Column(String(255), nullable=True)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
     position = Column(String(255), nullable=True)
     position_id = Column(Integer, ForeignKey("positions.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

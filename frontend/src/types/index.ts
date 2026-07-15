@@ -5,6 +5,13 @@ export interface UserPermissions {
   scope_all_departments: boolean;
 }
 
+export interface Department {
+  id: number;
+  name: string;
+  sort_order: number;
+  user_count: number;
+}
+
 export interface User {
   id: number;
   name: string;
@@ -12,6 +19,7 @@ export interface User {
   email: string;
   role: 'admin' | 'user';
   department?: string;
+  department_id?: number;
   position?: string;
   position_id?: number;
   permissions?: UserPermissions;

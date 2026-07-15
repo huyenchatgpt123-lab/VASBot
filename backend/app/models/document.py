@@ -16,6 +16,8 @@ DEPARTMENTS = [
     "Nhà Trường",
 ]
 
+# Deprecated: use DepartmentRepository.get_names() — kept for imports only
+
 
 class Document(Base):
     __tablename__ = "documents"

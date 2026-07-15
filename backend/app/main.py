@@ -5,7 +5,9 @@ from app.database import engine, Base, SessionLocal
 from app.routers import auth, documents, search, admin, tasks, feedback
 from app.models.user import User, UserRole
 from app.models.position import Position
+from app.models.department import DEFAULT_DEPARTMENTS
 from app.repositories.position_repository import PositionRepository
+from app.repositories.department_repository import DepartmentRepository
 from app.utils.auth import hash_password
 
 app = FastAPI(
@@ -84,6 +86,30 @@ def _migrate_user_positions(db):
     db.commit()
 
 
+def _seed_departments(db):
+    dept_repo = DepartmentRepository(db)
+    for i, name in enumerate(DEFAULT_DEPARTMENTS, start=1):
+        if not dept_repo.get_by_name(name):
+            dept_repo.create(name=name, sort_order=i)
+
+
+def _migrate_user_departments(db):
+    dept_repo = DepartmentRepository(db)
+    users = db.query(User).all()
+    for user in users:
+        if user.department_id:
+            dept = dept_repo.get_by_id(user.department_id)
+            if dept:
+                user.department = dept.name
+            continue
+        if user.department:
+            resolved = dept_repo.resolve_by_name(user.department)
+            if resolved:
+                user.department_id = resolved.id
+                user.department = resolved.name
+    db.commit()
+
+
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
@@ -112,6 +138,10 @@ def startup():
             db.execute(text("ALTER TABLE users ADD COLUMN position_id INTEGER REFERENCES positions(id)"))
             db.commit()
 
+        if "department_id" not in user_columns:
+            db.execute(text("ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES departments(id)"))
+            db.commit()
+
         doc_columns = [c["name"] for c in inspector.get_columns("documents")]
         if "department" not in doc_columns:
             db.execute(text("ALTER TABLE documents ADD COLUMN department VARCHAR(255)"))
@@ -120,7 +150,9 @@ def startup():
             db.commit()
 
         _seed_positions(db)
+        _seed_departments(db)
         _migrate_user_positions(db)
+        _migrate_user_departments(db)
 
         admin_user = db.query(User).filter(User.email == "admin@vietanh.edu.vn").first()
         if not admin_user:
