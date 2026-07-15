@@ -13,9 +13,12 @@ from app.services.dashboard_service import DashboardService
 from app.services.auth_service import AuthService
 from app.services.task_service import TaskService
 from app.repositories.user_repository import UserRepository
+from app.repositories.position_repository import PositionRepository
 from app.utils.auth import require_admin, hash_password
 from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
+from app.utils.user_serializer import serialize_user
 from app.models.user import User
+from app.schemas.position import PositionCreate, PositionUpdate, PositionResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -40,7 +43,7 @@ def get_users(
 ):
     repo = UserRepository(db)
     users = repo.get_all()
-    return [UserResponse.model_validate(u) for u in users]
+    return [serialize_user(u) for u in users]
 
 
 @router.post("/users", response_model=UserResponse)
@@ -53,7 +56,7 @@ def create_user(
     try:
         user = service.create_user(data)
         TaskService(db).rematch_assignees(user_id=user.id)
-        return UserResponse.model_validate(user)
+        return serialize_user(user)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -84,8 +87,18 @@ def update_user(
         update_fields["role"] = data.role
     if data.department is not None:
         update_fields["department"] = data.department or None
-    if data.position is not None:
-        update_fields["position"] = data.position or None
+    if data.position_id is not None:
+        pos_repo = PositionRepository(db)
+        pos = pos_repo.get_by_id(data.position_id)
+        if not pos:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chức vụ không tồn tại")
+        update_fields["position_id"] = pos.id
+        update_fields["position"] = pos.name
+    elif data.position is not None:
+        pos_repo = PositionRepository(db)
+        pos = pos_repo.resolve_by_name(data.position) if data.position else None
+        update_fields["position_id"] = pos.id if pos else None
+        update_fields["position"] = pos.name if pos else None
     if data.nickname is not None:
         nickname = data.nickname.strip()
         if not nickname:
@@ -103,7 +116,97 @@ def update_user(
     updated = repo.update(user_id, **update_fields)
     if "nickname" in update_fields:
         TaskService(db).rematch_assignees(user_id=user_id)
-    return UserResponse.model_validate(updated)
+    return serialize_user(updated)
+
+
+@router.get("/positions", response_model=List[PositionResponse])
+def get_positions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    pos_repo = PositionRepository(db)
+    positions = pos_repo.get_all()
+    return [
+        PositionResponse(
+            id=p.id,
+            name=p.name,
+            can_upload=p.can_upload,
+            can_manage_tasks=p.can_manage_tasks,
+            can_delete_documents=p.can_delete_documents,
+            scope_all_departments=p.scope_all_departments,
+            sort_order=p.sort_order,
+            user_count=pos_repo.count_users(p.id),
+        )
+        for p in positions
+    ]
+
+
+@router.post("/positions", response_model=PositionResponse)
+def create_position(
+    data: PositionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    pos_repo = PositionRepository(db)
+    if pos_repo.get_by_name(data.name):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chức vụ đã tồn tại")
+    pos = pos_repo.create(**data.model_dump())
+    return PositionResponse(
+        id=pos.id,
+        name=pos.name,
+        can_upload=pos.can_upload,
+        can_manage_tasks=pos.can_manage_tasks,
+        can_delete_documents=pos.can_delete_documents,
+        scope_all_departments=pos.scope_all_departments,
+        sort_order=pos.sort_order,
+        user_count=0,
+    )
+
+
+@router.put("/positions/{position_id}", response_model=PositionResponse)
+def update_position(
+    position_id: int,
+    data: PositionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    pos_repo = PositionRepository(db)
+    if data.name:
+        existing = pos_repo.get_by_name(data.name)
+        if existing and existing.id != position_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chức vụ đã tồn tại")
+    pos = pos_repo.update(position_id, **data.model_dump(exclude_unset=True))
+    if not pos:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chức vụ không tồn tại")
+    users_with_pos = db.query(User).filter(User.position_id == position_id).all()
+    for u in users_with_pos:
+        u.position = pos.name
+    db.commit()
+    return PositionResponse(
+        id=pos.id,
+        name=pos.name,
+        can_upload=pos.can_upload,
+        can_manage_tasks=pos.can_manage_tasks,
+        can_delete_documents=pos.can_delete_documents,
+        scope_all_departments=pos.scope_all_departments,
+        sort_order=pos.sort_order,
+        user_count=pos_repo.count_users(pos.id),
+    )
+
+
+@router.delete("/positions/{position_id}")
+def delete_position(
+    position_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    pos_repo = PositionRepository(db)
+    try:
+        if not pos_repo.delete(position_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chức vụ không tồn tại")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return {"message": "Chức vụ đã được xóa"}
 
 
 @router.delete("/users/{user_id}")

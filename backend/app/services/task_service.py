@@ -10,6 +10,12 @@ from app.models.user import User
 from app.models.document import Document
 from app.repositories.task_repository import TaskRepository
 from app.services.task_extractor import task_extractor
+from app.utils.permissions import (
+    is_admin,
+    can_manage_task,
+    can_manage_tasks,
+    has_scope_all_departments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,15 +137,59 @@ class TaskService:
         )
         return self._format_tasks(tasks), total
 
-    def update_status(self, task_id: int, status: str, user_id: int, is_admin: bool) -> Optional[Task]:
+    def get_tasks_for_department(
+        self, department: str, page: int = 1, page_size: int = 20,
+        status: Optional[str] = None, assignee_name: Optional[str] = None,
+        sort_by: str = "deadline", order: str = "asc",
+    ) -> Tuple[List[Dict], int]:
+        tasks, total = self.repo.get_by_department_scope(
+            department, page, page_size, status=status,
+            assignee_name=assignee_name, sort_by=sort_by, order=order,
+        )
+        return self._format_tasks(tasks), total
+
+    def get_tasks_for_manager(
+        self, user: User, page: int = 1, page_size: int = 20,
+        status: Optional[str] = None, assignee_name: Optional[str] = None,
+        sort_by: str = "deadline", order: str = "asc",
+    ) -> Tuple[List[Dict], int]:
+        if is_admin(user) or has_scope_all_departments(user):
+            return self.get_all_tasks(
+                page, page_size, status=status,
+                assignee_name=assignee_name, sort_by=sort_by, order=order,
+            )
+        if not user.department:
+            return [], 0
+        return self.get_tasks_for_department(
+            user.department, page, page_size, status=status,
+            assignee_name=assignee_name, sort_by=sort_by, order=order,
+        )
+
+    def _validate_assignee_for_manager(self, user: User, assignee_id: Optional[int]) -> None:
+        if is_admin(user) or has_scope_all_departments(user):
+            return
+        if not assignee_id:
+            raise PermissionError("Phải chọn người được giao")
+        assignee = self.db.query(User).filter(User.id == assignee_id).first()
+        if not assignee or assignee.department != user.department:
+            raise PermissionError("Chỉ được gán công việc cho thành viên cùng tổ")
+
+    def update_status(self, task_id: int, status: str, user: User) -> Optional[Task]:
         task = self.repo.get_by_id(task_id)
         if not task:
             return None
-        if not is_admin and task.assignee_id != user_id:
+        if not is_admin(user) and not can_manage_task(user, task) and task.assignee_id != user.id:
             raise PermissionError("Bạn không có quyền cập nhật công việc này")
         return self.repo.update(task_id, status=TaskStatus(status))
 
-    def update_task(self, task_id: int, **kwargs) -> Optional[Task]:
+    def update_task(self, task_id: int, user: User, **kwargs) -> Optional[Task]:
+        task = self.repo.get_by_id(task_id)
+        if not task:
+            return None
+        if not is_admin(user) and not can_manage_task(user, task):
+            raise PermissionError("Bạn không có quyền chỉnh sửa công việc này")
+        if "assignee_id" in kwargs and kwargs["assignee_id"]:
+            self._validate_assignee_for_manager(user, kwargs["assignee_id"])
         if "status" in kwargs and kwargs["status"]:
             kwargs["status"] = TaskStatus(kwargs["status"])
         if "deadline" in kwargs and isinstance(kwargs["deadline"], str):
@@ -153,13 +203,46 @@ class TaskService:
             kwargs["assignee_id"] = self._match_user(kwargs["assignee_name"])
         return self.repo.update(task_id, **kwargs)
 
-    def delete_task(self, task_id: int) -> bool:
+    def delete_task(self, task_id: int, user: User) -> bool:
+        task = self.repo.get_by_id(task_id)
+        if not task:
+            return False
+        if not is_admin(user) and not can_manage_task(user, task):
+            raise PermissionError("Bạn không có quyền xóa công việc này")
         return self.repo.delete(task_id)
 
-    def delete_tasks_by_document(self, document_id: Optional[int]) -> int:
+    def delete_tasks_by_document(self, document_id: Optional[int], user: User) -> int:
         if document_id is not None:
+            doc = self.db.query(Document).filter(Document.id == document_id).first()
+            if not doc:
+                raise PermissionError("Tài liệu không tồn tại")
+            if not is_admin(user):
+                if not can_manage_tasks(user):
+                    raise PermissionError("Bạn không có quyền xóa công việc của kế hoạch này")
+                if not has_scope_all_departments(user) and doc.department != user.department:
+                    raise PermissionError("Bạn không có quyền xóa công việc của kế hoạch này")
             return self.repo.delete_by_document(document_id)
-        return self.repo.delete_manual()
+        if is_admin(user) or has_scope_all_departments(user):
+            return self.repo.delete_manual()
+        if not user.department:
+            return 0
+        return self.repo.delete_manual_by_department(user.department)
+
+    def create_task(self, user: User, task_data: dict) -> Task:
+        if not is_admin(user) and not can_manage_tasks(user):
+            raise PermissionError("Bạn không có quyền tạo công việc")
+        assignee_id = task_data.get("assignee_id")
+        if not assignee_id:
+            assignee_id = self._match_user(task_data["assignee_name"])
+            task_data["assignee_id"] = assignee_id
+        self._validate_assignee_for_manager(user, assignee_id)
+        if not is_admin(user) and not has_scope_all_departments(user):
+            doc_id = task_data.get("document_id")
+            if doc_id:
+                doc = self.db.query(Document).filter(Document.id == doc_id).first()
+                if not doc or doc.department != user.department:
+                    raise PermissionError("Chỉ được tạo công việc trong kế hoạch của tổ mình")
+        return self.repo.create(**task_data)
 
     def get_assignee_names(self) -> List[str]:
         return self.repo.get_all_assignee_names()

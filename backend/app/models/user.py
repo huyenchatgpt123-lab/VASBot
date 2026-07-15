@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 
@@ -21,4 +22,7 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.user, nullable=False)
     department = Column(String(255), nullable=True)
     position = Column(String(255), nullable=True)
+    position_id = Column(Integer, ForeignKey("positions.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    position_obj = relationship("Position", backref="users")

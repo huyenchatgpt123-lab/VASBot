@@ -1,3 +1,10 @@
+export interface UserPermissions {
+  can_upload: boolean;
+  can_manage_tasks: boolean;
+  can_delete_documents: boolean;
+  scope_all_departments: boolean;
+}
+
 export interface User {
   id: number;
   name: string;
@@ -6,7 +13,20 @@ export interface User {
   role: 'admin' | 'user';
   department?: string;
   position?: string;
+  position_id?: number;
+  permissions?: UserPermissions;
   created_at: string;
+}
+
+export interface Position {
+  id: number;
+  name: string;
+  can_upload: boolean;
+  can_manage_tasks: boolean;
+  can_delete_documents: boolean;
+  scope_all_departments: boolean;
+  sort_order: number;
+  user_count: number;
 }
 
 export interface Document {

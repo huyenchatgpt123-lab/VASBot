@@ -6,12 +6,24 @@ from app.database import get_db
 from app.utils.auth import get_current_user
 from app.models.user import User, UserRole
 from app.services.task_service import TaskService
+from app.repositories.user_repository import UserRepository
+from app.utils.permissions import (
+    is_admin,
+    can_manage_tasks,
+    has_scope_all_departments,
+)
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskStatusUpdate,
     TaskResponse, TaskListResponse, TaskExtractRequest,
 )
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _require_task_manager(current_user: User = Depends(get_current_user)) -> User:
+    if is_admin(current_user) or can_manage_tasks(current_user):
+        return current_user
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền quản lý công việc")
 
 
 @router.get("", response_model=TaskListResponse)
@@ -27,10 +39,10 @@ def get_tasks(
 ):
     service = TaskService(db)
 
-    if current_user.role == UserRole.admin:
-        tasks, total = service.get_all_tasks(
-            page, page_size, status=status,
-            assignee_name=assignee_name, sort_by=sort_by, order=order
+    if is_admin(current_user) or can_manage_tasks(current_user):
+        tasks, total = service.get_tasks_for_manager(
+            current_user, page, page_size, status=status,
+            assignee_name=assignee_name, sort_by=sort_by, order=order,
         )
     else:
         tasks, total = service.get_tasks_for_user(
@@ -59,13 +71,15 @@ def get_assignees(
 @router.get("/users")
 def get_task_users(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_task_manager),
 ):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền xem")
-
-    from app.repositories.user_repository import UserRepository
-    users = UserRepository(db).get_all()
+    user_repo = UserRepository(db)
+    if is_admin(current_user) or has_scope_all_departments(current_user):
+        users = user_repo.get_all()
+    else:
+        if not current_user.department:
+            return []
+        users = user_repo.get_by_department(current_user.department)
     return [
         {"id": u.id, "name": u.name, "nickname": u.nickname}
         for u in users
@@ -92,9 +106,8 @@ def update_task_status(
     current_user: User = Depends(get_current_user),
 ):
     service = TaskService(db)
-    is_admin = current_user.role == UserRole.admin
     try:
-        task = service.update_status(task_id, body.status, current_user.id, is_admin)
+        task = service.update_status(task_id, body.status, current_user)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
@@ -143,14 +156,14 @@ def update_task(
     task_id: int,
     body: TaskUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_task_manager),
 ):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền chỉnh sửa")
-
     service = TaskService(db)
     update_data = body.model_dump(exclude_unset=True)
-    task = service.update_task(task_id, **update_data)
+    try:
+        task = service.update_task(task_id, current_user, **update_data)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     if not task:
         raise HTTPException(status_code=404, detail="Công việc không tồn tại")
     return {"message": "Cập nhật thành công"}
@@ -160,13 +173,13 @@ def update_task(
 def delete_tasks_by_document(
     document_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_task_manager),
 ):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền xóa")
-
     service = TaskService(db)
-    count = service.delete_tasks_by_document(document_id)
+    try:
+        count = service.delete_tasks_by_document(document_id, current_user)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     return {"message": f"Đã xóa {count} công việc", "count": count}
 
 
@@ -174,14 +187,14 @@ def delete_tasks_by_document(
 def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_task_manager),
 ):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền xóa")
-
     service = TaskService(db)
-    if not service.delete_task(task_id):
-        raise HTTPException(status_code=404, detail="Công việc không tồn tại")
+    try:
+        if not service.delete_task(task_id, current_user):
+            raise HTTPException(status_code=404, detail="Công việc không tồn tại")
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     return {"message": "Đã xóa công việc"}
 
 
@@ -189,11 +202,8 @@ def delete_task(
 def create_task(
     body: TaskCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_task_manager),
 ):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền tạo")
-
     service = TaskService(db)
     task_data = body.model_dump()
     if not task_data.get("assignee_id"):
@@ -202,5 +212,8 @@ def create_task(
     from app.models.task import TaskStatus
     task_data["status"] = TaskStatus(task_data.get("status", "pending"))
 
-    task = service.repo.create(**task_data)
+    try:
+        task = service.create_task(current_user, task_data)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     return {"message": "Đã tạo công việc", "task_id": task.id}

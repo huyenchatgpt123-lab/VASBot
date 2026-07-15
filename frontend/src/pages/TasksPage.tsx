@@ -43,7 +43,7 @@ interface DocumentGroup {
 }
 
 export default function TasksPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, canManageTasks, scopeAllDepartments } = useAuth();
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -68,11 +68,11 @@ export default function TasksPage() {
   }, [page, statusFilter, assigneeFilter]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canManageTasks) {
       tasksApi.getAssignees().then((res) => setAssignees(res.assignees));
       tasksApi.getUsers().then(setTaskUsers).catch(() => {});
     }
-  }, [isAdmin]);
+  }, [canManageTasks]);
 
   useEffect(() => {
     const now = new Date();
@@ -307,10 +307,10 @@ export default function TasksPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Công việc</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {isAdmin ? 'Quản lý tất cả công việc theo kế hoạch' : 'Danh sách công việc của bạn'}
+            {canManageTasks ? 'Quản lý công việc theo kế hoạch' : 'Danh sách công việc của bạn'}
           </p>
         </div>
-        {isAdmin && (
+        {canManageTasks && (
           <button
             onClick={() => openCreateModal(null)}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium w-full sm:w-auto"
@@ -345,7 +345,7 @@ export default function TasksPage() {
           ))}
         </select>
 
-        {isAdmin && (
+        {canManageTasks && (
           <select
             value={assigneeFilter}
             onChange={(e) => { setAssigneeFilter(e.target.value); setPage(1); }}
@@ -410,7 +410,7 @@ export default function TasksPage() {
                 >
                   👁
                 </button>
-                {isAdmin && (
+                {canManageTasks && (
                   <button
                     onClick={() => handleDeleteDocument(docGroup)}
                     className="ml-2 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
@@ -453,14 +453,14 @@ export default function TasksPage() {
                               key={item.id}
                               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium cursor-pointer transition-all hover:shadow-sm ${tagClass}`}
                               onClick={() => {
-                                if (!isAdmin && isUnassigned) return;
+                                if (!canManageTasks && isUnassigned) return;
                                 handleStatusChange(item.id, nextStatus(item.status));
                               }}
                               title={isUnassigned ? `Chưa gán: ${item.assignee_name}` : `Bấm để đổi trạng thái | ${item.assignee_name}`}
                             >
                               <span>{isUnassigned ? '⚠️' : (STATUS_ICONS[effectiveStatus] || '❌')}</span>
                               <span className="max-w-[120px] truncate">{tagLabel}</span>
-                              {isAdmin && (
+                              {canManageTasks && (
                                 <>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); setEditingTask({ ...item }); }}
@@ -486,7 +486,7 @@ export default function TasksPage() {
                         })}
 
                         {/* Admin: add person to this task */}
-                        {isAdmin && (
+                        {canManageTasks && (
                           <button
                             onClick={() => openAddPersonModal(taskGroup, docGroup.document_id)}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-xs text-gray-400 hover:text-primary-600 hover:border-primary-400 transition-colors"

@@ -1,9 +1,11 @@
 from typing import Optional, List, Tuple
-from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import desc, asc, or_, and_
 from datetime import datetime
 
 from app.models.task import Task, TaskStatus
+from app.models.document import Document
+from app.models.user import User as UserModel
 
 
 class TaskRepository:
@@ -29,7 +31,15 @@ class TaskRepository:
         return tasks
 
     def get_by_id(self, task_id: int) -> Optional[Task]:
-        return self.db.query(Task).filter(Task.id == task_id).first()
+        return (
+            self.db.query(Task)
+            .options(
+                joinedload(Task.document),
+                joinedload(Task.assignee),
+            )
+            .filter(Task.id == task_id)
+            .first()
+        )
 
     def update(self, task_id: int, **kwargs) -> Optional[Task]:
         task = self.get_by_id(task_id)
@@ -100,6 +110,66 @@ class TaskRepository:
         tasks = query.offset(offset).limit(page_size).all()
 
         return tasks, total
+
+    def _department_scope_filter(self, query, department: str):
+        return query.outerjoin(Document, Task.document_id == Document.id).outerjoin(
+            UserModel, Task.assignee_id == UserModel.id
+        ).filter(
+            or_(
+                Document.department == department,
+                and_(Task.document_id.is_(None), UserModel.department == department),
+            )
+        )
+
+    def get_by_department_scope(
+        self,
+        department: str,
+        page: int = 1,
+        page_size: int = 20,
+        status: Optional[str] = None,
+        assignee_name: Optional[str] = None,
+        sort_by: str = "deadline",
+        order: str = "asc",
+    ) -> Tuple[List[Task], int]:
+        query = self.db.query(Task)
+        query = self._department_scope_filter(query, department)
+
+        if status:
+            query = query.filter(Task.status == status)
+        if assignee_name:
+            query = query.filter(Task.assignee_name.ilike(f"%{assignee_name}%"))
+
+        total = query.count()
+
+        sort_column = getattr(Task, sort_by, Task.deadline)
+        if order == "desc":
+            query = query.order_by(desc(sort_column).nulls_last())
+        else:
+            query = query.order_by(asc(sort_column).nulls_last())
+
+        offset = (page - 1) * page_size
+        tasks = (
+            query.options(joinedload(Task.document), joinedload(Task.assignee))
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
+        return tasks, total
+
+    def delete_manual_by_department(self, department: str) -> int:
+        task_ids = [
+            t.id for t in (
+                self.db.query(Task)
+                .outerjoin(UserModel, Task.assignee_id == UserModel.id)
+                .filter(Task.document_id.is_(None), UserModel.department == department)
+                .all()
+            )
+        ]
+        if not task_ids:
+            return 0
+        count = self.db.query(Task).filter(Task.id.in_(task_ids)).delete(synchronize_session=False)
+        self.db.commit()
+        return count
 
     def get_by_user(
         self,

@@ -1,5 +1,5 @@
 import api from './client';
-import { DashboardStats, ActivityData, User } from '../types';
+import { DashboardStats, ActivityData, User, Position } from '../types';
 
 export const adminApi = {
   getDashboard: async (params?: { start_date?: string; end_date?: string }) => {
@@ -13,11 +13,29 @@ export const adminApi = {
     const res = await api.get('/admin/users');
     return res.data;
   },
-  createUser: async (data: { name: string; nickname: string; email: string; password: string; role: string; department?: string; position?: string }) => {
+  createUser: async (data: {
+    name: string;
+    nickname: string;
+    email: string;
+    password: string;
+    role: string;
+    department?: string;
+    position_id?: number;
+    position?: string;
+  }) => {
     const res = await api.post('/admin/users', data);
     return res.data;
   },
-  updateUser: async (id: number, data: { name?: string; nickname?: string; email?: string; password?: string; role?: string; department?: string; position?: string }) => {
+  updateUser: async (id: number, data: {
+    name?: string;
+    nickname?: string;
+    email?: string;
+    password?: string;
+    role?: string;
+    department?: string;
+    position_id?: number;
+    position?: string;
+  }) => {
     const res = await api.put(`/admin/users/${id}`, data);
     return res.data;
   },
@@ -32,5 +50,21 @@ export const adminApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return res.data as { message: string; created: number; skipped: number; errors: string[] };
+  },
+  getPositions: async (): Promise<Position[]> => {
+    const res = await api.get('/admin/positions');
+    return res.data;
+  },
+  createPosition: async (data: Omit<Position, 'id' | 'user_count'>) => {
+    const res = await api.post('/admin/positions', data);
+    return res.data as Position;
+  },
+  updatePosition: async (id: number, data: Partial<Omit<Position, 'id' | 'user_count'>>) => {
+    const res = await api.put(`/admin/positions/${id}`, data);
+    return res.data as Position;
+  },
+  deletePosition: async (id: number) => {
+    const res = await api.delete(`/admin/positions/${id}`);
+    return res.data;
   },
 };

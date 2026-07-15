@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { adminApi } from '../api/admin';
 import { useAuth } from '../context/AuthContext';
-import { User } from '../types';
+import { User, Position } from '../types';
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
@@ -9,7 +9,18 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [form, setForm] = useState({ name: '', nickname: '', email: '', password: '', role: 'user', department: '', position: '' });
+  const [form, setForm] = useState({ name: '', nickname: '', email: '', password: '', role: 'user', department: '', position_id: '' });
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [showPositionForm, setShowPositionForm] = useState(false);
+  const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+  const [positionForm, setPositionForm] = useState({
+    name: '',
+    can_upload: false,
+    can_manage_tasks: false,
+    can_delete_documents: false,
+    scope_all_departments: false,
+    sort_order: 0,
+  });
   const [importResult, setImportResult] = useState<{ message: string; errors: string[] } | null>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
@@ -21,7 +32,17 @@ export default function UsersPage() {
 
   useEffect(() => {
     loadUsers();
+    loadPositions();
   }, []);
+
+  const loadPositions = async () => {
+    try {
+      const data = await adminApi.getPositions();
+      setPositions(data);
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -64,7 +85,11 @@ export default function UsersPage() {
   };
 
   const resetForm = () => {
-    setForm({ name: '', nickname: '', email: '', password: '', role: 'user', department: '', position: '' });
+    const defaultPosition = positions.find((p) => p.name === 'Giáo viên');
+    setForm({
+      name: '', nickname: '', email: '', password: '', role: 'user', department: '',
+      position_id: defaultPosition ? String(defaultPosition.id) : '',
+    });
     setEditingUser(null);
     setShowForm(false);
   };
@@ -102,7 +127,7 @@ export default function UsersPage() {
         password: form.password,
         role: form.role,
         department: form.department || undefined,
-        position: form.position || undefined,
+        position_id: form.position_id ? parseInt(form.position_id) : undefined,
       });
       resetForm();
       loadUsers();
@@ -120,7 +145,7 @@ export default function UsersPage() {
       password: '',
       role: user.role,
       department: user.department || '',
-      position: user.position || '',
+      position_id: user.position_id ? String(user.position_id) : '',
     });
     setShowForm(true);
   };
@@ -129,7 +154,7 @@ export default function UsersPage() {
     e.preventDefault();
     if (!editingUser) return;
 
-    const data: Record<string, string | undefined> = {};
+    const data: Record<string, string | number | undefined> = {};
     if (form.name !== editingUser.name) data.name = form.name;
     if (form.email !== editingUser.email) data.email = form.email;
     if (form.password) data.password = form.password;
@@ -137,7 +162,8 @@ export default function UsersPage() {
     if (form.nickname !== (editingUser.nickname || '')) data.nickname = form.nickname;
 
     if (form.department !== (editingUser.department || '')) data.department = form.department;
-    if (form.position !== (editingUser.position || '')) data.position = form.position;
+    const newPositionId = form.position_id ? parseInt(form.position_id) : undefined;
+    if (newPositionId !== editingUser.position_id) data.position_id = newPositionId;
 
     if (!editingUser.nickname && !form.nickname.trim()) {
       alert('Vui lòng nhập biệt danh.');
@@ -210,6 +236,61 @@ export default function UsersPage() {
       alert('Import thất bại.');
     } finally {
       if (excelInputRef.current) excelInputRef.current.value = '';
+    }
+  };
+
+  const resetPositionForm = () => {
+    setPositionForm({
+      name: '',
+      can_upload: false,
+      can_manage_tasks: false,
+      can_delete_documents: false,
+      scope_all_departments: false,
+      sort_order: positions.length + 1,
+    });
+    setEditingPosition(null);
+    setShowPositionForm(false);
+  };
+
+  const handleEditPosition = (pos: Position) => {
+    setEditingPosition(pos);
+    setPositionForm({
+      name: pos.name,
+      can_upload: pos.can_upload,
+      can_manage_tasks: pos.can_manage_tasks,
+      can_delete_documents: pos.can_delete_documents,
+      scope_all_departments: pos.scope_all_departments,
+      sort_order: pos.sort_order,
+    });
+    setShowPositionForm(true);
+  };
+
+  const handleSavePosition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!positionForm.name.trim()) {
+      alert('Vui lòng nhập tên chức vụ');
+      return;
+    }
+    try {
+      if (editingPosition) {
+        await adminApi.updatePosition(editingPosition.id, positionForm);
+      } else {
+        await adminApi.createPosition(positionForm);
+      }
+      resetPositionForm();
+      loadPositions();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Lưu chức vụ thất bại');
+    }
+  };
+
+  const handleDeletePosition = async (pos: Position) => {
+    if (!confirm(`Xóa chức vụ "${pos.name}"?`)) return;
+    try {
+      await adminApi.deletePosition(pos.id);
+      loadPositions();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Không thể xóa chức vụ');
     }
   };
 
@@ -311,12 +392,16 @@ export default function UsersPage() {
               onChange={(e) => setForm({ ...form, department: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
             />
-            <input
-              placeholder="Chức vụ"
-              value={form.position}
-              onChange={(e) => setForm({ ...form, position: e.target.value })}
+            <select
+              value={form.position_id}
+              onChange={(e) => setForm({ ...form, position_id: e.target.value })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-            />
+            >
+              <option value="">-- Chọn chức vụ --</option>
+              {positions.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
             <div className="md:col-span-2 flex gap-3">
               <button type="submit" className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700">
                 {editingUser ? 'Cập nhật' : 'Tạo'}
@@ -334,7 +419,106 @@ export default function UsersPage() {
       )}
 
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-        File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Dòng đầu tiên là tiêu đề. <strong>Biệt danh</strong> có thể để trống khi import — admin bổ sung sau trên trang Người dùng.
+        File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Chức vụ phải khớp tên trong danh sách bên dưới.
+      </div>
+
+      {/* Quản lý chức vụ */}
+      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">Chức vụ & Phân quyền</h2>
+          <button
+            onClick={() => {
+              setEditingPosition(null);
+              setPositionForm({
+                name: '',
+                can_upload: false,
+                can_manage_tasks: false,
+                can_delete_documents: false,
+                scope_all_departments: false,
+                sort_order: positions.length + 1,
+              });
+              setShowPositionForm(true);
+            }}
+            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            + Thêm chức vụ
+          </button>
+        </div>
+
+        {showPositionForm && (
+          <form onSubmit={handleSavePosition} className="mb-4 p-4 bg-gray-50 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input
+              placeholder="Tên chức vụ"
+              value={positionForm.name}
+              onChange={(e) => setPositionForm({ ...positionForm, name: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              required
+            />
+            <input
+              type="number"
+              placeholder="Thứ tự"
+              value={positionForm.sort_order}
+              onChange={(e) => setPositionForm({ ...positionForm, sort_order: parseInt(e.target.value) || 0 })}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_upload} onChange={(e) => setPositionForm({ ...positionForm, can_upload: e.target.checked })} />
+              Upload tài liệu
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_manage_tasks} onChange={(e) => setPositionForm({ ...positionForm, can_manage_tasks: e.target.checked })} />
+              Quản lý công việc
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_delete_documents} onChange={(e) => setPositionForm({ ...positionForm, can_delete_documents: e.target.checked })} />
+              Xóa tài liệu
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.scope_all_departments} onChange={(e) => setPositionForm({ ...positionForm, scope_all_departments: e.target.checked })} />
+              Toàn trường (tất cả tổ)
+            </label>
+            <div className="md:col-span-2 flex gap-2">
+              <button type="submit" className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">
+                {editingPosition ? 'Cập nhật' : 'Tạo'}
+              </button>
+              <button type="button" onClick={resetPositionForm} className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
+                Hủy
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                <th className="py-2 pr-3">Chức vụ</th>
+                <th className="py-2 pr-3">Upload</th>
+                <th className="py-2 pr-3">Công việc</th>
+                <th className="py-2 pr-3">Xóa TL</th>
+                <th className="py-2 pr-3">Toàn trường</th>
+                <th className="py-2 pr-3">Users</th>
+                <th className="py-2 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((p) => (
+                <tr key={p.id} className="border-b border-gray-100">
+                  <td className="py-2 pr-3 font-medium">{p.name}</td>
+                  <td className="py-2 pr-3">{p.can_upload ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_manage_tasks ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_delete_documents ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.scope_all_departments ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.user_count}</td>
+                  <td className="py-2 text-right space-x-2">
+                    <button onClick={() => handleEditPosition(p)} className="text-primary-600 hover:underline">Sửa</button>
+                    <button onClick={() => handleDeletePosition(p)} className="text-red-600 hover:underline">Xóa</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Filters */}

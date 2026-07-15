@@ -1,6 +1,13 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User } from '../types';
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import { User, UserPermissions } from '../types';
 import { authApi } from '../api/auth';
+
+const defaultPermissions: UserPermissions = {
+  can_upload: false,
+  can_manage_tasks: false,
+  can_delete_documents: false,
+  scope_all_departments: false,
+};
 
 interface AuthContextType {
   user: User | null;
@@ -9,6 +16,11 @@ interface AuthContextType {
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   isAdmin: boolean;
+  permissions: UserPermissions;
+  canUpload: boolean;
+  canManageTasks: boolean;
+  canDeleteDocuments: boolean;
+  scopeAllDepartments: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -54,6 +66,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const permissions = useMemo(
+    () => user?.permissions ?? defaultPermissions,
+    [user],
+  );
+
+  const isAdmin = user?.role === 'admin';
+
   return (
     <AuthContext.Provider
       value={{
@@ -62,7 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
-        isAdmin: user?.role === 'admin',
+        isAdmin,
+        permissions,
+        canUpload: isAdmin || permissions.can_upload,
+        canManageTasks: isAdmin || permissions.can_manage_tasks,
+        canDeleteDocuments: isAdmin || permissions.can_delete_documents,
+        scopeAllDepartments: isAdmin || permissions.scope_all_departments,
       }}
     >
       {children}

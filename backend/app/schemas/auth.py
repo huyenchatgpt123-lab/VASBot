@@ -3,6 +3,13 @@ from datetime import datetime
 from typing import Optional
 
 
+class UserPermissions(BaseModel):
+    can_upload: bool = False
+    can_manage_tasks: bool = False
+    can_delete_documents: bool = False
+    scope_all_departments: bool = False
+
+
 class UserCreate(BaseModel):
     name: str
     nickname: Optional[str] = None
@@ -11,6 +18,7 @@ class UserCreate(BaseModel):
     role: str = "user"
     department: Optional[str] = None
     position: Optional[str] = None
+    position_id: Optional[int] = None
 
 
 class UserUpdate(BaseModel):
@@ -21,6 +29,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     department: Optional[str] = None
     position: Optional[str] = None
+    position_id: Optional[int] = None
 
 
 class UserResponse(BaseModel):
@@ -31,6 +40,8 @@ class UserResponse(BaseModel):
     role: str
     department: Optional[str] = None
     position: Optional[str] = None
+    position_id: Optional[int] = None
+    permissions: UserPermissions = UserPermissions()
     created_at: datetime
 
     class Config:

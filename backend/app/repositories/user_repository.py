@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional, List
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
@@ -9,6 +9,7 @@ from app.models.task import Task
 from app.models.document import Document
 from app.models.feedback import Feedback
 from app.models.conversation import Conversation, Message
+from app.repositories.position_repository import PositionRepository
 from app.schemas.auth import UserCreate
 
 
@@ -17,7 +18,12 @@ class UserRepository:
         self.db = db
 
     def get_by_id(self, user_id: int) -> Optional[User]:
-        return self.db.query(User).filter(User.id == user_id).first()
+        return (
+            self.db.query(User)
+            .options(joinedload(User.position_obj))
+            .filter(User.id == user_id)
+            .first()
+        )
 
     def get_by_email(self, email: str) -> Optional[User]:
         return self.db.query(User).filter(User.email == email).first()
@@ -47,9 +53,32 @@ class UserRepository:
         return query.first() is not None
 
     def get_all(self) -> List[User]:
-        return self.db.query(User).order_by(User.created_at.desc()).all()
+        return (
+            self.db.query(User)
+            .options(joinedload(User.position_obj))
+            .order_by(User.created_at.desc())
+            .all()
+        )
+
+    def get_by_department(self, department: str) -> List[User]:
+        return (
+            self.db.query(User)
+            .options(joinedload(User.position_obj))
+            .filter(User.department == department)
+            .order_by(User.name)
+            .all()
+        )
+
+    def _resolve_position(self, user_data: UserCreate):
+        pos_repo = PositionRepository(self.db)
+        if user_data.position_id:
+            return pos_repo.get_by_id(user_data.position_id)
+        if user_data.position:
+            return pos_repo.resolve_by_name(user_data.position)
+        return pos_repo.get_default()
 
     def create(self, user_data: UserCreate, password_hash: str) -> User:
+        position = self._resolve_position(user_data)
         user = User(
             name=user_data.name,
             nickname=user_data.nickname.strip() if user_data.nickname else None,
@@ -57,12 +86,12 @@ class UserRepository:
             password_hash=password_hash,
             role=UserRole(user_data.role),
             department=user_data.department,
-            position=user_data.position,
+            position=position.name if position else user_data.position,
+            position_id=position.id if position else None,
         )
         self.db.add(user)
         self.db.commit()
-        self.db.refresh(user)
-        return user
+        return self.get_by_id(user.id) or user
 
     def update(self, user_id: int, **kwargs) -> Optional[User]:
         user = self.get_by_id(user_id)
@@ -75,8 +104,7 @@ class UserRepository:
                 else:
                     setattr(user, key, value)
         self.db.commit()
-        self.db.refresh(user)
-        return user
+        return self.get_by_id(user_id)
 
     def count(self) -> int:
         return self.db.query(User).count()

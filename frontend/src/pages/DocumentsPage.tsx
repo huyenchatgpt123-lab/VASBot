@@ -36,7 +36,7 @@ export default function DocumentsPage() {
   const [total, setTotal] = useState(0);
   const pageSize = 20;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { isAdmin } = useAuth();
+  const { canUpload, canDeleteDocuments, scopeAllDepartments, user } = useAuth();
 
   // Filters
   const [filterDept, setFilterDept] = useState('');
@@ -78,10 +78,16 @@ export default function DocumentsPage() {
 
   const openUploadModal = () => {
     setUploadFile(null);
-    setUploadDept('');
+    setUploadDept(scopeAllDepartments ? '' : (user?.department || ''));
     setUploadMonth('');
     setUploadYear('');
     setShowUploadModal(true);
+  };
+
+  const canDeleteDoc = (doc: Document) => {
+    if (!canDeleteDocuments) return false;
+    if (scopeAllDepartments) return true;
+    return doc.department === user?.department;
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,7 +179,7 @@ export default function DocumentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Tài liệu</h1>
           <p className="text-gray-500 mt-1">Quản lý tài liệu nội bộ ({total} tài liệu)</p>
         </div>
-        {isAdmin && (
+        {canUpload && (
           <button
             onClick={openUploadModal}
             disabled={uploading}
@@ -241,7 +247,7 @@ export default function DocumentsPage() {
             <p className="text-gray-500">
               {hasFilters ? 'Không tìm thấy tài liệu phù hợp.' : 'Chưa có tài liệu nào.'}
             </p>
-            {isAdmin && !hasFilters && (
+            {canUpload && !hasFilters && (
               <p className="text-sm text-gray-400 mt-2">Upload PDF hoặc Word để bắt đầu.</p>
             )}
           </div>
@@ -276,7 +282,7 @@ export default function DocumentsPage() {
                   >
                     📥
                   </button>
-                  {isAdmin && (
+                  {canDeleteDoc(doc) && (
                     <button
                       onClick={() => handleDelete(doc.id)}
                       className="text-sm text-red-600 hover:text-red-700 font-medium"
@@ -347,7 +353,7 @@ export default function DocumentsPage() {
                       >
                         📥
                       </button>
-                      {isAdmin && (
+                      {canDeleteDoc(doc) && (
                         <button
                           onClick={() => handleDelete(doc.id)}
                           className="text-sm text-red-600 hover:text-red-700 font-medium"
@@ -403,7 +409,8 @@ export default function DocumentsPage() {
                 <select
                   value={uploadDept}
                   onChange={(e) => setUploadDept(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  disabled={!scopeAllDepartments}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100"
                 >
                   <option value="">-- Chọn Tổ --</option>
                   {DEPARTMENTS.map((d) => (

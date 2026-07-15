@@ -17,6 +17,7 @@ from app.services.storage_service import (
     get_download_url,
 )
 from app.utils.auth import get_current_user, require_admin
+from app.utils.permissions import can_upload, can_upload_to_department, can_delete_document, has_scope_all_departments, is_admin
 from app.models.user import User
 from app.models.document import DEPARTMENTS
 
@@ -39,8 +40,19 @@ async def upload_document(
     month: int = Form(...),
     school_year: str = Form(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    if not can_upload(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền upload tài liệu")
+
+    upload_department = department
+    if not is_admin(current_user) and not has_scope_all_departments(current_user):
+        if not current_user.department:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tài khoản chưa được gán tổ")
+        upload_department = current_user.department
+    elif not can_upload_to_department(current_user, upload_department):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền upload cho tổ này")
+
     if not file.filename.lower().endswith(ALLOWED_EXTENSIONS):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chỉ chấp nhận file PDF hoặc Word (.docx)")
 
@@ -50,7 +62,7 @@ async def upload_document(
     try:
         result = service.upload_document(
             content, file.filename, current_user.id,
-            department=department, month=month, school_year=school_year,
+            department=upload_department, month=month, school_year=school_year,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
@@ -197,8 +209,15 @@ def view_document(
 def delete_document(
     doc_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    repo = DocumentRepository(db)
+    doc = repo.get_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
+    if not can_delete_document(current_user, doc):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền xóa tài liệu này")
+
     service = DocumentService(db)
     if not service.delete_document(doc_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
