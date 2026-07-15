@@ -188,8 +188,6 @@ class TaskService:
             return None
         if not is_admin(user) and not can_manage_task(user, task):
             raise PermissionError("Bạn không có quyền chỉnh sửa công việc này")
-        if "assignee_id" in kwargs and kwargs["assignee_id"]:
-            self._validate_assignee_for_manager(user, kwargs["assignee_id"])
         if "status" in kwargs and kwargs["status"]:
             kwargs["status"] = TaskStatus(kwargs["status"])
         if "deadline" in kwargs and isinstance(kwargs["deadline"], str):
@@ -228,6 +226,87 @@ class TaskService:
             return 0
         return self.repo.delete_manual_by_department(user.department)
 
+    def create_tasks_batch(self, user: User, title: str, assignee_ids: List[int], **kwargs) -> List[Task]:
+        if not is_admin(user) and not can_manage_tasks(user):
+            raise PermissionError("Bạn không có quyền tạo công việc")
+        if not assignee_ids:
+            raise PermissionError("Phải chọn ít nhất một người được giao")
+
+        doc_id = kwargs.get("document_id")
+        if not is_admin(user) and not has_scope_all_departments(user) and doc_id:
+            doc = self.db.query(Document).filter(Document.id == doc_id).first()
+            if not doc or doc.department != user.department:
+                raise PermissionError("Chỉ được tạo công việc trong kế hoạch của tổ mình")
+
+        created = []
+        for assignee_id in assignee_ids:
+            assignee = self.db.query(User).filter(User.id == assignee_id).first()
+            if not assignee:
+                raise PermissionError(f"Người dùng ID {assignee_id} không tồn tại")
+            task_data = {
+                "title": title,
+                "assignee_id": assignee.id,
+                "assignee_name": assignee.name,
+                "deadline": kwargs.get("deadline"),
+                "document_id": doc_id,
+                "note": kwargs.get("note"),
+                "status": TaskStatus.pending,
+            }
+            created.append(self.repo.create(**task_data))
+        return created
+
+    def sync_task_group(
+        self, user: User, task_ids: List[int], title: str, assignee_ids: List[int], **kwargs
+    ) -> List[Task]:
+        if not task_ids:
+            raise PermissionError("Không có công việc để cập nhật")
+        if not assignee_ids:
+            raise PermissionError("Phải chọn ít nhất một người được giao")
+
+        existing_tasks = [self.repo.get_by_id(tid) for tid in task_ids]
+        existing_tasks = [t for t in existing_tasks if t]
+        if not existing_tasks:
+            raise PermissionError("Công việc không tồn tại")
+
+        for task in existing_tasks:
+            if not is_admin(user) and not can_manage_task(user, task):
+                raise PermissionError("Bạn không có quyền chỉnh sửa công việc này")
+
+        doc_id = kwargs.get("document_id", existing_tasks[0].document_id)
+        deadline = kwargs.get("deadline")
+        note = kwargs.get("note")
+
+        current_ids = {t.assignee_id for t in existing_tasks if t.assignee_id}
+        new_ids = set(assignee_ids)
+        to_remove = current_ids - new_ids
+        to_add = new_ids - current_ids
+
+        update_fields = {"title": title, "document_id": doc_id, "note": note}
+        if deadline is not None:
+            update_fields["deadline"] = deadline
+
+        for task in existing_tasks:
+            if task.assignee_id in to_remove:
+                self.repo.delete(task.id)
+            elif task.assignee_id in new_ids:
+                self.repo.update(task.id, **update_fields)
+
+        for assignee_id in to_add:
+            assignee = self.db.query(User).filter(User.id == assignee_id).first()
+            if not assignee:
+                raise PermissionError(f"Người dùng ID {assignee_id} không tồn tại")
+            self.repo.create(
+                title=title,
+                assignee_id=assignee.id,
+                assignee_name=assignee.name,
+                deadline=deadline,
+                document_id=doc_id,
+                note=note,
+                status=TaskStatus.pending,
+            )
+
+        return existing_tasks
+
     def create_task(self, user: User, task_data: dict) -> Task:
         if not is_admin(user) and not can_manage_tasks(user):
             raise PermissionError("Bạn không có quyền tạo công việc")
@@ -235,7 +314,6 @@ class TaskService:
         if not assignee_id:
             assignee_id = self._match_user(task_data["assignee_name"])
             task_data["assignee_id"] = assignee_id
-        self._validate_assignee_for_manager(user, assignee_id)
         if not is_admin(user) and not has_scope_all_departments(user):
             doc_id = task_data.get("document_id")
             if doc_id:

@@ -10,11 +10,11 @@ from app.repositories.user_repository import UserRepository
 from app.utils.permissions import (
     is_admin,
     can_manage_tasks,
-    has_scope_all_departments,
 )
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskStatusUpdate,
     TaskResponse, TaskListResponse, TaskExtractRequest,
+    TaskBatchCreate, TaskGroupUpdate,
 )
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -74,14 +74,9 @@ def get_task_users(
     current_user: User = Depends(_require_task_manager),
 ):
     user_repo = UserRepository(db)
-    if is_admin(current_user) or has_scope_all_departments(current_user):
-        users = user_repo.get_all()
-    else:
-        if not current_user.department:
-            return []
-        users = user_repo.get_by_department(current_user.department)
+    users = user_repo.get_all()
     return [
-        {"id": u.id, "name": u.name, "nickname": u.nickname}
+        {"id": u.id, "name": u.name, "nickname": u.nickname, "department": u.department}
         for u in users
     ]
 
@@ -196,6 +191,49 @@ def delete_task(
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     return {"message": "Đã xóa công việc"}
+
+
+@router.post("/batch")
+def create_tasks_batch(
+    body: TaskBatchCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_task_manager),
+):
+    service = TaskService(db)
+    try:
+        created = service.create_tasks_batch(
+            current_user,
+            body.title,
+            body.assignee_ids,
+            deadline=body.deadline,
+            document_id=body.document_id,
+            note=body.note,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    return {"message": f"Đã tạo {len(created)} công việc", "count": len(created)}
+
+
+@router.put("/group")
+def update_task_group(
+    body: TaskGroupUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_task_manager),
+):
+    service = TaskService(db)
+    try:
+        service.sync_task_group(
+            current_user,
+            body.task_ids,
+            body.title,
+            body.assignee_ids,
+            deadline=body.deadline,
+            document_id=body.document_id,
+            note=body.note,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    return {"message": "Cập nhật thành công", "count": len(body.assignee_ids)}
 
 
 @router.post("", response_model=dict)

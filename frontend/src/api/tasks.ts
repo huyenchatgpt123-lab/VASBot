@@ -14,6 +14,13 @@ export interface TaskItem {
   updated_at: string | null;
 }
 
+export interface TaskUser {
+  id: number;
+  name: string;
+  nickname: string | null;
+  department: string | null;
+}
+
 export interface TaskListResponse {
   tasks: TaskItem[];
   total: number;
@@ -47,7 +54,7 @@ export const tasksApi = {
     return res.data;
   },
 
-  getUsers: async (): Promise<{ id: number; name: string; nickname: string | null }[]> => {
+  getUsers: async (): Promise<TaskUser[]> => {
     const res = await api.get('/tasks/users');
     return res.data;
   },
@@ -64,6 +71,29 @@ export const tasksApi = {
 
   saveTasks: async (documentId: number, tasks: any[], replace: boolean = false) => {
     const res = await api.post(`/tasks/save?document_id=${documentId}&replace=${replace}`, tasks);
+    return res.data;
+  },
+
+  createBatch: async (data: {
+    title: string;
+    assignee_ids: number[];
+    deadline?: string;
+    document_id?: number;
+    note?: string;
+  }) => {
+    const res = await api.post('/tasks/batch', data);
+    return res.data;
+  },
+
+  updateGroup: async (data: {
+    title: string;
+    assignee_ids: number[];
+    task_ids: number[];
+    deadline?: string | null;
+    document_id?: number | null;
+    note?: string | null;
+  }) => {
+    const res = await api.put('/tasks/group', data);
     return res.data;
   },
 

@@ -13,6 +13,23 @@ class TaskCreate(BaseModel):
     note: Optional[str] = None
 
 
+class TaskBatchCreate(BaseModel):
+    title: str
+    assignee_ids: List[int]
+    deadline: Optional[datetime] = None
+    document_id: Optional[int] = None
+    note: Optional[str] = None
+
+
+class TaskGroupUpdate(BaseModel):
+    title: str
+    assignee_ids: List[int]
+    deadline: Optional[datetime] = None
+    note: Optional[str] = None
+    document_id: Optional[int] = None
+    task_ids: List[int]
+
+
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     assignee_name: Optional[str] = None
