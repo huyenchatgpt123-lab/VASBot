@@ -339,8 +339,12 @@ class TaskService:
         result = []
         for task in tasks:
             doc_name = None
+            department = None
             if task.document:
                 doc_name = task.document.filename
+                department = task.document.department
+            elif task.assignee:
+                department = task.assignee.department
             result.append({
                 "id": task.id,
                 "title": task.title,
@@ -350,6 +354,7 @@ class TaskService:
                 "status": task.status.value if task.status else "pending",
                 "document_id": task.document_id,
                 "document_name": doc_name,
+                "department": department,
                 "note": task.note,
                 "created_at": task.created_at.isoformat() if task.created_at else None,
                 "updated_at": task.updated_at.isoformat() if task.updated_at else None,

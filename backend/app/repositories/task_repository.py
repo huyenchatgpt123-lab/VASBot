@@ -107,7 +107,12 @@ class TaskRepository:
             query = query.order_by(asc(sort_column).nulls_last())
 
         offset = (page - 1) * page_size
-        tasks = query.offset(offset).limit(page_size).all()
+        tasks = (
+            query.options(joinedload(Task.document), joinedload(Task.assignee))
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
 
         return tasks, total
 
@@ -194,7 +199,12 @@ class TaskRepository:
             query = query.order_by(asc(sort_column).nulls_last())
 
         offset = (page - 1) * page_size
-        tasks = query.offset(offset).limit(page_size).all()
+        tasks = (
+            query.options(joinedload(Task.document), joinedload(Task.assignee))
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
 
         return tasks, total
 
