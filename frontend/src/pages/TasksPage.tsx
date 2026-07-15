@@ -176,6 +176,14 @@ function buildPersonGroups(taskList: TaskItem[]): PersonGroup[] {
   return Object.values(map).sort((a, b) => a.assignee_name.localeCompare(b.assignee_name, 'vi'));
 }
 
+function getAllExpandedDocs(docGroups: DocumentGroup[]): Set<string> {
+  return new Set(docGroups.map((d) => d.document_name));
+}
+
+function getAllExpandedDepts(deptGroups: DepartmentGroup[]): Set<string> {
+  return new Set(deptGroups.map((d) => d.department));
+}
+
 function getSmartExpandedDocs(docGroups: DocumentGroup[]): Set<string> {
   const expanded = new Set<string>();
   for (const doc of docGroups) {
@@ -201,7 +209,8 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(200);
+  const [pageSize] = useState(100);
+  const [loadError, setLoadError] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [assignees, setAssignees] = useState<string[]>([]);
@@ -285,6 +294,10 @@ export default function TasksPage() {
     if (q) list = list.filter((t) => t.title.toLowerCase().includes(q));
     if (overdueOnly) list = list.filter(isTaskOverdue);
 
+    if (statusFilter === 'overdue') {
+      list = list.filter((t) => getEffectiveStatus(t) === 'overdue');
+    }
+
     if (summaryFilter === 'overdue') {
       list = list.filter((t) => getEffectiveStatus(t) === 'overdue');
     } else if (summaryFilter) {
@@ -292,7 +305,7 @@ export default function TasksPage() {
     }
 
     return list;
-  }, [tasks, viewMode, listDeptFilter, planFilter, titleSearch, overdueOnly, summaryFilter]);
+  }, [tasks, viewMode, listDeptFilter, planFilter, titleSearch, overdueOnly, summaryFilter, statusFilter]);
 
   const stats = useMemo(() => {
     const base = canManageTasks ? tasks : visibleTasks;
@@ -321,8 +334,8 @@ export default function TasksPage() {
 
   const documentGroups = useMemo(() => {
     const source = viewMode === 'manual'
-      ? visibleTasks
-      : visibleTasks.filter((t) => t.document_id);
+      ? visibleTasks.filter((t) => !t.document_id)
+      : visibleTasks;
     return buildDocumentGroups(source);
   }, [visibleTasks, viewMode]);
   const departmentGroups = useMemo(() => buildDepartmentGroups(documentGroups), [documentGroups]);
@@ -355,23 +368,44 @@ export default function TasksPage() {
 
   const loadTasks = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const params: Record<string, string | number> = { page, page_size: pageSize, sort_by: 'deadline', order: 'asc' };
-      if (statusFilter) params.status = statusFilter;
+      if (statusFilter && statusFilter !== 'overdue') params.status = statusFilter;
       if (assigneeFilter) params.assignee_name = assigneeFilter;
       const res = await tasksApi.getAll(params);
       setTasks(res.tasks);
       setTotal(res.total);
       const docs = buildDocumentGroups(res.tasks);
-      setExpandedDocs(getSmartExpandedDocs(docs));
+      setExpandedDocs(getAllExpandedDocs(docs));
       if (scopeAllDepartments) {
-        setExpandedDepts(getSmartExpandedDepts(buildDepartmentGroups(docs)));
+        setExpandedDepts(getAllExpandedDepts(buildDepartmentGroups(docs)));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setTasks([]);
+      setTotal(0);
+      const detail = err.response?.data?.detail;
+      setLoadError(
+        typeof detail === 'string'
+          ? detail
+          : 'Không thể tải danh sách công việc. Kiểm tra kết nối hoặc đăng nhập lại.'
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearFilters = () => {
+    setViewMode('plan');
+    setListDeptFilter('');
+    setPlanFilter('');
+    setTitleSearch('');
+    setOverdueOnly(false);
+    setSummaryFilter('');
+    setStatusFilter('');
+    setAssigneeFilter('');
+    setPage(1);
   };
 
   const resetAssigneePicker = (defaultDept = '') => {
@@ -415,7 +449,7 @@ export default function TasksPage() {
     setViewMode('plan');
     setExpandedDepts(new Set([dept]));
     const docs = buildDocumentGroups(tasks.filter((t) => getTaskDepartment(t) === dept));
-    setExpandedDocs(getSmartExpandedDocs(docs));
+    setExpandedDocs(getAllExpandedDocs(docs));
   };
 
   const handleSummaryClick = (filter: SummaryFilter) => {
@@ -842,7 +876,7 @@ export default function TasksPage() {
           <p className="text-xs font-medium text-gray-500 mb-2">Tổng quan theo tổ</p>
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => { setListDeptFilter(''); setExpandedDepts(getSmartExpandedDepts(departmentGroups)); }}
+              onClick={() => { setListDeptFilter(''); setExpandedDepts(getAllExpandedDepts(departmentGroups)); }}
               className={`px-3 py-2 rounded-lg border text-sm ${!listDeptFilter ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
             >
               Tất cả tổ
@@ -909,12 +943,24 @@ export default function TasksPage() {
           </>
         )}
         <span className="px-3 py-2 text-sm text-gray-500">Hiển thị: {visibleTasks.length} / {total}</span>
+        {canManageTasks && (
+          <button onClick={clearFilters} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
+            Xóa bộ lọc
+          </button>
+        )}
         {isAdmin && (
           <button onClick={handleRematch} disabled={rematching} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             {rematching ? 'Đang cập nhật...' : 'Cập nhật phân công'}
           </button>
         )}
       </div>
+
+      {loadError && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {loadError}
+          <button onClick={loadTasks} className="ml-3 underline hover:text-red-900">Thử lại</button>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">Đang tải...</div>
