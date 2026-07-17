@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, asc, or_, and_
 from datetime import datetime
 
-from app.models.task import Task, TaskStatus
+from app.models.task import Task, TaskStatus, UNASSIGNED_DEPARTMENT
 from app.models.document import Document
 from app.models.user import User as UserModel
 
@@ -117,12 +117,13 @@ class TaskRepository:
         return tasks, total
 
     def _department_scope_filter(self, query, department: str):
-        return query.outerjoin(Document, Task.document_id == Document.id).outerjoin(
-            UserModel, Task.assignee_id == UserModel.id
-        ).filter(
+        return query.outerjoin(Document, Task.document_id == Document.id).filter(
             or_(
-                Document.department == department,
-                and_(Task.document_id.is_(None), UserModel.department == department),
+                Task.department == department,
+                and_(
+                    Task.department == UNASSIGNED_DEPARTMENT,
+                    Document.department == department,
+                ),
             )
         )
 
@@ -162,17 +163,10 @@ class TaskRepository:
         return tasks, total
 
     def delete_manual_by_department(self, department: str) -> int:
-        task_ids = [
-            t.id for t in (
-                self.db.query(Task)
-                .outerjoin(UserModel, Task.assignee_id == UserModel.id)
-                .filter(Task.document_id.is_(None), UserModel.department == department)
-                .all()
-            )
-        ]
-        if not task_ids:
-            return 0
-        count = self.db.query(Task).filter(Task.id.in_(task_ids)).delete(synchronize_session=False)
+        count = self.db.query(Task).filter(
+            Task.document_id.is_(None),
+            Task.department == department,
+        ).delete(synchronize_session=False)
         self.db.commit()
         return count
 

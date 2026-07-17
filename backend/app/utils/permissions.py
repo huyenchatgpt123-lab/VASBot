@@ -70,10 +70,10 @@ def can_manage_task(user: User, task: Task) -> bool:
         return True
     if not user.department:
         return False
-    if task.document_id and task.document:
-        return task.document.department == user.department
-    if not task.document_id and task.assignee:
-        return task.assignee.department == user.department
+    if task.department == user.department:
+        return True
+    if task.document_id and task.document and task.document.department == user.department:
+        return True
     return False
 
 

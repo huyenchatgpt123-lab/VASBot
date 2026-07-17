@@ -93,6 +93,25 @@ def _seed_departments(db):
             dept_repo.create(name=name, sort_order=i)
 
 
+def _migrate_task_departments(db):
+    from app.models.task import Task, UNASSIGNED_DEPARTMENT
+    from app.models.user import User
+
+    tasks = db.query(Task).filter(
+        (Task.department.is_(None)) | (Task.department == "")
+    ).all()
+    if not tasks:
+        return
+    for task in tasks:
+        dept = UNASSIGNED_DEPARTMENT
+        if task.assignee_id:
+            user = db.query(User).filter(User.id == task.assignee_id).first()
+            if user and user.department:
+                dept = user.department
+        task.department = dept
+    db.commit()
+
+
 def _migrate_user_departments(db):
     dept_repo = DepartmentRepository(db)
     users = db.query(User).all()
@@ -149,10 +168,16 @@ def startup():
             db.execute(text("ALTER TABLE documents ADD COLUMN school_year VARCHAR(20)"))
             db.commit()
 
+        task_columns = [c["name"] for c in inspector.get_columns("tasks")]
+        if "department" not in task_columns:
+            db.execute(text("ALTER TABLE tasks ADD COLUMN department VARCHAR(255)"))
+            db.commit()
+
         _seed_positions(db)
         _seed_departments(db)
         _migrate_user_positions(db)
         _migrate_user_departments(db)
+        _migrate_task_departments(db)
 
         admin_user = db.query(User).filter(User.email == "admin@vietanh.edu.vn").first()
         if not admin_user:

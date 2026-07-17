@@ -42,7 +42,7 @@ interface TaskGroup {
 interface DocumentGroup {
   document_name: string;
   document_id: number | null;
-  department: string | null;
+  document_department: string | null;
   isManual: boolean;
   taskGroups: TaskGroup[];
   completedCount: number;
@@ -98,8 +98,14 @@ function needsAttention(task: TaskItem): boolean {
   return isTaskOverdue(task) || isDueWithinDays(task, 7);
 }
 
-function getTaskDepartment(task: TaskItem, fallback = 'Khác'): string {
+function getTaskDepartment(task: TaskItem, fallback = 'Chưa gán'): string {
   return task.department || fallback;
+}
+
+function sortDepartments(a: string, b: string): number {
+  if (a === 'Chưa gán') return 1;
+  if (b === 'Chưa gán') return -1;
+  return a.localeCompare(b, 'vi');
 }
 
 
@@ -113,7 +119,7 @@ function buildDocumentGroups(taskList: TaskItem[]): DocumentGroup[] {
       docMap[docKey] = {
         document_name: displayName,
         document_id: task.document_id,
-        department: task.department,
+        document_department: task.document_department ?? null,
         isManual,
         taskGroups: [],
         completedCount: 0,
@@ -138,20 +144,30 @@ function buildDocumentGroups(taskList: TaskItem[]): DocumentGroup[] {
   return Object.values(docMap);
 }
 
-function buildDepartmentGroups(docGroups: DocumentGroup[]): DepartmentGroup[] {
-  const deptMap: Record<string, DepartmentGroup> = {};
-  for (const doc of docGroups) {
-    const dept = doc.department || 'Khác';
-    if (!deptMap[dept]) {
-      deptMap[dept] = { department: dept, documentGroups: [], completedCount: 0, totalCount: 0, overdueCount: 0 };
-    }
-    const d = deptMap[dept];
-    d.documentGroups.push(doc);
-    d.completedCount += doc.completedCount;
-    d.totalCount += doc.totalCount;
-    d.overdueCount += doc.overdueCount;
+function buildDepartmentGroupsFromTasks(taskList: TaskItem[]): DepartmentGroup[] {
+  const byDept: Record<string, TaskItem[]> = {};
+  for (const task of taskList) {
+    const dept = getTaskDepartment(task);
+    if (!byDept[dept]) byDept[dept] = [];
+    byDept[dept].push(task);
   }
-  return Object.values(deptMap).sort((a, b) => a.department.localeCompare(b.department, 'vi'));
+  return Object.entries(byDept).map(([department, tasks]) => {
+    let completedCount = 0;
+    let totalCount = 0;
+    let overdueCount = 0;
+    for (const t of tasks) {
+      totalCount++;
+      if (t.status === 'completed') completedCount++;
+      if (getEffectiveStatus(t) === 'overdue') overdueCount++;
+    }
+    return {
+      department,
+      documentGroups: buildDocumentGroups(tasks),
+      completedCount,
+      totalCount,
+      overdueCount,
+    };
+  }).sort((a, b) => sortDepartments(a.department, b.department));
 }
 
 function buildPersonGroups(taskList: TaskItem[]): PersonGroup[] {
@@ -329,16 +345,15 @@ export default function TasksPage() {
       if (t.status === 'completed') map[dept].completed++;
       if (getEffectiveStatus(t) === 'overdue') map[dept].overdue++;
     }
-    return Object.values(map).sort((a, b) => a.department.localeCompare(b.department, 'vi'));
+    return Object.values(map).sort((a, b) => sortDepartments(a.department, b.department));
   }, [tasks, scopeAllDepartments]);
 
-  const documentGroups = useMemo(() => {
-    const source = viewMode === 'manual'
-      ? visibleTasks.filter((t) => !t.document_id)
-      : visibleTasks;
-    return buildDocumentGroups(source);
-  }, [visibleTasks, viewMode]);
-  const departmentGroups = useMemo(() => buildDepartmentGroups(documentGroups), [documentGroups]);
+  const planTaskSource = useMemo(() => (
+    viewMode === 'manual' ? visibleTasks.filter((t) => !t.document_id) : visibleTasks
+  ), [visibleTasks, viewMode]);
+
+  const documentGroups = useMemo(() => buildDocumentGroups(planTaskSource), [planTaskSource]);
+  const departmentGroups = useMemo(() => buildDepartmentGroupsFromTasks(planTaskSource), [planTaskSource]);
   const personGroups = useMemo(() => buildPersonGroups(visibleTasks), [visibleTasks]);
 
   const teacherBuckets = useMemo(() => {
@@ -379,7 +394,7 @@ export default function TasksPage() {
       const docs = buildDocumentGroups(res.tasks);
       setExpandedDocs(getAllExpandedDocs(docs));
       if (scopeAllDepartments) {
-        setExpandedDepts(getAllExpandedDepts(buildDepartmentGroups(docs)));
+        setExpandedDepts(getAllExpandedDepts(buildDepartmentGroupsFromTasks(res.tasks)));
       }
     } catch (err: any) {
       console.error(err);
@@ -674,6 +689,9 @@ export default function TasksPage() {
             <span className="font-semibold text-gray-800 text-sm truncate">
               {docGroup.isManual ? '📝' : '📁'} {docGroup.document_name}
               {docGroup.isManual && <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Thủ công</span>}
+              {docGroup.document_department && !docGroup.isManual && (
+                <span className="ml-2 text-xs font-normal text-gray-500">· Nguồn: {docGroup.document_department}</span>
+              )}
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-3">
@@ -730,7 +748,9 @@ export default function TasksPage() {
               <button onClick={() => toggleDept(deptGroup.department)} className="w-full flex items-center justify-between px-5 py-3 bg-indigo-50 hover:bg-indigo-100 transition-colors">
                 <div className="flex items-center gap-3">
                   <span className="text-gray-400 text-xs">{expandedDepts.has(deptGroup.department) ? '▼' : '▶'}</span>
-                  <span className="font-semibold text-indigo-900 text-sm">🏫 {deptGroup.department}</span>
+                  <span className="font-semibold text-indigo-900 text-sm">
+                    {deptGroup.department === 'Chưa gán' ? '⚠️' : '🏫'} {deptGroup.department}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-indigo-700">
                   <span>{deptGroup.completedCount}/{deptGroup.totalCount}</span>

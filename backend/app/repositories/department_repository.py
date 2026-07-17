@@ -65,6 +65,7 @@ class DepartmentRepository:
     def _rename_references(self, old_name: str, new_name: str, dept_id: int) -> None:
         from app.models.user import User
         from app.models.document import Document
+        from app.models.task import Task
 
         self.db.query(User).filter(
             (User.department == old_name) | (User.department_id == dept_id)
@@ -72,11 +73,15 @@ class DepartmentRepository:
         self.db.query(Document).filter(Document.department == old_name).update(
             {Document.department: new_name}, synchronize_session=False
         )
+        self.db.query(Task).filter(Task.department == old_name).update(
+            {Task.department: new_name}, synchronize_session=False
+        )
         self.db.commit()
 
     def delete(self, department_id: int) -> bool:
         from app.models.user import User
         from app.models.document import Document
+        from app.models.task import Task
 
         dept = self.get_by_id(department_id)
         if not dept:
@@ -85,9 +90,10 @@ class DepartmentRepository:
         if user_count == 0:
             user_count = self.db.query(User).filter(User.department == dept.name).count()
         doc_count = self.db.query(Document).filter(Document.department == dept.name).count()
-        if user_count > 0 or doc_count > 0:
+        task_count = self.db.query(Task).filter(Task.department == dept.name).count()
+        if user_count > 0 or doc_count > 0 or task_count > 0:
             raise ValueError(
-                f"Không thể xóa: {user_count} người dùng và {doc_count} tài liệu đang dùng tổ này"
+                f"Không thể xóa: còn {user_count} người dùng, {doc_count} tài liệu, {task_count} công việc"
             )
         self.db.delete(dept)
         self.db.commit()

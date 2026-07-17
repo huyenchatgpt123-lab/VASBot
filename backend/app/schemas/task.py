@@ -52,6 +52,8 @@ class TaskResponse(BaseModel):
     status: str
     document_id: Optional[int] = None
     document_name: Optional[str] = None
+    document_department: Optional[str] = None
+    department: Optional[str] = None
     note: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

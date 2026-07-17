@@ -9,6 +9,7 @@ export interface TaskItem {
   status: string;
   document_id: number | null;
   document_name: string | null;
+  document_department: string | null;
   department: string | null;
   note: string | null;
   created_at: string;

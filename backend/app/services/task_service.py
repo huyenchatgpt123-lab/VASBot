@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.models.task import Task, TaskStatus
+from app.models.task import Task, TaskStatus, UNASSIGNED_DEPARTMENT
 from app.models.user import User
 from app.models.document import Document
 from app.repositories.task_repository import TaskRepository
@@ -28,6 +28,13 @@ class TaskService:
     def _match_user(self, name: str) -> Optional[int]:
         from app.utils.name_matcher import match_user_by_name
         return match_user_by_name(self.db, name)
+
+    def _resolve_task_department(self, assignee_id: Optional[int]) -> str:
+        if assignee_id:
+            assignee = self.db.query(User).filter(User.id == assignee_id).first()
+            if assignee and assignee.department:
+                return assignee.department
+        return UNASSIGNED_DEPARTMENT
 
     def extract_tasks_from_document(self, document_id: int) -> Dict[str, Any]:
         """Extract tasks from document using GPT and return preview."""
@@ -113,6 +120,7 @@ class TaskService:
                 "status": TaskStatus.pending,
                 "document_id": document_id,
                 "note": t.get("note"),
+                "department": self._resolve_task_department(assignee_id),
             })
 
         return self.repo.create_many(tasks_to_create)
@@ -199,6 +207,8 @@ class TaskService:
             pass
         elif "assignee_name" in kwargs and kwargs["assignee_name"]:
             kwargs["assignee_id"] = self._match_user(kwargs["assignee_name"])
+        if "assignee_id" in kwargs:
+            kwargs["department"] = self._resolve_task_department(kwargs.get("assignee_id"))
         return self.repo.update(task_id, **kwargs)
 
     def delete_task(self, task_id: int, user: User) -> bool:
@@ -251,6 +261,7 @@ class TaskService:
                 "document_id": doc_id,
                 "note": kwargs.get("note"),
                 "status": TaskStatus.pending,
+                "department": self._resolve_task_department(assignee.id),
             }
             created.append(self.repo.create(**task_data))
         return created
@@ -289,7 +300,11 @@ class TaskService:
             if task.assignee_id in to_remove:
                 self.repo.delete(task.id)
             elif task.assignee_id in new_ids:
-                self.repo.update(task.id, **update_fields)
+                self.repo.update(
+                    task.id,
+                    **update_fields,
+                    department=self._resolve_task_department(task.assignee_id),
+                )
 
         for assignee_id in to_add:
             assignee = self.db.query(User).filter(User.id == assignee_id).first()
@@ -303,6 +318,7 @@ class TaskService:
                 document_id=doc_id,
                 note=note,
                 status=TaskStatus.pending,
+                department=self._resolve_task_department(assignee.id),
             )
 
         return existing_tasks
@@ -314,6 +330,7 @@ class TaskService:
         if not assignee_id:
             assignee_id = self._match_user(task_data["assignee_name"])
             task_data["assignee_id"] = assignee_id
+        task_data["department"] = self._resolve_task_department(assignee_id)
         if not is_admin(user) and not has_scope_all_departments(user):
             doc_id = task_data.get("document_id")
             if doc_id:
@@ -331,7 +348,11 @@ class TaskService:
         for task in tasks:
             uid = self._match_user(task.assignee_name)
             if uid and (user_id is None or uid == user_id):
-                self.repo.update(task.id, assignee_id=uid)
+                self.repo.update(
+                    task.id,
+                    assignee_id=uid,
+                    department=self._resolve_task_department(uid),
+                )
                 matched += 1
         return {"matched": matched, "total_unassigned": len(tasks)}
 
@@ -339,12 +360,11 @@ class TaskService:
         result = []
         for task in tasks:
             doc_name = None
-            department = None
+            document_department = None
             if task.document:
                 doc_name = task.document.filename
-                department = task.document.department
-            elif task.assignee:
-                department = task.assignee.department
+                document_department = task.document.department
+            department = task.department or UNASSIGNED_DEPARTMENT
             result.append({
                 "id": task.id,
                 "title": task.title,
@@ -354,6 +374,7 @@ class TaskService:
                 "status": task.status.value if task.status else "pending",
                 "document_id": task.document_id,
                 "document_name": doc_name,
+                "document_department": document_department,
                 "department": department,
                 "note": task.note,
                 "created_at": task.created_at.isoformat() if task.created_at else None,

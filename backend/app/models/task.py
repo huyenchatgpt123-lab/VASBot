@@ -14,6 +14,9 @@ class TaskStatus(str, enum.Enum):
     cancelled = "cancelled"
 
 
+UNASSIGNED_DEPARTMENT = "Chưa gán"
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -24,6 +27,7 @@ class Task(Base):
     deadline = Column(DateTime(timezone=True), nullable=True)
     status = Column(Enum(TaskStatus), default=TaskStatus.pending, nullable=False)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    department = Column(String(255), nullable=True)
     note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
