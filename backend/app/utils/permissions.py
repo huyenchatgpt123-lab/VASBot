@@ -74,6 +74,8 @@ def can_manage_task(user: User, task: Task) -> bool:
         return True
     if task.document_id and task.document and task.document.department == user.department:
         return True
+    if task.created_by_id == user.id:
+        return True
     return False
 
 

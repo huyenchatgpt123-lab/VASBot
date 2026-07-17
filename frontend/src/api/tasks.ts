@@ -11,6 +11,7 @@ export interface TaskItem {
   document_name: string | null;
   document_department: string | null;
   department: string | null;
+  created_by_id: number | null;
   note: string | null;
   created_at: string;
   updated_at: string | null;

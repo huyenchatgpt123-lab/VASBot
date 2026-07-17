@@ -116,16 +116,19 @@ class TaskRepository:
 
         return tasks, total
 
-    def _department_scope_filter(self, query, department: str):
-        return query.outerjoin(Document, Task.document_id == Document.id).filter(
-            or_(
-                Task.department == department,
-                and_(
-                    Task.department == UNASSIGNED_DEPARTMENT,
-                    Document.department == department,
-                ),
-            )
-        )
+    def _department_scope_filter(
+        self, query, department: str, manager_user_id: Optional[int] = None
+    ):
+        conditions = [
+            Task.department == department,
+            and_(
+                Task.department == UNASSIGNED_DEPARTMENT,
+                Document.department == department,
+            ),
+        ]
+        if manager_user_id is not None:
+            conditions.append(Task.created_by_id == manager_user_id)
+        return query.outerjoin(Document, Task.document_id == Document.id).filter(or_(*conditions))
 
     def get_by_department_scope(
         self,
@@ -136,9 +139,10 @@ class TaskRepository:
         assignee_name: Optional[str] = None,
         sort_by: str = "deadline",
         order: str = "asc",
+        manager_user_id: Optional[int] = None,
     ) -> Tuple[List[Task], int]:
         query = self.db.query(Task)
-        query = self._department_scope_filter(query, department)
+        query = self._department_scope_filter(query, department, manager_user_id)
 
         if status:
             query = query.filter(Task.status == status)

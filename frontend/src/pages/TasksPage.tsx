@@ -109,12 +109,37 @@ function sortDepartments(a: string, b: string): number {
 }
 
 
+const MANUAL_GROUP_NAME = 'Việc phát sinh';
+
+function isDelegatedByMe(task: TaskItem, userId?: number, userDept?: string): boolean {
+  if (!userId || !userDept) return false;
+  return task.created_by_id === userId && getTaskDepartment(task) !== userDept;
+}
+
+function buildAssigneeDeptPreview(
+  assigneeIds: number[],
+  taskUsers: TaskUser[],
+): string {
+  if (assigneeIds.length === 0) return '';
+  const counts: Record<string, number> = {};
+  for (const id of assigneeIds) {
+    const u = taskUsers.find((x) => x.id === id);
+    const dept = u?.department || 'Chưa gán';
+    counts[dept] = (counts[dept] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .map(([dept, n]) => `${dept} (${n})`)
+    .sort((a, b) => a.localeCompare(b, 'vi'))
+    .join(', ');
+}
+
+
 function buildDocumentGroups(taskList: TaskItem[]): DocumentGroup[] {
   const docMap: Record<string, DocumentGroup> = {};
   for (const task of taskList) {
     const isManual = !task.document_id;
     const docKey = isManual ? '__manual__' : (task.document_name || '__manual__');
-    const displayName = isManual ? 'Công việc thủ công' : (task.document_name || 'Không tên');
+    const displayName = isManual ? MANUAL_GROUP_NAME : (task.document_name || 'Không tên');
     if (!docMap[docKey]) {
       docMap[docKey] = {
         document_name: displayName,
@@ -242,6 +267,7 @@ export default function TasksPage() {
   const [userSearch, setUserSearch] = useState('');
   const [existingAssigneeIds, setExistingAssigneeIds] = useState<number[]>([]);
   const [isAddingPerson, setIsAddingPerson] = useState(false);
+  const [isSpontaneousCreate, setIsSpontaneousCreate] = useState(false);
   const [rematching, setRematching] = useState(false);
   const [newTaskCount, setNewTaskCount] = useState(0);
   const [showNotif, setShowNotif] = useState(true);
@@ -524,8 +550,12 @@ export default function TasksPage() {
       });
       setShowCreateModal(false);
       setIsAddingPerson(false);
+      setIsSpontaneousCreate(false);
       setNewTask({ title: '', deadline: '', note: '', document_id: null });
       resetAssigneePicker();
+      if (!newTask.document_id) {
+        setViewMode('manual');
+      }
       loadTasks();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể tạo');
@@ -548,6 +578,7 @@ export default function TasksPage() {
 
   const openCreateModal = (documentId: number | null = null) => {
     setIsAddingPerson(false);
+    setIsSpontaneousCreate(documentId === null);
     setNewTask({ title: '', deadline: '', note: '', document_id: documentId });
     resetAssigneePicker(user?.department || '');
     setShowCreateModal(true);
@@ -555,6 +586,7 @@ export default function TasksPage() {
 
   const openAddPersonModal = (taskGroup: TaskGroup, documentId: number | null) => {
     setIsAddingPerson(true);
+    setIsSpontaneousCreate(false);
     setExistingAssigneeIds(taskGroup.items.filter((i) => i.assignee_id !== null).map((i) => i.assignee_id as number));
     setNewTask({
       title: taskGroup.title,
@@ -599,6 +631,11 @@ export default function TasksPage() {
       alert(err.response?.data?.detail || 'Không thể cập nhật');
     }
   };
+
+  const createDeptPreview = useMemo(
+    () => buildAssigneeDeptPreview(selectedAssigneeIds, taskUsers),
+    [selectedAssigneeIds, taskUsers],
+  );
 
   const renderAssigneePicker = (
     selectedIds: number[],
@@ -688,7 +725,7 @@ export default function TasksPage() {
             <span className="text-gray-400 text-xs shrink-0">{expandedDocs.has(docGroup.document_name) ? '▼' : '▶'}</span>
             <span className="font-semibold text-gray-800 text-sm truncate">
               {docGroup.isManual ? '📝' : '📁'} {docGroup.document_name}
-              {docGroup.isManual && <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Thủ công</span>}
+              {docGroup.isManual && <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Phát sinh</span>}
               {docGroup.document_department && !docGroup.isManual && (
                 <span className="ml-2 text-xs font-normal text-gray-500">· Nguồn: {docGroup.document_department}</span>
               )}
@@ -709,12 +746,24 @@ export default function TasksPage() {
       </div>
       {expandedDocs.has(docGroup.document_name) && (
         <div className="divide-y divide-gray-100">
-          {docGroup.taskGroups.map((taskGroup, idx) => (
+          {docGroup.taskGroups.map((taskGroup, idx) => {
+            const showDelegatedBadge = !scopeAllDepartments && taskGroup.items.some(
+              (t) => isDelegatedByMe(t, user?.id, user?.department),
+            );
+            const delegatedDept = showDelegatedBadge
+              ? getTaskDepartment(taskGroup.items.find((t) => isDelegatedByMe(t, user?.id, user?.department))!)
+              : null;
+            return (
             <div key={`${taskGroup.title}-${idx}`} className="px-5 py-3">
               <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <span className="text-gray-400 text-sm">📋</span>
                   <span className={`text-sm font-medium truncate ${taskGroup.overdueCount > 0 ? 'text-red-700' : 'text-gray-900'}`}>{taskGroup.title}</span>
+                  {showDelegatedBadge && delegatedDept && (
+                    <span className="text-xs font-normal text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded shrink-0">
+                      Đã giao · {delegatedDept}
+                    </span>
+                  )}
                   {canManageTasks && (
                     <button onClick={() => openEditGroup(taskGroup.items[0])} className="text-gray-400 hover:text-blue-600 text-xs" title="Sửa nhóm">✏️</button>
                   )}
@@ -728,12 +777,13 @@ export default function TasksPage() {
               <div className="ml-6 mb-2">{renderGroupProgress(taskGroup.completedCount, taskGroup.items.length, taskGroup.overdueCount)}</div>
               <div className="flex flex-wrap gap-2 ml-6">
                 {taskGroup.items.map(renderTaskTag)}
-                {canManageTasks && (
-                  <button onClick={() => openAddPersonModal(taskGroup, docGroup.document_id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-xs text-gray-400 hover:text-primary-600 hover:border-primary-400">+ Thêm</button>
+                {canManageTasks && !docGroup.isManual && (
+                  <button onClick={() => openAddPersonModal(taskGroup, docGroup.document_id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-xs text-gray-400 hover:text-primary-600 hover:border-primary-400" title="Thêm người vào kế hoạch">+ Vào kế hoạch</button>
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -786,7 +836,7 @@ export default function TasksPage() {
                 <div key={task.id} className="px-5 py-2.5 flex items-center justify-between gap-3 hover:bg-gray-50">
                   <div className="min-w-0">
                     <p className={`text-sm truncate ${st === 'overdue' ? 'text-red-700 font-medium' : 'text-gray-800'}`}>{task.title}</p>
-                    <p className="text-xs text-gray-400 truncate">{task.document_name || 'Việc thủ công'}{task.deadline ? ` · ${formatDate(task.deadline)}` : ''}</p>
+                    <p className="text-xs text-gray-400 truncate">{task.document_name || MANUAL_GROUP_NAME}{task.deadline ? ` · ${formatDate(task.deadline)}` : ''}</p>
                   </div>
                   <button
                     onClick={() => handleStatusChange(task.id, nextStatus(task.status))}
@@ -859,7 +909,7 @@ export default function TasksPage() {
           </p>
         </div>
         {canManageTasks && (
-          <button onClick={() => openCreateModal(null)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium w-full sm:w-auto">+ Thêm công việc</button>
+          <button onClick={() => openCreateModal(null)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium w-full sm:w-auto" title="Việc phát sinh — không gắn kế hoạch tài liệu">+ Thêm công việc</button>
         )}
       </div>
 
@@ -1007,7 +1057,19 @@ export default function TasksPage() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4">{isAddingPerson ? 'Thêm người' : 'Thêm công việc'}</h2>
+            <h2 className="text-lg font-bold mb-1">
+              {isAddingPerson ? 'Thêm vào kế hoạch' : 'Thêm công việc'}
+            </h2>
+            {isSpontaneousCreate && !isAddingPerson && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                Việc phát sinh — không gắn kế hoạch tài liệu. Công việc sẽ được xếp theo tổ người được giao.
+              </p>
+            )}
+            {isAddingPerson && (
+              <p className="text-sm text-gray-600 mb-4">
+                Thêm người vào công việc trong kế hoạch hiện tại.
+              </p>
+            )}
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tên công việc *</label>
@@ -1017,6 +1079,11 @@ export default function TasksPage() {
                 isAddingPerson ? [...existingAssigneeIds, ...selectedAssigneeIds.filter((id) => !existingAssigneeIds.includes(id))] : selectedAssigneeIds,
                 (id) => { if (!isAddingPerson || !existingAssigneeIds.includes(id)) toggleAssignee(id, 'create'); },
                 { disabledIds: isAddingPerson ? existingAssigneeIds : [] }
+              )}
+              {!isAddingPerson && createDeptPreview && (
+                <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                  Sẽ xếp vào: {createDeptPreview}
+                </p>
               )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Deadline</label>
@@ -1028,7 +1095,7 @@ export default function TasksPage() {
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-5">
-              <button onClick={() => { setShowCreateModal(false); setIsAddingPerson(false); resetAssigneePicker(); }} className="px-4 py-2 text-sm text-gray-600">Hủy</button>
+              <button onClick={() => { setShowCreateModal(false); setIsAddingPerson(false); setIsSpontaneousCreate(false); resetAssigneePicker(); }} className="px-4 py-2 text-sm text-gray-600">Hủy</button>
               <button onClick={handleCreate} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium">{isAddingPerson ? 'Thêm' : 'Tạo'}</button>
             </div>
           </div>

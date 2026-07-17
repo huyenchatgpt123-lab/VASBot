@@ -149,10 +149,12 @@ class TaskService:
         self, department: str, page: int = 1, page_size: int = 20,
         status: Optional[str] = None, assignee_name: Optional[str] = None,
         sort_by: str = "deadline", order: str = "asc",
+        manager_user_id: Optional[int] = None,
     ) -> Tuple[List[Dict], int]:
         tasks, total = self.repo.get_by_department_scope(
             department, page, page_size, status=status,
             assignee_name=assignee_name, sort_by=sort_by, order=order,
+            manager_user_id=manager_user_id,
         )
         return self._format_tasks(tasks), total
 
@@ -171,16 +173,8 @@ class TaskService:
         return self.get_tasks_for_department(
             user.department, page, page_size, status=status,
             assignee_name=assignee_name, sort_by=sort_by, order=order,
+            manager_user_id=user.id,
         )
-
-    def _validate_assignee_for_manager(self, user: User, assignee_id: Optional[int]) -> None:
-        if is_admin(user) or has_scope_all_departments(user):
-            return
-        if not assignee_id:
-            raise PermissionError("Phải chọn người được giao")
-        assignee = self.db.query(User).filter(User.id == assignee_id).first()
-        if not assignee or assignee.department != user.department:
-            raise PermissionError("Chỉ được gán công việc cho thành viên cùng tổ")
 
     def update_status(self, task_id: int, status: str, user: User) -> Optional[Task]:
         task = self.repo.get_by_id(task_id)
@@ -262,6 +256,7 @@ class TaskService:
                 "note": kwargs.get("note"),
                 "status": TaskStatus.pending,
                 "department": self._resolve_task_department(assignee.id),
+                "created_by_id": user.id,
             }
             created.append(self.repo.create(**task_data))
         return created
@@ -319,6 +314,7 @@ class TaskService:
                 note=note,
                 status=TaskStatus.pending,
                 department=self._resolve_task_department(assignee.id),
+                created_by_id=user.id,
             )
 
         return existing_tasks
@@ -331,6 +327,7 @@ class TaskService:
             assignee_id = self._match_user(task_data["assignee_name"])
             task_data["assignee_id"] = assignee_id
         task_data["department"] = self._resolve_task_department(assignee_id)
+        task_data["created_by_id"] = user.id
         if not is_admin(user) and not has_scope_all_departments(user):
             doc_id = task_data.get("document_id")
             if doc_id:
@@ -376,6 +373,7 @@ class TaskService:
                 "document_name": doc_name,
                 "document_department": document_department,
                 "department": department,
+                "created_by_id": task.created_by_id,
                 "note": task.note,
                 "created_at": task.created_at.isoformat() if task.created_at else None,
                 "updated_at": task.updated_at.isoformat() if task.updated_at else None,

@@ -172,6 +172,9 @@ def startup():
         if "department" not in task_columns:
             db.execute(text("ALTER TABLE tasks ADD COLUMN department VARCHAR(255)"))
             db.commit()
+        if "created_by_id" not in task_columns:
+            db.execute(text("ALTER TABLE tasks ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
+            db.commit()
 
         _seed_positions(db)
         _seed_departments(db)
