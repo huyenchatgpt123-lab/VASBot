@@ -1,8 +1,21 @@
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { User } from '../types';
 
 interface TopbarProps {
   onMenuClick: () => void;
+}
+
+function getUserSubtitle(user: User | null | undefined): string {
+  if (!user) return '—';
+  if (user.role === 'admin') return 'Admin';
+
+  const position = user.position?.trim();
+  if (position?.toLowerCase() === 'ban giám hiệu') return 'Ban Giám Hiệu';
+
+  const department = user.department?.trim();
+  if (position && department) return `${position} ${department}`;
+  return '—';
 }
 
 export default function Topbar({ onMenuClick }: TopbarProps) {
@@ -33,7 +46,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           </div>
           <div className="text-right hidden sm:block">
             <p className="text-sm font-medium text-gray-900 truncate max-w-[120px] md:max-w-none">{user?.name}</p>
-            <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+            <p className="text-xs text-gray-500 truncate max-w-[160px] md:max-w-xs">{getUserSubtitle(user)}</p>
           </div>
         </div>
         <button
