@@ -1,17 +1,17 @@
-# VABot - AI Knowledge Assistant
+# VATask - Việt Anh School
 
-Hệ thống AI tra cứu tài liệu nội bộ dành cho **Trung tâm Việt Anh**.
+Hệ thống quản lý công việc và tài liệu nội bộ dành cho **Trung tâm Việt Anh**.
 
-VABot cho phép upload tài liệu PDF, tìm kiếm ngữ nghĩa và chat với AI dựa trên nội dung tài liệu (RAG).
+VATask hỗ trợ upload kế hoạch/tài liệu, trích xuất công việc, phân công theo tổ/bộ môn, theo dõi tiến độ và góp ý nội bộ.
 
 ## Tính năng
 
-- **Authentication**: Đăng nhập/đăng ký với JWT, phân quyền Admin/User
-- **Upload PDF**: Admin upload tài liệu, tự động extract text, chunking, embedding
-- **Vector Search**: FAISS + OpenAI text-embedding-3-small
-- **RAG Chat**: GPT-4o-mini trả lời dựa trên tài liệu với nguồn tham khảo
-- **Lịch sử chat**: Lưu toàn bộ cuộc trò chuyện
-- **Dashboard Admin**: Thống kê tài liệu, người dùng, hoạt động, chi phí OpenAI
+- **Authentication**: Đăng nhập JWT, phân quyền Admin / BGH / Tổ trưởng / Giáo viên
+- **Quản lý công việc**: Kế hoạch từ tài liệu, việc phát sinh, deadline, trạng thái
+- **Tài liệu**: Upload PDF/Word, lọc theo tổ, tháng, năm học
+- **Trích xuất công việc**: GPT đọc tài liệu và gợi ý phân công
+- **Feedback**: Góp ý người dùng, Admin xử lý phản hồi
+- **Dashboard Admin**: Thống kê hoạt động, chi phí OpenAI
 
 ## Công nghệ
 
@@ -21,7 +21,7 @@ VABot cho phép upload tài liệu PDF, tìm kiếm ngữ nghĩa và chat với 
 | Backend | Python, FastAPI, SQLAlchemy |
 | Database | PostgreSQL |
 | Vector DB | FAISS |
-| AI | OpenAI GPT-4o-mini, text-embedding-3-small |
+| AI | OpenAI (trích xuất công việc, embedding tài liệu) |
 
 ## Yêu cầu
 
@@ -69,6 +69,8 @@ docker-compose up --build
 |-------|----------|---------|
 | admin@vietanh.edu.vn | admin123 | Admin |
 
+> Đăng ký công khai đã tắt. Admin tạo tài khoản qua trang **Người dùng** hoặc import Excel.
+
 ## Cấu trúc dự án
 
 ```
@@ -99,72 +101,27 @@ VASBot/
 └── README.md
 ```
 
-## API Endpoints
+## API Endpoints (tóm tắt)
 
 ### Authentication
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
 | POST | `/login` | Đăng nhập |
-| POST | `/register` | Đăng ký |
+| POST | `/register` | Đã tắt (403) |
 | GET | `/me` | Thông tin user |
 
-### Documents
-| Method | Endpoint | Mô tả | Quyền |
-|--------|----------|-------|-------|
-| POST | `/documents/upload` | Upload PDF | Admin |
-| GET | `/documents` | Danh sách tài liệu | All |
-| DELETE | `/documents/{id}` | Xóa tài liệu | Admin |
-
-### Search & Chat
+### Documents & Tasks
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| GET | `/search?query=` | Tìm kiếm ngữ nghĩa |
-| POST | `/chat` | Chat với AI (RAG) |
-| GET | `/conversations` | Lịch sử chat |
-| GET | `/conversations/{id}` | Chi tiết cuộc trò chuyện |
-| DELETE | `/conversations/{id}` | Xóa cuộc trò chuyện |
+| POST | `/documents/upload` | Upload tài liệu |
+| GET | `/documents` | Danh sách tài liệu |
+| GET/POST/PATCH/DELETE | `/tasks/...` | Quản lý công việc |
 
 ### Admin
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
 | GET | `/admin/dashboard` | Thống kê dashboard |
-| GET | `/admin/users` | Danh sách người dùng |
-| POST | `/admin/users` | Tạo người dùng |
-| DELETE | `/admin/users/{id}` | Xóa người dùng |
-
-## Phân quyền
-
-| Chức năng | Admin | User |
-|-----------|-------|------|
-| Upload tài liệu | ✅ | ❌ |
-| Xóa tài liệu | ✅ | ❌ |
-| Xem tài liệu | ✅ | ✅ |
-| Chat AI | ✅ | ✅ |
-| Tìm kiếm | ✅ | ✅ |
-| Dashboard | ✅ | ❌ |
-| Quản lý user | ✅ | ❌ |
-
-## Luồng xử lý RAG
-
-```
-PDF Upload
-    ↓
-Extract Text (PyMuPDF)
-    ↓
-Chunking (600 chars, overlap 100)
-    ↓
-Embedding (text-embedding-3-small)
-    ↓
-FAISS Index
-    ↓
-User Question
-    ↓
-Semantic Search (Top 5)
-    ↓
-GPT-4o-mini + Context
-    ↓
-Answer + Sources
-```
+| GET/POST/DELETE | `/admin/users/...` | Quản lý người dùng |
 
 ## Chạy local (không Docker)
 

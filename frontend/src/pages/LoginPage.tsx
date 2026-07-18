@@ -34,9 +34,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-primary-100 px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="VABot" className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg object-cover" />
-          <h1 className="text-3xl font-bold text-gray-900">VABot</h1>
-          <p className="text-gray-500 mt-2">VATask - Việt Anh School</p>
+          <img src="/logo.png" alt="VATask" className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg object-cover" />
+          <h1 className="text-3xl font-bold text-gray-900">VATask</h1>
+          <p className="text-gray-500 mt-2">Việt Anh School</p>
         </div>
 
         <div className={`bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-gray-100 ${shake ? 'animate-shake' : ''}`}>

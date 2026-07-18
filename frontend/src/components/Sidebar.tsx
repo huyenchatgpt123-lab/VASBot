@@ -64,9 +64,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     >
       <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="VABot" className="w-10 h-10 rounded-xl object-cover" />
+          <img src="/logo.png" alt="VATask" className="w-10 h-10 rounded-xl object-cover" />
           <div>
-            <h1 className="font-bold text-lg text-gray-900">VABot</h1>
+            <h1 className="font-bold text-lg text-gray-900">VATask</h1>
             <p className="text-xs text-gray-500">Việt Anh School</p>
           </div>
         </div>
