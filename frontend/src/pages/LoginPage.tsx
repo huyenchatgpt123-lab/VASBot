@@ -36,7 +36,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <img src="/logo.png" alt="VABot" className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg object-cover" />
           <h1 className="text-3xl font-bold text-gray-900">VABot</h1>
-          <p className="text-gray-500 mt-2">AI Knowledge Assistant - Việt Anh School</p>
+          <p className="text-gray-500 mt-2">VATask - Việt Anh School</p>
         </div>
 
         <div className={`bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-gray-100 ${shake ? 'animate-shake' : ''}`}>
@@ -73,12 +73,20 @@ export default function LoginPage() {
                 className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition ${
                   error ? 'border-red-300' : 'border-gray-300'
                 }`}
-                placeholder="admin@vietanh.edu.vn"
+                placeholder="username@vietanhschool.edu.vn"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Mật khẩu</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-gray-700">Mật khẩu</label>
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Quên mật khẩu?
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}
