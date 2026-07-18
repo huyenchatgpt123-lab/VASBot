@@ -272,6 +272,8 @@ export default function TasksPage() {
   const [newTaskCount, setNewTaskCount] = useState(0);
   const [showNotif, setShowNotif] = useState(true);
   const [changingStatus, setChangingStatus] = useState<number | null>(null);
+  const [showCompletedSection, setShowCompletedSection] = useState(false);
+  const [showCancelledSection, setShowCancelledSection] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>('plan');
   const [listDeptFilter, setListDeptFilter] = useState('');
@@ -389,9 +391,11 @@ export default function TasksPage() {
     const overdue: TaskItem[] = [];
     const thisWeek: TaskItem[] = [];
     const later: TaskItem[] = [];
-    const done: TaskItem[] = [];
+    const completed: TaskItem[] = [];
+    const cancelled: TaskItem[] = [];
     for (const t of visibleTasks) {
-      if (t.status === 'completed' || t.status === 'cancelled') { done.push(t); continue; }
+      if (t.status === 'completed') { completed.push(t); continue; }
+      if (t.status === 'cancelled') { cancelled.push(t); continue; }
       if (isTaskOverdue(t)) { overdue.push(t); continue; }
       if (t.deadline && new Date(t.deadline) <= weekEnd) { thisWeek.push(t); continue; }
       later.push(t);
@@ -404,7 +408,9 @@ export default function TasksPage() {
     overdue.sort(sortByDeadline);
     thisWeek.sort(sortByDeadline);
     later.sort(sortByDeadline);
-    return { overdue, thisWeek, later, done };
+    completed.sort(sortByDeadline);
+    cancelled.sort(sortByDeadline);
+    return { overdue, thisWeek, later, completed, cancelled };
   }, [visibleTasks, canManageTasks]);
 
   const loadTasks = async () => {
@@ -679,6 +685,17 @@ export default function TasksPage() {
     window.open(documentsApi.getPreviewUrl(documentId), '_blank');
   };
 
+  const handleDownloadDocument = (documentId: number | null) => {
+    if (!documentId) return;
+    const url = documentsApi.getDownloadUrl(documentId);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -857,36 +874,118 @@ export default function TasksPage() {
     const st = getEffectiveStatus(task);
     return (
       <div key={task.id} className={`bg-white rounded-lg border p-4 flex items-center justify-between gap-3 ${st === 'overdue' ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="font-medium text-gray-900 truncate">{task.title}</p>
           {task.document_name && <p className="text-xs text-gray-400 truncate mt-0.5">{task.document_name}</p>}
           {task.deadline && <p className={`text-xs mt-1 ${st === 'overdue' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>📅 {formatDate(task.deadline)}</p>}
           {task.note && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.note}</p>}
         </div>
-        <button onClick={() => handleStatusChange(task.id, nextStatus(task.status))} className={`shrink-0 px-3 py-1.5 rounded-full border text-xs font-medium ${STATUS_TAG_COLORS[st]}`}>
-          {STATUS_ICONS[st]} {STATUS_OPTIONS.find((s) => s.value === st)?.label}
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {task.document_id && (
+            <>
+              <button
+                type="button"
+                onClick={() => handlePreviewPlan(task.document_id)}
+                title="Xem kế hoạch"
+                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+              >
+                👁
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadDocument(task.document_id)}
+                title="Tải xuống"
+                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+              >
+                📥
+              </button>
+            </>
+          )}
+          <button onClick={() => handleStatusChange(task.id, nextStatus(task.status))} className={`px-3 py-1.5 rounded-full border text-xs font-medium ${STATUS_TAG_COLORS[st]}`}>
+            {STATUS_ICONS[st]} {STATUS_OPTIONS.find((s) => s.value === st)?.label}
+          </button>
+        </div>
       </div>
     );
   };
 
   const renderTeacherView = () => {
     if (!teacherBuckets) return null;
-    const sections = [
-      { key: 'overdue', title: '🔴 Quá hạn', items: teacherBuckets.overdue, show: true },
-      { key: 'week', title: '📅 Tuần này', items: teacherBuckets.thisWeek, show: true },
-      { key: 'later', title: '📆 Sau này', items: teacherBuckets.later, show: true },
-      { key: 'done', title: '✅ Đã xong', items: teacherBuckets.done, show: teacherBuckets.done.length > 0 },
+    const { overdue, thisWeek, later, completed, cancelled } = teacherBuckets;
+    const activeSections = [
+      { key: 'overdue', title: '🔴 Quá hạn', items: overdue },
+      { key: 'week', title: '📅 Tuần này', items: thisWeek },
+      { key: 'later', title: '📆 Sau này', items: later },
     ];
+    const hasActive = activeSections.some((s) => s.items.length > 0);
+
     return (
       <div className="space-y-6">
-        {sections.filter((s) => s.show && s.items.length > 0).map((s) => (
+        {activeSections.filter((s) => s.items.length > 0).map((s) => (
           <div key={s.key}>
             <h3 className="text-sm font-semibold text-gray-700 mb-2">{s.title} ({s.items.length})</h3>
             <div className="space-y-2">{s.items.map(renderTeacherCard)}</div>
           </div>
         ))}
-        {visibleTasks.length === 0 && <div className="text-center py-12 text-gray-400">Không có công việc nào</div>}
+
+        {!hasActive && completed.length === 0 && cancelled.length === 0 && (
+          <div className="text-center py-12 text-gray-400">Không có công việc nào</div>
+        )}
+        {!hasActive && (completed.length > 0 || cancelled.length > 0) && (
+          <div className="text-center py-8 text-gray-400 text-sm">Không có công việc đang chờ xử lý</div>
+        )}
+
+        {completed.length > 0 && (
+          showCompletedSection ? (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">✅ Đã hoàn thành ({completed.length})</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedSection(false)}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Ẩn
+                </button>
+              </div>
+              <div className="space-y-2">{completed.map(renderTeacherCard)}</div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCompletedSection(true)}
+              className="w-full py-2.5 text-sm text-primary-600 hover:text-primary-700 hover:bg-primary-50 border border-dashed border-primary-200 rounded-lg transition-colors"
+            >
+              Xem công việc đã hoàn thành ({completed.length})
+            </button>
+          )
+        )}
+
+        {cancelled.length > 0 && (
+          showCancelledSection ? (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">⛔ Đã hủy ({cancelled.length})</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelledSection(false)}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Ẩn
+                </button>
+              </div>
+              <div className="space-y-2">{cancelled.map(renderTeacherCard)}</div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCancelledSection(true)}
+              className="w-full py-2.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-50 border border-dashed border-gray-200 rounded-lg transition-colors"
+            >
+              Xem công việc đã hủy ({cancelled.length})
+            </button>
+          )
+        )}
       </div>
     );
   };
