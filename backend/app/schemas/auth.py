@@ -61,8 +61,3 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: UserResponse
 
-
-class RegisterRequest(BaseModel):
-    name: str
-    email: EmailStr
-    password: str

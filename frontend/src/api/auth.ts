@@ -6,10 +6,6 @@ export const authApi = {
     const res = await api.post('/login', { email, password });
     return res.data;
   },
-  register: async (name: string, email: string, password: string) => {
-    const res = await api.post('/register', { name, email, password });
-    return res.data;
-  },
   getMe: async (): Promise<User> => {
     const res = await api.get('/me');
     return res.data;
