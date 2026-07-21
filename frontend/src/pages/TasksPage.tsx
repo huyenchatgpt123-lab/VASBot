@@ -28,7 +28,7 @@ const STATUS_TAG_COLORS: Record<string, string> = {
   cancelled: 'bg-yellow-50 text-yellow-700 border-yellow-300',
 };
 
-type ViewMode = 'plan' | 'person' | 'attention' | 'manual';
+type ViewMode = 'mine' | 'plan' | 'person' | 'manual';
 type SummaryFilter = '' | 'overdue' | 'pending' | 'in_progress' | 'completed';
 
 interface TaskGroup {
@@ -83,19 +83,6 @@ function isTaskOverdue(task: TaskItem): boolean {
 
 function getEffectiveStatus(task: TaskItem): string {
   return isTaskOverdue(task) && task.status === 'pending' ? 'overdue' : task.status;
-}
-
-function isDueWithinDays(task: TaskItem, days: number): boolean {
-  if (!task.deadline || task.status === 'completed' || task.status === 'cancelled') return false;
-  const now = new Date();
-  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-  const d = new Date(task.deadline);
-  return d >= now && d <= end;
-}
-
-function needsAttention(task: TaskItem): boolean {
-  if (task.status === 'completed' || task.status === 'cancelled') return false;
-  return isTaskOverdue(task) || isDueWithinDays(task, 7);
 }
 
 function getTaskDepartment(task: TaskItem, fallback = 'Chưa gán'): string {
@@ -275,7 +262,7 @@ export default function TasksPage() {
   const [showCompletedSection, setShowCompletedSection] = useState(false);
   const [showCancelledSection, setShowCancelledSection] = useState(false);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('plan');
+  const [viewMode, setViewMode] = useState<ViewMode>('mine');
   const [listDeptFilter, setListDeptFilter] = useState('');
   const [planFilter, setPlanFilter] = useState('');
   const [titleSearch, setTitleSearch] = useState('');
@@ -327,10 +314,10 @@ export default function TasksPage() {
     let list = [...tasks];
     const q = titleSearch.trim().toLowerCase();
 
-    if (viewMode === 'manual') {
+    if (viewMode === 'mine') {
+      list = list.filter((t) => t.assignee_id === user?.id);
+    } else if (viewMode === 'manual') {
       list = list.filter((t) => !t.document_id);
-    } else if (viewMode === 'attention') {
-      list = list.filter(needsAttention);
     }
 
     if (listDeptFilter) list = list.filter((t) => getTaskDepartment(t) === listDeptFilter);
@@ -349,19 +336,24 @@ export default function TasksPage() {
     }
 
     return list;
-  }, [tasks, viewMode, listDeptFilter, planFilter, titleSearch, overdueOnly, summaryFilter, statusFilter]);
+  }, [tasks, viewMode, listDeptFilter, planFilter, titleSearch, overdueOnly, summaryFilter, statusFilter, user?.id]);
+
+  const statsBase = useMemo(() => {
+    if (!canManageTasks) return visibleTasks;
+    if (viewMode === 'mine') return tasks.filter((t) => t.assignee_id === user?.id);
+    return tasks;
+  }, [tasks, visibleTasks, canManageTasks, viewMode, user?.id]);
 
   const stats = useMemo(() => {
-    const base = canManageTasks ? tasks : visibleTasks;
+    const base = statsBase;
     return {
       total: base.length,
       overdue: base.filter((t) => getEffectiveStatus(t) === 'overdue').length,
       pending: base.filter((t) => t.status === 'pending').length,
       in_progress: base.filter((t) => t.status === 'in_progress').length,
       completed: base.filter((t) => t.status === 'completed').length,
-      attention: base.filter(needsAttention).length,
     };
-  }, [tasks, visibleTasks, canManageTasks]);
+  }, [statsBase]);
 
   const deptStats = useMemo(() => {
     if (!scopeAllDepartments) return [];
@@ -385,7 +377,7 @@ export default function TasksPage() {
   const personGroups = useMemo(() => buildPersonGroups(visibleTasks), [visibleTasks]);
 
   const teacherBuckets = useMemo(() => {
-    if (canManageTasks) return null;
+    if (canManageTasks && viewMode !== 'mine') return null;
     const now = new Date();
     const weekEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const overdue: TaskItem[] = [];
@@ -411,7 +403,7 @@ export default function TasksPage() {
     completed.sort(sortByDeadline);
     cancelled.sort(sortByDeadline);
     return { overdue, thisWeek, later, completed, cancelled };
-  }, [visibleTasks, canManageTasks]);
+  }, [visibleTasks, canManageTasks, viewMode]);
 
   const loadTasks = async () => {
     setLoading(true);
@@ -971,9 +963,9 @@ export default function TasksPage() {
 
   const totalPages = Math.ceil(total / pageSize);
   const viewTabs: { key: ViewMode; label: string }[] = [
+    { key: 'mine', label: 'Việc của tôi' },
     { key: 'plan', label: 'Theo kế hoạch' },
     { key: 'person', label: 'Theo người' },
-    { key: 'attention', label: `Cần chú ý${stats.attention > 0 ? ` (${stats.attention})` : ''}` },
     { key: 'manual', label: 'Việc phát sinh' },
   ];
 
@@ -1112,7 +1104,7 @@ export default function TasksPage() {
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">Đang tải...</div>
-      ) : !canManageTasks ? (
+      ) : !canManageTasks || viewMode === 'mine' ? (
         renderTeacherView()
       ) : viewMode === 'person' ? (
         personGroups.length === 0 ? <div className="text-center py-12 text-gray-400">Không có công việc nào</div> : renderPersonView()
