@@ -31,6 +31,8 @@ app.include_router(admin.router)
 app.include_router(tasks.router)
 app.include_router(feedback.router)
 
+DEFAULT_ADMIN_EMAIL = "admin@vietanhschool.edu.vn"
+
 DEFAULT_POSITIONS = [
     {
         "name": "Ban giám hiệu",
@@ -129,6 +131,28 @@ def _migrate_user_departments(db):
     db.commit()
 
 
+def _seed_admin_user(db):
+    if db.query(User).filter(User.role == UserRole.admin).first():
+        return
+
+    admin_user = db.query(User).filter(User.email == DEFAULT_ADMIN_EMAIL).first()
+    if admin_user:
+        admin_user.role = UserRole.admin
+        db.commit()
+        return
+
+    db.add(
+        User(
+            name="Admin",
+            email=DEFAULT_ADMIN_EMAIL,
+            password_hash=hash_password("admin123"),
+            role=UserRole.admin,
+            must_change_password=True,
+        )
+    )
+    db.commit()
+
+
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
@@ -187,21 +211,7 @@ def startup():
         _migrate_user_departments(db)
         _migrate_task_departments(db)
 
-        admin_user = db.query(User).filter(User.email == "admin@vietanh.edu.vn").first()
-        if not admin_user:
-            admin_user = User(
-                name="Admin",
-                nickname="Admin",
-                email="admin@vietanh.edu.vn",
-                password_hash=hash_password("admin123"),
-                role=UserRole.admin,
-                must_change_password=True,
-            )
-            db.add(admin_user)
-            db.commit()
-        elif admin_user.nickname is None:
-            admin_user.nickname = "Admin"
-            db.commit()
+        _seed_admin_user(db)
     finally:
         db.close()
 
