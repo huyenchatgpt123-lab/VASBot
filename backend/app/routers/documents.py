@@ -1,9 +1,10 @@
 import logging
 
+from typing import Optional, List
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from typing import Optional
 from openai import AuthenticationError, APIConnectionError, RateLimitError
 
 from app.database import get_db
@@ -20,6 +21,7 @@ from app.utils.auth import get_current_user, require_admin
 from app.utils.permissions import can_upload, can_upload_to_department, can_delete_document, has_scope_all_departments, is_admin
 from app.models.user import User
 from app.repositories.department_repository import DepartmentRepository
+from app.repositories.campus_repository import CampusRepository
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -34,12 +36,22 @@ def get_departments(current_user: User = Depends(get_current_user), db: Session 
     return {"departments": dept_repo.get_names()}
 
 
+@router.get("/campuses")
+def get_campuses(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    campus_repo = CampusRepository(db)
+    campuses = campus_repo.get_all()
+    return {
+        "campuses": [{"id": c.id, "code": c.code, "name": c.name} for c in campuses],
+    }
+
+
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
     department: str = Form(...),
     month: int = Form(...),
     school_year: str = Form(...),
+    campus_ids: List[int] = Form(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -61,6 +73,11 @@ async def upload_document(
     if not file.filename.lower().endswith(ALLOWED_EXTENSIONS):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chỉ chấp nhận file PDF hoặc Word (.docx)")
 
+    campus_repo = CampusRepository(db)
+    campuses = campus_repo.get_by_ids(campus_ids)
+    if not campuses:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Vui lòng chọn ít nhất một trường (VA1, VA3, EMC)")
+
     content = await file.read()
     service = DocumentService(db)
 
@@ -68,6 +85,7 @@ async def upload_document(
         result = service.upload_document(
             content, file.filename, current_user.id,
             department=upload_department, month=month, school_year=school_year,
+            campus_ids=[c.id for c in campuses],
         )
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))

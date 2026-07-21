@@ -4,7 +4,6 @@ from sqlalchemy.orm import relationship
 
 from app.database import Base
 
-
 DEPARTMENTS = [
     "Tổ Toán",
     "Tổ Xã hội 1",
@@ -33,3 +32,4 @@ class Document(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     uploader = relationship("User", backref="documents")
+    campuses = relationship("Campus", secondary="document_campuses", back_populates="documents")

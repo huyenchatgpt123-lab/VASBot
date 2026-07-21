@@ -12,6 +12,7 @@ export interface UploadMetadata {
   department: string;
   month: number;
   school_year: string;
+  campus_ids: number[];
 }
 
 export const documentsApi = {
@@ -34,6 +35,7 @@ export const documentsApi = {
     formData.append('department', metadata.department);
     formData.append('month', metadata.month.toString());
     formData.append('school_year', metadata.school_year);
+    metadata.campus_ids.forEach((id) => formData.append('campus_ids', id.toString()));
     const res = await api.post('/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
@@ -41,6 +43,10 @@ export const documentsApi = {
   },
   delete: async (id: number) => {
     const res = await api.delete(`/documents/${id}`);
+    return res.data;
+  },
+  getCampuses: async (): Promise<{ campuses: { id: number; code: string; name: string }[] }> => {
+    const res = await api.get('/documents/campuses');
     return res.data;
   },
   getDepartments: async (): Promise<{ departments: string[] }> => {

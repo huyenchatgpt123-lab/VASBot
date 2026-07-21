@@ -39,3 +39,14 @@ export function AdminRoute({ children }: { children: React.ReactNode }) {
 
   return <>{children}</>;
 }
+
+export function BghRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, scopeAllDepartments } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
+  if (!scopeAllDepartments) return <Navigate to="/tasks" replace />;
+
+  return <>{children}</>;
+}

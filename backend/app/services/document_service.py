@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -26,9 +27,15 @@ class DocumentService:
     def upload_document(
         self, file_content: bytes, filename: str, uploaded_by: int,
         department: str = None, month: int = None, school_year: str = None,
+        campus_ids: Optional[List[int]] = None,
     ) -> dict:
+        from app.repositories.campus_repository import CampusRepository
+
         temp_path = write_temp_file(file_content, filename)
         storage_path = None
+        campuses = []
+        if campus_ids:
+            campuses = CampusRepository(self.db).get_by_ids(campus_ids)
 
         try:
             storage_path = upload_document_file(file_content, filename)
@@ -36,6 +43,7 @@ class DocumentService:
             doc = self.doc_repo.create(
                 filename, storage_path, uploaded_by, 0,
                 department=department, month=month, school_year=school_year,
+                campuses=campuses,
             )
 
             if filename.lower().endswith(".docx"):
@@ -72,6 +80,8 @@ class DocumentService:
                 "department": doc.department,
                 "month": doc.month,
                 "school_year": doc.school_year,
+                "campus_ids": [c.id for c in doc.campuses],
+                "campuses": [c.code for c in doc.campuses],
                 "message": "Tài liệu đã được upload và xử lý thành công",
             }
         except Exception:

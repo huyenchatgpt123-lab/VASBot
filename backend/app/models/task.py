@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Text, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
@@ -25,6 +25,7 @@ class Task(Base):
     assignee_name = Column(String(255), nullable=False)
     assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     deadline = Column(DateTime(timezone=True), nullable=True)
+    has_scheduled_time = Column(Boolean, default=False, nullable=False, server_default="false")
     status = Column(Enum(TaskStatus), default=TaskStatus.pending, nullable=False)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
     department = Column(String(255), nullable=True)

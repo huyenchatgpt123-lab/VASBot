@@ -38,7 +38,9 @@ export default function DocumentsPage() {
   const [uploadDept, setUploadDept] = useState('');
   const [uploadMonth, setUploadMonth] = useState('');
   const [uploadYear, setUploadYear] = useState('');
+  const [uploadCampusIds, setUploadCampusIds] = useState<number[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
+  const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
 
   useEffect(() => {
     loadDocuments();
@@ -46,6 +48,7 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     documentsApi.getDepartments().then((res) => setDepartments(res.departments)).catch(() => {});
+    documentsApi.getCampuses().then((res) => setCampuses(res.campuses)).catch(() => {});
   }, []);
 
   const loadDocuments = async () => {
@@ -75,6 +78,7 @@ export default function DocumentsPage() {
     setUploadDept(scopeAllDepartments ? '' : (user?.department || ''));
     setUploadMonth('');
     setUploadYear('');
+    setUploadCampusIds([]);
     setShowUploadModal(true);
   };
 
@@ -90,8 +94,8 @@ export default function DocumentsPage() {
   };
 
   const handleUploadSubmit = async () => {
-    if (!uploadFile || !uploadDept || !uploadMonth || !uploadYear) {
-      alert('Vui lòng điền đầy đủ thông tin.');
+    if (!uploadFile || !uploadDept || !uploadMonth || !uploadYear || uploadCampusIds.length === 0) {
+      alert('Vui lòng điền đầy đủ thông tin và chọn ít nhất một trường.');
       return;
     }
 
@@ -99,6 +103,7 @@ export default function DocumentsPage() {
       department: uploadDept,
       month: parseInt(uploadMonth),
       school_year: uploadYear,
+      campus_ids: uploadCampusIds,
     };
 
     setUploading(true);
@@ -418,6 +423,30 @@ export default function DocumentsPage() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Trường (địa điểm) *</label>
+                <p className="text-xs text-gray-400 mb-2">Chọn một hoặc nhiều trường mà kế hoạch này áp dụng</p>
+                <div className="flex flex-wrap gap-3">
+                  {campuses.map((c) => (
+                    <label key={c.id} className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={uploadCampusIds.includes(c.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setUploadCampusIds((prev) => [...prev, c.id]);
+                          } else {
+                            setUploadCampusIds((prev) => prev.filter((id) => id !== c.id));
+                          }
+                        }}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      {c.code}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Chọn file (PDF/DOCX) *</label>
                 <input
                   ref={fileInputRef}
@@ -441,7 +470,7 @@ export default function DocumentsPage() {
               </button>
               <button
                 onClick={handleUploadSubmit}
-                disabled={uploading || !uploadFile || !uploadDept || !uploadMonth || !uploadYear}
+                disabled={uploading || !uploadFile || !uploadDept || !uploadMonth || !uploadYear || uploadCampusIds.length === 0}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? 'Đang upload...' : 'Upload'}

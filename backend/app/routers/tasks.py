@@ -10,7 +10,9 @@ from app.repositories.user_repository import UserRepository
 from app.utils.permissions import (
     is_admin,
     can_manage_tasks,
+    has_scope_all_departments,
 )
+from app.schemas.calendar import BghCalendarResponse
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskStatusUpdate,
     TaskResponse, TaskListResponse, TaskExtractRequest,
@@ -56,6 +58,27 @@ def get_tasks(
         "page": page,
         "page_size": page_size,
     }
+
+
+def _require_bgh_calendar(current_user: User = Depends(get_current_user)) -> User:
+    if is_admin(current_user) or has_scope_all_departments(current_user):
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Chỉ Ban giám hiệu mới xem được lịch công việc",
+    )
+
+
+@router.get("/bgh-calendar", response_model=BghCalendarResponse)
+def get_bgh_calendar(
+    start_date: str = Query(..., description="YYYY-MM-DD"),
+    end_date: str = Query(..., description="YYYY-MM-DD"),
+    campus_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_bgh_calendar),
+):
+    service = TaskService(db)
+    return service.get_bgh_calendar(start_date, end_date, campus_id=campus_id)
 
 
 @router.get("/assignees")

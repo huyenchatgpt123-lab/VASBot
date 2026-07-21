@@ -20,6 +20,35 @@ from app.utils.permissions import (
 logger = logging.getLogger(__name__)
 
 
+def _parse_deadline(raw) -> Tuple[Optional[datetime], bool]:
+    """Return (deadline, has_scheduled_time)."""
+    if raw is None:
+        return None, False
+    s = str(raw).strip()
+    if not s or s.lower() == "null":
+        return None, False
+
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(s, fmt), True
+        except ValueError:
+            continue
+
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d"), False
+    except ValueError:
+        pass
+
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo:
+            dt = dt.replace(tzinfo=None)
+        has_time = not (dt.hour == 0 and dt.minute == 0 and dt.second == 0)
+        return dt, has_time
+    except (ValueError, TypeError):
+        return None, False
+
+
 class TaskService:
     def __init__(self, db: Session):
         self.db = db
@@ -65,18 +94,14 @@ class TaskService:
         tasks_preview = []
         for t in raw_tasks:
             assignee_id = self._match_user(t["assignee_name"])
-            deadline = None
-            if t.get("deadline"):
-                try:
-                    deadline = datetime.strptime(t["deadline"], "%Y-%m-%d")
-                except (ValueError, TypeError):
-                    pass
+            deadline, has_scheduled_time = _parse_deadline(t.get("deadline"))
 
             tasks_preview.append({
                 "title": t["title"],
                 "assignee_name": t["assignee_name"],
                 "assignee_id": assignee_id,
                 "deadline": deadline.isoformat() if deadline else None,
+                "has_scheduled_time": has_scheduled_time,
                 "status": "pending",
                 "document_id": document_id,
             })
@@ -99,14 +124,18 @@ class TaskService:
         tasks_to_create = []
         for t in tasks_data:
             deadline = None
+            has_scheduled_time = bool(t.get("has_scheduled_time"))
             if t.get("deadline"):
-                try:
-                    if isinstance(t["deadline"], str):
-                        deadline = datetime.fromisoformat(t["deadline"].replace("Z", "+00:00"))
-                    else:
-                        deadline = t["deadline"]
-                except (ValueError, TypeError):
-                    pass
+                if isinstance(t["deadline"], str):
+                    deadline, parsed_has_time = _parse_deadline(t["deadline"])
+                    if "has_scheduled_time" not in t:
+                        has_scheduled_time = parsed_has_time
+                else:
+                    deadline = t["deadline"]
+                    if "has_scheduled_time" not in t:
+                        has_scheduled_time = bool(
+                            deadline and (deadline.hour or deadline.minute or deadline.second)
+                        )
 
             assignee_id = t.get("assignee_id")
             if not assignee_id:
@@ -117,6 +146,7 @@ class TaskService:
                 "assignee_name": t["assignee_name"],
                 "assignee_id": assignee_id,
                 "deadline": deadline,
+                "has_scheduled_time": has_scheduled_time,
                 "status": TaskStatus.pending,
                 "document_id": document_id,
                 "note": t.get("note"),
@@ -353,6 +383,70 @@ class TaskService:
                 matched += 1
         return {"matched": matched, "total_unassigned": len(tasks)}
 
+    def get_bgh_calendar(
+        self,
+        start_date: str,
+        end_date: str,
+        campus_id: Optional[int] = None,
+    ) -> dict:
+        from sqlalchemy.orm import joinedload
+        from app.models.campus import document_campuses
+
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+
+        query = (
+            self.db.query(Task)
+            .join(Document, Task.document_id == Document.id)
+            .join(document_campuses, document_campuses.c.document_id == Document.id)
+            .options(joinedload(Task.document).joinedload(Document.campuses))
+        )
+        if campus_id:
+            query = query.filter(document_campuses.c.campus_id == campus_id)
+
+        tasks = query.distinct().all()
+        scheduled_tasks = []
+        unscheduled_tasks = []
+        day_counts: dict[str, int] = {}
+
+        for task in tasks:
+            item = self._format_calendar_task(task)
+            if task.has_scheduled_time and task.deadline:
+                dl = task.deadline.replace(tzinfo=None) if task.deadline.tzinfo else task.deadline
+                if start_dt <= dl <= end_dt:
+                    scheduled_tasks.append(item)
+                    day_key = dl.strftime("%Y-%m-%d")
+                    day_counts[day_key] = day_counts.get(day_key, 0) + 1
+            elif not task.has_scheduled_time:
+                unscheduled_tasks.append(item)
+
+        scheduled_tasks.sort(
+            key=lambda t: t["deadline"] or "",
+        )
+        unscheduled_tasks.sort(key=lambda t: (t["deadline"] or "", t["title"]))
+
+        return {
+            "scheduled_tasks": scheduled_tasks,
+            "unscheduled_tasks": unscheduled_tasks,
+            "day_counts": day_counts,
+        }
+
+    def _campus_codes(self, task: Task) -> List[str]:
+        if not task.document or not task.document.campuses:
+            return []
+        return sorted(c.code for c in task.document.campuses)
+
+    def _format_calendar_task(self, task: Task) -> dict:
+        doc_name = task.document.filename if task.document else None
+        return {
+            "id": task.id,
+            "title": task.title,
+            "deadline": task.deadline.isoformat() if task.deadline else None,
+            "has_scheduled_time": bool(task.has_scheduled_time),
+            "campuses": self._campus_codes(task),
+            "document_name": doc_name,
+        }
+
     def _format_tasks(self, tasks: List[Task]) -> List[Dict]:
         result = []
         for task in tasks:
@@ -368,6 +462,7 @@ class TaskService:
                 "assignee_name": task.assignee_name,
                 "assignee_id": task.assignee_id,
                 "deadline": task.deadline.isoformat() if task.deadline else None,
+                "has_scheduled_time": bool(task.has_scheduled_time),
                 "status": task.status.value if task.status else "pending",
                 "document_id": task.document_id,
                 "document_name": doc_name,

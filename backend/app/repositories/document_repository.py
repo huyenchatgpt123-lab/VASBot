@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import asc, desc
 
 from app.models.document import Document
+from app.models.campus import Campus
 
 
 class DocumentRepository:
@@ -48,6 +49,7 @@ class DocumentRepository:
     def create(
         self, filename: str, filepath: str, uploaded_by: int, page_count: int,
         department: str = None, month: int = None, school_year: str = None,
+        campuses: Optional[List[Campus]] = None,
     ) -> Document:
         doc = Document(
             filename=filename,
@@ -58,6 +60,8 @@ class DocumentRepository:
             month=month,
             school_year=school_year,
         )
+        if campuses:
+            doc.campuses = campuses
         self.db.add(doc)
         self.db.commit()
         self.db.refresh(doc)

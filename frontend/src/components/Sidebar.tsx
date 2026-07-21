@@ -6,6 +6,7 @@ import { feedbackApi } from '../api/feedback';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
+  { path: '/bgh-calendar', label: 'Lịch BGH', icon: '📅', bghOnly: true },
   { path: '/documents', label: 'Tài liệu', icon: '📄' },
   { path: '/tasks', label: 'Công việc', icon: '✅', showBadge: true },
   { path: '/feedback', label: 'Feedback', icon: '💡', showFeedbackBadge: true },
@@ -19,7 +20,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, scopeAllDepartments } = useAuth();
   const [taskCount, setTaskCount] = useState(0);
   const [feedbackCount, setFeedbackCount] = useState(0);
 
@@ -81,7 +82,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navItems
-          .filter((item) => !item.adminOnly || isAdmin)
+          .filter((item) => {
+            if (item.adminOnly && !isAdmin) return false;
+            if ('bghOnly' in item && item.bghOnly && !scopeAllDepartments) return false;
+            return true;
+          })
           .map((item) => (
             <NavLink
               key={item.path}

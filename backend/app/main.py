@@ -4,10 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base, SessionLocal
 from app.routers import auth, documents, search, admin, tasks, feedback
 from app.models.user import User, UserRole
+from app.models.campus import Campus  # noqa: F401 — register ORM tables
 from app.models.position import Position
 from app.models.department import DEFAULT_DEPARTMENTS
 from app.repositories.position_repository import PositionRepository
 from app.repositories.department_repository import DepartmentRepository
+from app.repositories.campus_repository import CampusRepository
 from app.utils.auth import hash_password
 
 app = FastAPI(
@@ -204,9 +206,13 @@ def startup():
         if "created_by_id" not in task_columns:
             db.execute(text("ALTER TABLE tasks ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
             db.commit()
+        if "has_scheduled_time" not in task_columns:
+            db.execute(text("ALTER TABLE tasks ADD COLUMN has_scheduled_time BOOLEAN DEFAULT FALSE"))
+            db.commit()
 
         _seed_positions(db)
         _seed_departments(db)
+        CampusRepository(db).seed_defaults()
         _migrate_user_positions(db)
         _migrate_user_departments(db)
         _migrate_task_departments(db)
