@@ -13,7 +13,14 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_COST_PER_1M = 0.13  # text-embedding-3-large
+
+def _embedding_cost_per_1m() -> float:
+    defaults = {
+        "text-embedding-3-small": 0.02,
+        "text-embedding-3-large": 0.13,
+        "text-embedding-ada-002": 0.10,
+    }
+    return defaults.get(settings.EMBEDDING_MODEL, float(settings.EMBEDDING_COST_PER_1M))
 
 
 class BM25:
@@ -111,6 +118,10 @@ class FAISSService:
             json.dump(self._chunks, f, ensure_ascii=False, indent=2)
 
     def _get_embeddings(self, texts: List[str]) -> np.ndarray:
+        vectors, _ = self._create_embeddings(texts)
+        return vectors
+
+    def _create_embeddings(self, texts: List[str]) -> tuple[np.ndarray, int]:
         if self.client is None:
             raise RuntimeError(
                 "OPENAI_API_KEY chưa được cấu hình. "
@@ -124,16 +135,16 @@ class FAISSService:
         embeddings = [item.embedding for item in response.data]
         vectors = np.array(embeddings, dtype=np.float32)
         faiss.normalize_L2(vectors)
-        return vectors
+        tokens = response.usage.total_tokens if response.usage else 0
+        return vectors, int(tokens)
 
     def add_chunks(self, chunks: List[Dict[str, Any]], document_names: Dict[int, str]) -> dict:
         if not chunks:
             return {"tokens": 0, "cost": 0.0}
 
         texts = [c["content"] for c in chunks]
-        vectors = self._get_embeddings(texts)
-        tokens = sum(len(t.split()) * 1.3 for t in texts)
-        cost = (tokens / 1_000_000) * EMBEDDING_COST_PER_1M
+        vectors, tokens = self._create_embeddings(texts)
+        cost = (tokens / 1_000_000) * _embedding_cost_per_1m()
 
         for chunk in chunks:
             chunk_entry = {
@@ -147,7 +158,7 @@ class FAISSService:
         self._index.add(vectors)
         self._build_bm25()
         self._save()
-        return {"tokens": int(tokens), "cost": cost}
+        return {"tokens": tokens, "cost": cost}
 
     def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Semantic search only (FAISS)."""

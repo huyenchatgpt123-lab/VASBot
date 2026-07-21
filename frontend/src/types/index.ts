@@ -50,11 +50,18 @@ export interface Document {
   created_at: string;
 }
 
+export interface CloudinaryStats {
+  storage_bytes: number;
+  file_count: number;
+}
+
 export interface DashboardStats {
   total_documents: number;
   total_pages: number;
   total_users: number;
-  openai_cost_this_month: number;
+  openai_cost_usd: number;
+  openai_cost_vnd: number;
+  cloudinary?: CloudinaryStats | null;
 }
 
 export interface ActivityData {

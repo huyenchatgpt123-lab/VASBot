@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 250
     EMBEDDING_MODEL: str = "text-embedding-3-large"
     EMBEDDING_DIMENSION: int = 3072
+    EMBEDDING_COST_PER_1M: float = 0.13
+    USD_TO_VND: float = 25000.0
     CHAT_MODEL: str = "gpt-4.1"
     REWRITE_MODEL: str = "gpt-4.1-nano"
 

@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 import cloudinary
 import cloudinary.uploader
 import cloudinary.utils
+import cloudinary.api
 
 from app.config import settings
 
@@ -139,3 +140,40 @@ def get_download_url(filepath: str, filename: str) -> str:
         flags=f"attachment:{filename}",
     )
     return url
+
+
+CLOUDINARY_DOCUMENT_FOLDER = "vabot/documents"
+
+
+def get_cloudinary_document_stats() -> dict | None:
+    """Return storage stats for documents stored on Cloudinary."""
+    if not use_cloudinary():
+        return None
+
+    _configure_cloudinary()
+    total_bytes = 0
+    file_count = 0
+
+    for resource_type in ("image", "raw"):
+        next_cursor = None
+        while True:
+            params: dict = {
+                "type": "upload",
+                "prefix": CLOUDINARY_DOCUMENT_FOLDER,
+                "resource_type": resource_type,
+                "max_results": 500,
+            }
+            if next_cursor:
+                params["next_cursor"] = next_cursor
+            result = cloudinary.api.resources(**params)
+            for resource in result.get("resources", []):
+                total_bytes += int(resource.get("bytes") or 0)
+                file_count += 1
+            next_cursor = result.get("next_cursor")
+            if not next_cursor:
+                break
+
+    return {
+        "storage_bytes": total_bytes,
+        "file_count": file_count,
+    }

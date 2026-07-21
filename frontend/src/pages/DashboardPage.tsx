@@ -49,6 +49,17 @@ function getPresetDates(days: number): { start_date: string; end_date: string } 
   return { start_date: formatDate(start), end_date: formatDate(end) };
 }
 
+function formatStorageBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
+function formatVnd(amount: number): string {
+  return new Intl.NumberFormat('vi-VN').format(Math.round(amount));
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activity, setActivity] = useState<ActivityData[]>([]);
@@ -145,13 +156,45 @@ export default function DashboardPage() {
         <StatCard label="Tài liệu" value={stats?.total_documents ?? 0} icon="📄" color="bg-blue-100" />
         <StatCard label="Tổng số trang" value={stats?.total_pages ?? 0} icon="📑" color="bg-indigo-100" />
         <StatCard label="Người dùng" value={stats?.total_users ?? 0} icon="👥" color="bg-green-100" />
-        <StatCard
-          label="Chi phí OpenAI"
-          value={`$${(stats?.openai_cost_this_month ?? 0).toFixed(4)}`}
-          icon="💰"
-          color="bg-yellow-100"
-        />
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Chi phí OpenAI (embedding)</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                ${(stats?.openai_cost_usd ?? 0).toFixed(4)}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                ≈ {formatVnd(stats?.openai_cost_vnd ?? 0)} ₫
+              </p>
+              <p className="text-xs text-gray-400 mt-1">Trong khoảng thời gian đã chọn</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-yellow-100">
+              💰
+            </div>
+          </div>
+        </div>
       </div>
+
+      {stats?.cloudinary && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Cloudinary</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <StatCard
+              label="Dung lượng lưu trữ"
+              value={formatStorageBytes(stats.cloudinary.storage_bytes)}
+              icon="☁️"
+              color="bg-sky-100"
+            />
+            <StatCard
+              label="Số file tài liệu"
+              value={stats.cloudinary.file_count}
+              icon="📦"
+              color="bg-cyan-100"
+            />
+          </div>
+          <p className="text-xs text-gray-400 mt-2">Thống kê thư mục vabot/documents trên Cloudinary</p>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Tài liệu tải lên theo ngày</h2>

@@ -4,9 +4,11 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from app.config import settings
 from app.models.user import User
 from app.models.document import Document
 from app.models.usage import OpenAIUsage
+from app.services.storage_service import get_cloudinary_document_stats
 
 
 class DashboardService:
@@ -15,12 +17,24 @@ class DashboardService:
 
     def get_dashboard(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> dict:
         start_dt, end_dt = self._parse_dates(start_date, end_date)
+        cost_usd = self._get_cost(start_dt, end_dt)
+        cost_vnd = round(cost_usd * settings.USD_TO_VND, 0)
+
+        cloudinary_stats = None
+        raw_cloudinary = get_cloudinary_document_stats()
+        if raw_cloudinary is not None:
+            cloudinary_stats = {
+                "storage_bytes": raw_cloudinary["storage_bytes"],
+                "file_count": raw_cloudinary["file_count"],
+            }
 
         stats = {
             "total_documents": self._count_documents(start_dt, end_dt),
             "total_pages": self._total_pages(start_dt, end_dt),
             "total_users": self.db.query(User).count(),
-            "openai_cost_this_month": self._get_cost(start_dt, end_dt),
+            "openai_cost_usd": cost_usd,
+            "openai_cost_vnd": cost_vnd,
+            "cloudinary": cloudinary_stats,
         }
         activity = self._get_activity(start_dt, end_dt)
         return {"stats": stats, "activity": activity}
@@ -65,7 +79,7 @@ class DashboardService:
             .filter(OpenAIUsage.created_at >= start_dt, OpenAIUsage.created_at <= end_dt)
             .scalar()
         )
-        return float(result or 0.0)
+        return round(float(result or 0.0), 6)
 
     def _get_activity(self, start_dt: datetime, end_dt: datetime) -> list:
         doc_activity = (
