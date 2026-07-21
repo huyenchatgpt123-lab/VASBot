@@ -11,16 +11,15 @@ class CampusResponse(BaseModel):
         from_attributes = True
 
 
-class BghCalendarTask(BaseModel):
-    id: int
-    title: str
-    deadline: Optional[str] = None
-    has_scheduled_time: bool
+class BghCalendarPlan(BaseModel):
+    document_id: int
+    plan_name: str
+    date: Optional[str] = None
+    start_time: Optional[str] = None
     campuses: List[str]
-    document_name: Optional[str] = None
 
 
 class BghCalendarResponse(BaseModel):
-    scheduled_tasks: List[BghCalendarTask]
-    unscheduled_tasks: List[BghCalendarTask]
+    scheduled_plans: List[BghCalendarPlan]
+    unscheduled_plans: List[BghCalendarPlan]
     day_counts: dict[str, int]

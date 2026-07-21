@@ -389,62 +389,70 @@ class TaskService:
         end_date: str,
         campus_id: Optional[int] = None,
     ) -> dict:
+        from collections import defaultdict
         from sqlalchemy.orm import joinedload
         from app.models.campus import document_campuses
 
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
 
-        query = (
-            self.db.query(Task)
-            .join(Document, Task.document_id == Document.id)
+        doc_query = (
+            self.db.query(Document)
             .join(document_campuses, document_campuses.c.document_id == Document.id)
-            .options(joinedload(Task.document).joinedload(Document.campuses))
+            .options(joinedload(Document.campuses))
         )
         if campus_id:
-            query = query.filter(document_campuses.c.campus_id == campus_id)
+            doc_query = doc_query.filter(document_campuses.c.campus_id == campus_id)
 
-        tasks = query.distinct().all()
-        scheduled_tasks = []
-        unscheduled_tasks = []
+        documents = doc_query.distinct().all()
+        scheduled_plans = []
+        unscheduled_plans = []
         day_counts: dict[str, int] = {}
 
-        for task in tasks:
-            item = self._format_calendar_task(task)
-            if task.has_scheduled_time and task.deadline:
+        for doc in documents:
+            campuses = sorted(c.code for c in doc.campuses)
+            tasks = self.db.query(Task).filter(Task.document_id == doc.id).all()
+
+            scheduled_by_date: dict[str, list] = defaultdict(list)
+            has_any_scheduled_time = False
+
+            for task in tasks:
+                if not task.has_scheduled_time or not task.deadline:
+                    continue
+                has_any_scheduled_time = True
                 dl = task.deadline.replace(tzinfo=None) if task.deadline.tzinfo else task.deadline
                 if start_dt <= dl <= end_dt:
-                    scheduled_tasks.append(item)
                     day_key = dl.strftime("%Y-%m-%d")
-                    day_counts[day_key] = day_counts.get(day_key, 0) + 1
-            elif not task.has_scheduled_time:
-                unscheduled_tasks.append(item)
+                    scheduled_by_date[day_key].append(dl)
 
-        scheduled_tasks.sort(
-            key=lambda t: t["deadline"] or "",
-        )
-        unscheduled_tasks.sort(key=lambda t: (t["deadline"] or "", t["title"]))
+            if not has_any_scheduled_time:
+                unscheduled_plans.append({
+                    "document_id": doc.id,
+                    "plan_name": doc.filename,
+                    "date": None,
+                    "start_time": None,
+                    "campuses": campuses,
+                })
+                continue
+
+            for day_key, times in scheduled_by_date.items():
+                earliest = min(times)
+                scheduled_plans.append({
+                    "document_id": doc.id,
+                    "plan_name": doc.filename,
+                    "date": day_key,
+                    "start_time": earliest.isoformat(),
+                    "campuses": campuses,
+                })
+                day_counts[day_key] = day_counts.get(day_key, 0) + 1
+
+        scheduled_plans.sort(key=lambda p: (p["date"] or "", p["start_time"] or ""))
+        unscheduled_plans.sort(key=lambda p: p["plan_name"])
 
         return {
-            "scheduled_tasks": scheduled_tasks,
-            "unscheduled_tasks": unscheduled_tasks,
+            "scheduled_plans": scheduled_plans,
+            "unscheduled_plans": unscheduled_plans,
             "day_counts": day_counts,
-        }
-
-    def _campus_codes(self, task: Task) -> List[str]:
-        if not task.document or not task.document.campuses:
-            return []
-        return sorted(c.code for c in task.document.campuses)
-
-    def _format_calendar_task(self, task: Task) -> dict:
-        doc_name = task.document.filename if task.document else None
-        return {
-            "id": task.id,
-            "title": task.title,
-            "deadline": task.deadline.isoformat() if task.deadline else None,
-            "has_scheduled_time": bool(task.has_scheduled_time),
-            "campuses": self._campus_codes(task),
-            "document_name": doc_name,
         }
 
     def _format_tasks(self, tasks: List[Task]) -> List[Dict]:

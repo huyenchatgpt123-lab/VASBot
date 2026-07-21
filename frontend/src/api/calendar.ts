@@ -6,18 +6,17 @@ export interface Campus {
   name: string;
 }
 
-export interface BghCalendarTask {
-  id: number;
-  title: string;
-  deadline: string | null;
-  has_scheduled_time: boolean;
+export interface BghCalendarPlan {
+  document_id: number;
+  plan_name: string;
+  date: string | null;
+  start_time: string | null;
   campuses: string[];
-  document_name: string | null;
 }
 
 export interface BghCalendarData {
-  scheduled_tasks: BghCalendarTask[];
-  unscheduled_tasks: BghCalendarTask[];
+  scheduled_plans: BghCalendarPlan[];
+  unscheduled_plans: BghCalendarPlan[];
   day_counts: Record<string, number>;
 }
 

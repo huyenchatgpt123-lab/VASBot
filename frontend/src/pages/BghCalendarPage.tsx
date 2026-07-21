@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { calendarApi, BghCalendarTask, Campus } from '../api/calendar';
+import { calendarApi, BghCalendarPlan, Campus } from '../api/calendar';
 import { documentsApi } from '../api/documents';
 
 type DatePreset = 'today' | 'tomorrow' | 'week' | 'custom';
@@ -38,9 +38,9 @@ function formatDisplayDate(key: string): string {
 }
 
 function formatTime(iso: string | null): string {
-  if (!iso) return '';
+  if (!iso) return '—';
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
+  if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -73,6 +73,10 @@ function buildCalendarGrid(viewMonth: Date): (string | null)[][] {
   return weeks;
 }
 
+function stripExtension(name: string): string {
+  return name.replace(/\.(pdf|docx)$/i, '');
+}
+
 export default function BghCalendarPage() {
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()));
@@ -82,7 +86,6 @@ export default function BghCalendarPage() {
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [data, setData] = useState<Awaited<ReturnType<typeof calendarApi.getBghCalendar>> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedTask, setSelectedTask] = useState<BghCalendarTask | null>(null);
 
   const range = useMemo(() => {
     const start = startOfMonth(viewMonth);
@@ -133,7 +136,6 @@ export default function BghCalendarPage() {
     if (preset === 'week') {
       setViewMonth(startOfMonth(today));
       setSelectedDate(formatDateKey(today));
-      return;
     }
   };
 
@@ -147,28 +149,12 @@ export default function BghCalendarPage() {
 
   const weeks = useMemo(() => buildCalendarGrid(viewMonth), [viewMonth]);
 
-  const dayTasks = useMemo(() => {
+  const dayPlans = useMemo(() => {
     if (!data) return [];
-    return data.scheduled_tasks.filter((t) => {
-      if (!t.deadline) return false;
-      return t.deadline.slice(0, 10) === selectedDate;
-    });
+    return data.scheduled_plans
+      .filter((p) => p.date === selectedDate)
+      .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
   }, [data, selectedDate]);
-
-  const uniqueDayTitles = useMemo(() => {
-    const seen = new Set<number>();
-    const items: BghCalendarTask[] = [];
-    for (const t of dayTasks) {
-      if (seen.has(t.id)) continue;
-      seen.add(t.id);
-      items.push(t);
-    }
-    const byTitle = new Map<string, BghCalendarTask>();
-    for (const t of items) {
-      if (!byTitle.has(t.title)) byTitle.set(t.title, t);
-    }
-    return Array.from(byTitle.values());
-  }, [dayTasks]);
 
   const weekHighlightDates = useMemo(() => {
     if (activePreset !== 'week') return new Set<string>();
@@ -185,10 +171,9 @@ export default function BghCalendarPage() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Lịch công việc BGH</h1>
-        <p className="text-gray-500 mt-1">Theo kế hoạch tài liệu và trường (VA1, VA3, EMC)</p>
+        <p className="text-gray-500 mt-1">Tổng quan kế hoạch theo ngày · VA1, VA3, EMC</p>
       </div>
 
-      {/* Filters */}
       <div className="mb-6 flex flex-col gap-3">
         <div className="flex flex-wrap gap-2">
           {([
@@ -235,7 +220,6 @@ export default function BghCalendarPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendar */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
           <div className="flex items-center justify-between mb-4">
             <button
@@ -274,7 +258,6 @@ export default function BghCalendarPage() {
                   key={dateKey}
                   onClick={() => {
                     setSelectedDate(dateKey);
-                    setSelectedTask(null);
                     setActivePreset('custom');
                     setCustomDate(dateKey);
                   }}
@@ -298,76 +281,42 @@ export default function BghCalendarPage() {
               );
             })}
           </div>
+          <p className="text-xs text-gray-400 mt-3">Số trên ô ngày = số kế hoạch trong ngày</p>
         </div>
 
-        {/* Day detail */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col min-h-[320px]">
           <h3 className="text-base font-semibold text-gray-900 mb-1 capitalize">
             {formatDisplayDate(selectedDate)}
           </h3>
-          <p className="text-xs text-gray-400 mb-4">Danh sách công việc trong ngày</p>
+          <p className="text-xs text-gray-400 mb-4">Kế hoạch trong ngày</p>
 
-          {uniqueDayTitles.length === 0 ? (
-            <p className="text-sm text-gray-500 flex-1">Không có công việc đã xếp giờ trong ngày này.</p>
+          {dayPlans.length === 0 ? (
+            <p className="text-sm text-gray-500 flex-1">Không có kế hoạch đã xếp giờ trong ngày này.</p>
           ) : (
-            <ul className="space-y-1 flex-1 overflow-y-auto">
-              {uniqueDayTitles.map((task) => (
-                <li key={task.id}>
-                  <button
-                    onClick={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                      selectedTask?.id === task.id
-                        ? 'bg-primary-50 text-primary-800 border border-primary-200'
-                        : 'hover:bg-gray-50 text-gray-800'
-                    }`}
-                  >
-                    {task.title}
-                  </button>
-                </li>
+            <ul className="space-y-3 flex-1 overflow-y-auto">
+              {dayPlans.map((plan) => (
+                <PlanRow key={`${plan.document_id}-${plan.date}`} plan={plan} />
               ))}
             </ul>
-          )}
-
-          {selectedTask && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="text-sm font-medium text-gray-900">{selectedTask.title}</p>
-              <p className="text-sm text-gray-600 mt-2">
-                🕐 {formatTime(selectedTask.deadline) || '—'}
-              </p>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {selectedTask.campuses.map((code) => (
-                  <span
-                    key={code}
-                    className="text-xs px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-medium"
-                  >
-                    {code}
-                  </span>
-                ))}
-              </div>
-            </div>
           )}
         </div>
       </div>
 
-      {/* Unscheduled */}
-      {data && data.unscheduled_tasks.length > 0 && (
+      {data && data.unscheduled_plans.length > 0 && (
         <div className="mt-8 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Chưa xếp giờ</h2>
-          <p className="text-xs text-gray-400 mb-4">Công việc từ kế hoạch chưa trích được giờ cụ thể từ tài liệu</p>
+          <p className="text-xs text-gray-400 mb-4">Kế hoạch chưa trích được giờ bắt đầu từ tài liệu</p>
           <ul className="space-y-2">
-            {data.unscheduled_tasks.map((task) => (
+            {data.unscheduled_plans.map((plan) => (
               <li
-                key={task.id}
+                key={plan.document_id}
                 className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-100"
               >
-                <span className="text-sm text-gray-900 flex-1 min-w-[200px]">{task.title}</span>
-                {task.deadline && (
-                  <span className="text-xs text-gray-500">
-                    📅 {task.deadline.slice(0, 10).split('-').reverse().join('/')}
-                  </span>
-                )}
+                <span className="text-sm text-gray-900 flex-1 min-w-[200px]">
+                  {stripExtension(plan.plan_name)}
+                </span>
                 <div className="flex flex-wrap gap-1">
-                  {task.campuses.map((code) => (
+                  {plan.campuses.map((code) => (
                     <span key={code} className="text-xs px-2 py-0.5 rounded-full bg-white text-amber-800 border border-amber-200">
                       {code}
                     </span>
@@ -379,5 +328,18 @@ export default function BghCalendarPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function PlanRow({ plan }: { plan: BghCalendarPlan }) {
+  return (
+    <li className="flex gap-3 items-start px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+      <span className="text-sm font-semibold text-primary-700 shrink-0 tabular-nums w-12">
+        {formatTime(plan.start_time)}
+      </span>
+      <span className="text-sm text-gray-900 leading-snug">
+        {plan.plan_name.replace(/\.(pdf|docx)$/i, '')}
+      </span>
+    </li>
   );
 }
