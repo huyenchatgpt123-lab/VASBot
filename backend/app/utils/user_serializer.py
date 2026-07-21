@@ -19,5 +19,6 @@ def serialize_user(user: User) -> UserResponse:
         position=position_name,
         position_id=user.position_id,
         permissions=UserPermissions(**get_permissions(user)),
+        must_change_password=bool(user.must_change_password),
         created_at=user.created_at,
     )

@@ -1,20 +1,30 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
+    </div>
+  );
+}
+
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  return <>{children}</>;
+}
+
+export function ChangePasswordRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.must_change_password) return <Navigate to="/tasks" replace />;
 
   return <>{children}</>;
 }
@@ -22,21 +32,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, isAdmin } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (!isAdmin) {
-    return <Navigate to="/tasks" replace />;
-  }
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
+  if (!isAdmin) return <Navigate to="/tasks" replace />;
 
   return <>{children}</>;
 }

@@ -15,7 +15,7 @@ export default function ForgotPasswordPage() {
 
           <div className="space-y-4 text-sm text-gray-600">
             <p>
-              VATask chưa hỗ trợ tự đặt lại mật khẩu qua email. Nếu bạn quên mật khẩu, vui lòng liên hệ{' '}
+              Nếu bạn quên mật khẩu, vui lòng liên hệ{' '}
               <span className="font-medium text-gray-800">Admin hệ thống</span> để được cấp lại.
             </p>
 

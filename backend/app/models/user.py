@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -25,6 +25,7 @@ class User(Base):
     position = Column(String(255), nullable=True)
     position_id = Column(Integer, ForeignKey("positions.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    must_change_password = Column(Boolean, default=True, nullable=False, server_default="true")
 
     position_obj = relationship("Position", backref="users")
     department_obj = relationship("Department", foreign_keys=[department_id])

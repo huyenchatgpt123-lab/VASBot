@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
+from app.schemas.auth import LoginRequest, TokenResponse, UserResponse, ChangePasswordRequest
 from app.services.auth_service import AuthService
 from app.utils.auth import get_current_user
 from app.utils.user_serializer import serialize_user
@@ -36,3 +36,22 @@ def register():
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return serialize_user(current_user)
+
+
+@router.post("/change-password", response_model=UserResponse)
+def change_password(
+    request: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    service = AuthService(db)
+    try:
+        user = service.change_password(
+            current_user.id,
+            current_password=request.current_password,
+            new_password=request.new_password,
+            confirm_password=request.confirm_password,
+        )
+        return serialize_user(user)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

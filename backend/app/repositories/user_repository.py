@@ -99,6 +99,7 @@ class UserRepository:
             department_id=department.id if department else None,
             position=position.name if position else user_data.position,
             position_id=position.id if position else None,
+            must_change_password=True,
         )
         self.db.add(user)
         self.db.commit()

@@ -129,16 +129,6 @@ export default function DocumentsPage() {
     window.open(url, '_blank');
   };
 
-  const handleDownload = (id: number) => {
-    const url = documentsApi.getDownloadUrl(id);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = '';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const totalPages = Math.ceil(total / pageSize);
 
   const handleSort = (field: string) => {
@@ -269,13 +259,6 @@ export default function DocumentsPage() {
                   >
                     👁
                   </button>
-                  <button
-                    onClick={() => handleDownload(doc.id)}
-                    title="Tải xuống"
-                    className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                  >
-                    📥
-                  </button>
                   {canDeleteDoc(doc) && (
                     <button
                       onClick={() => handleDelete(doc.id)}
@@ -339,13 +322,6 @@ export default function DocumentsPage() {
                         className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                       >
                         👁
-                      </button>
-                      <button
-                        onClick={() => handleDownload(doc.id)}
-                        title="Tải xuống"
-                        className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                      >
-                        📥
                       </button>
                       {canDeleteDoc(doc) && (
                         <button

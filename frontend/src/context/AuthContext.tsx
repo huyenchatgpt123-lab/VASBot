@@ -9,10 +9,17 @@ const defaultPermissions: UserPermissions = {
   scope_all_departments: false,
 };
 
+interface ChangePasswordPayload {
+  current_password?: string;
+  new_password: string;
+  confirm_password: string;
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  changePassword: (data: ChangePasswordPayload) => Promise<User>;
   logout: () => void;
   isAdmin: boolean;
   permissions: UserPermissions;
@@ -32,7 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('token');
     if (token) {
       authApi.getMe()
-        .then(setUser)
+        .then((me) => {
+          setUser(me);
+          localStorage.setItem('user', JSON.stringify(me));
+        })
         .catch(() => {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
@@ -47,8 +57,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await authApi.login(email, password);
     localStorage.setItem('token', data.access_token);
     localStorage.setItem('user', JSON.stringify(data.user));
-    sessionStorage.setItem('showTaskWelcome', '1');
+    if (!data.user.must_change_password) {
+      sessionStorage.setItem('showTaskWelcome', '1');
+    }
     setUser(data.user);
+    return data.user;
+  };
+
+  const changePassword = async (payload: ChangePasswordPayload) => {
+    const updated = await authApi.changePassword(payload);
+    localStorage.setItem('user', JSON.stringify(updated));
+    setUser(updated);
+    if (!updated.must_change_password) {
+      sessionStorage.setItem('showTaskWelcome', '1');
+    }
+    return updated;
   };
 
   const logout = () => {
@@ -70,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         login,
+        changePassword,
         logout,
         isAdmin,
         permissions,

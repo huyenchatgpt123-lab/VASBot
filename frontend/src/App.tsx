@@ -1,9 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { ProtectedRoute, AdminRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, AdminRoute, ChangePasswordRoute } from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import DocumentsPage from './pages/DocumentsPage';
 import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
@@ -19,6 +20,14 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/register" element={<Navigate to="/login" replace />} />
+          <Route
+            path="/change-password"
+            element={
+              <ChangePasswordRoute>
+                <ChangePasswordPage required />
+              </ChangePasswordRoute>
+            }
+          />
           <Route
             element={
               <ProtectedRoute>

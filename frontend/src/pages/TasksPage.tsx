@@ -685,17 +685,6 @@ export default function TasksPage() {
     window.open(documentsApi.getPreviewUrl(documentId), '_blank');
   };
 
-  const handleDownloadDocument = (documentId: number | null) => {
-    if (!documentId) return;
-    const url = documentsApi.getDownloadUrl(documentId);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = '';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -882,24 +871,14 @@ export default function TasksPage() {
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {task.document_id && (
-            <>
-              <button
-                type="button"
-                onClick={() => handlePreviewPlan(task.document_id)}
-                title="Xem kế hoạch"
-                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-              >
-                👁
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDownloadDocument(task.document_id)}
-                title="Tải xuống"
-                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-              >
-                📥
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => handlePreviewPlan(task.document_id)}
+              title="Xem kế hoạch"
+              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+            >
+              👁
+            </button>
           )}
           <button onClick={() => handleStatusChange(task.id, nextStatus(task.status))} className={`px-3 py-1.5 rounded-full border text-xs font-medium ${STATUS_TAG_COLORS[st]}`}>
             {STATUS_ICONS[st]} {STATUS_OPTIONS.find((s) => s.value === st)?.label}

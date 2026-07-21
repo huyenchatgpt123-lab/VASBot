@@ -23,6 +23,7 @@ export interface User {
   position?: string;
   position_id?: number;
   permissions?: UserPermissions;
+  must_change_password?: boolean;
   created_at: string;
 }
 

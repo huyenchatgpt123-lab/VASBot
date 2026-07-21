@@ -45,6 +45,7 @@ class UserResponse(BaseModel):
     position: Optional[str] = None
     position_id: Optional[int] = None
     permissions: UserPermissions = UserPermissions()
+    must_change_password: bool = False
     created_at: datetime
 
     class Config:
@@ -60,4 +61,10 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: Optional[str] = None
+    new_password: str
+    confirm_password: str
 

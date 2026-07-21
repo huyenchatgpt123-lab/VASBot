@@ -161,6 +161,11 @@ def startup():
             db.execute(text("ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES departments(id)"))
             db.commit()
 
+        if "must_change_password" not in user_columns:
+            db.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT TRUE"))
+            db.execute(text("UPDATE users SET must_change_password = TRUE"))
+            db.commit()
+
         doc_columns = [c["name"] for c in inspector.get_columns("documents")]
         if "department" not in doc_columns:
             db.execute(text("ALTER TABLE documents ADD COLUMN department VARCHAR(255)"))
@@ -190,6 +195,7 @@ def startup():
                 email="admin@vietanh.edu.vn",
                 password_hash=hash_password("admin123"),
                 role=UserRole.admin,
+                must_change_password=True,
             )
             db.add(admin_user)
             db.commit()

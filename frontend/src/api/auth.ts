@@ -10,4 +10,12 @@ export const authApi = {
     const res = await api.get('/me');
     return res.data;
   },
+  changePassword: async (data: {
+    current_password?: string;
+    new_password: string;
+    confirm_password: string;
+  }): Promise<User> => {
+    const res = await api.post('/change-password', data);
+    return res.data;
+  },
 };

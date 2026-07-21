@@ -87,6 +87,7 @@ def update_user(
         update_fields["email"] = data.email
     if data.password is not None:
         update_fields["password_hash"] = hash_password(data.password)
+        update_fields["must_change_password"] = True
     if data.role is not None:
         update_fields["role"] = data.role
     if data.department_id is not None:
