@@ -8,6 +8,7 @@ from app.config import settings
 from app.models.user import User
 from app.models.document import Document
 from app.models.usage import OpenAIUsage
+from app.services.openai_billing_service import get_openai_costs_for_dashboard
 from app.services.storage_service import get_cloudinary_document_stats
 
 
@@ -17,7 +18,17 @@ class DashboardService:
 
     def get_dashboard(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> dict:
         start_dt, end_dt = self._parse_dates(start_date, end_date)
-        cost_usd = self._get_cost(start_dt, end_dt)
+        billing = get_openai_costs_for_dashboard(start_dt, end_dt)
+        if billing["source"] == "openai_billing" and billing["cost_usd"] is not None:
+            cost_usd = billing["cost_usd"]
+            cost_source = "openai_billing"
+            cost_note = None
+            line_items = billing.get("line_items")
+        else:
+            cost_usd = self._get_internal_cost(start_dt, end_dt)
+            cost_source = "internal"
+            cost_note = billing.get("note")
+            line_items = None
         cost_vnd = round(cost_usd * settings.USD_TO_VND, 0)
 
         cloudinary_stats = None
@@ -34,6 +45,9 @@ class DashboardService:
             "total_users": self.db.query(User).count(),
             "openai_cost_usd": cost_usd,
             "openai_cost_vnd": cost_vnd,
+            "openai_cost_source": cost_source,
+            "openai_cost_note": cost_note,
+            "openai_line_items": line_items,
             "cloudinary": cloudinary_stats,
         }
         activity = self._get_activity(start_dt, end_dt)
@@ -73,7 +87,7 @@ class DashboardService:
         )
         return int(result or 0)
 
-    def _get_cost(self, start_dt: datetime, end_dt: datetime) -> float:
+    def _get_internal_cost(self, start_dt: datetime, end_dt: datetime) -> float:
         result = (
             self.db.query(func.sum(OpenAIUsage.cost_usd))
             .filter(OpenAIUsage.created_at >= start_dt, OpenAIUsage.created_at <= end_dt)

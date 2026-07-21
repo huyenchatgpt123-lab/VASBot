@@ -5,6 +5,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://vabot:vabot123@localhost:5432/vabot"
     SECRET_KEY: str = "your-super-secret-key-change-in-production"
     OPENAI_API_KEY: str = ""
+    OPENAI_ADMIN_API_KEY: str = ""
+    OPENAI_ORG_ID: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     UPLOAD_DIR: str = "./uploads"

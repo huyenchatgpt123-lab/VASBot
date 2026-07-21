@@ -60,6 +60,17 @@ function formatVnd(amount: number): string {
   return new Intl.NumberFormat('vi-VN').format(Math.round(amount));
 }
 
+function formatLineItem(label: string): string {
+  const map: Record<string, string> = {
+    'chat completions': 'Chat (GPT)',
+    embeddings: 'Embedding',
+    'image generation': 'Tạo ảnh',
+    'audio transcriptions': 'Chuyển giọng nói',
+    'audio speeches': 'Text-to-speech',
+  };
+  return map[label.toLowerCase()] ?? label;
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activity, setActivity] = useState<ActivityData[]>([]);
@@ -159,14 +170,31 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Chi phí OpenAI (embedding)</p>
+              <p className="text-sm text-gray-500">Chi phí OpenAI</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
                 ${(stats?.openai_cost_usd ?? 0).toFixed(4)}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 ≈ {formatVnd(stats?.openai_cost_vnd ?? 0)} ₫
               </p>
-              <p className="text-xs text-gray-400 mt-1">Trong khoảng thời gian đã chọn</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {stats?.openai_cost_source === 'openai_billing'
+                  ? 'Theo hóa đơn OpenAI · trong khoảng thời gian đã chọn'
+                  : 'Ước tính nội bộ (embedding) · trong khoảng thời gian đã chọn'}
+              </p>
+              {stats?.openai_cost_note && (
+                <p className="text-xs text-amber-600 mt-2">{stats.openai_cost_note}</p>
+              )}
+              {stats?.openai_line_items && stats.openai_line_items.length > 0 && (
+                <ul className="mt-3 space-y-1">
+                  {stats.openai_line_items.map((item) => (
+                    <li key={item.line_item} className="flex justify-between text-xs text-gray-500 gap-4">
+                      <span>{formatLineItem(item.line_item)}</span>
+                      <span className="font-medium text-gray-700">${item.cost_usd.toFixed(4)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-yellow-100">
               💰

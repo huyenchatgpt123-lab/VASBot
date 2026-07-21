@@ -55,12 +55,20 @@ export interface CloudinaryStats {
   file_count: number;
 }
 
+export interface OpenAILineItemCost {
+  line_item: string;
+  cost_usd: number;
+}
+
 export interface DashboardStats {
   total_documents: number;
   total_pages: number;
   total_users: number;
   openai_cost_usd: number;
   openai_cost_vnd: number;
+  openai_cost_source: 'openai_billing' | 'internal';
+  openai_cost_note?: string | null;
+  openai_line_items?: OpenAILineItemCost[] | null;
   cloudinary?: CloudinaryStats | null;
 }
 
