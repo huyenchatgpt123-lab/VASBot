@@ -204,6 +204,42 @@ function buildPersonGroups(taskList: TaskItem[]): PersonGroup[] {
   return Object.values(map).sort((a, b) => a.assignee_name.localeCompare(b.assignee_name, 'vi'));
 }
 
+function sortAssigneeNamesForTeamLead(
+  names: string[],
+  taskUsers: TaskUser[],
+  teamDepartment: string,
+): string[] {
+  const deptOf = (name: string) => taskUsers.find((u) => u.name === name)?.department;
+  return [...names].sort((a, b) => {
+    const aMine = deptOf(a) === teamDepartment;
+    const bMine = deptOf(b) === teamDepartment;
+    if (aMine && !bMine) return -1;
+    if (!aMine && bMine) return 1;
+    return a.localeCompare(b, 'vi');
+  });
+}
+
+function sortPersonGroupsForTeamLead(
+  groups: PersonGroup[],
+  taskUsers: TaskUser[],
+  teamDepartment: string,
+): PersonGroup[] {
+  const deptOf = (pg: PersonGroup) => taskUsers.find((u) => u.id === pg.assignee_id)?.department;
+  return [...groups].sort((a, b) => {
+    const aUnassigned = a.assignee_id === null;
+    const bUnassigned = b.assignee_id === null;
+    if (aUnassigned && !bUnassigned) return 1;
+    if (!aUnassigned && bUnassigned) return -1;
+    if (aUnassigned && bUnassigned) return a.assignee_name.localeCompare(b.assignee_name, 'vi');
+
+    const aMine = deptOf(a) === teamDepartment;
+    const bMine = deptOf(b) === teamDepartment;
+    if (aMine && !bMine) return -1;
+    if (!aMine && bMine) return 1;
+    return a.assignee_name.localeCompare(b.assignee_name, 'vi');
+  });
+}
+
 function getAllExpandedDocs(docGroups: DocumentGroup[]): Set<string> {
   return new Set(docGroups.map((d) => d.document_name));
 }
@@ -279,6 +315,13 @@ export default function TasksPage() {
       tasksApi.getUsers().then(setTaskUsers).catch(() => {});
     }
   }, [canManageTasks]);
+
+  useEffect(() => {
+    if (viewMode === 'mine' && assigneeFilter) {
+      setAssigneeFilter('');
+      setPage(1);
+    }
+  }, [viewMode, assigneeFilter]);
 
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
@@ -375,6 +418,18 @@ export default function TasksPage() {
   const documentGroups = useMemo(() => buildDocumentGroups(planTaskSource), [planTaskSource]);
   const departmentGroups = useMemo(() => buildDepartmentGroupsFromTasks(planTaskSource), [planTaskSource]);
   const personGroups = useMemo(() => buildPersonGroups(visibleTasks), [visibleTasks]);
+
+  const isTeamLeadView = canManageTasks && !scopeAllDepartments && !!user?.department;
+
+  const sortedAssignees = useMemo(() => {
+    if (!isTeamLeadView || !user?.department) return assignees;
+    return sortAssigneeNamesForTeamLead(assignees, taskUsers, user.department);
+  }, [assignees, taskUsers, isTeamLeadView, user?.department]);
+
+  const sortedPersonGroups = useMemo(() => {
+    if (!isTeamLeadView || !user?.department) return personGroups;
+    return sortPersonGroupsForTeamLead(personGroups, taskUsers, user.department);
+  }, [personGroups, taskUsers, isTeamLeadView, user?.department]);
 
   const teacherBuckets = useMemo(() => {
     if (canManageTasks && viewMode !== 'mine') return null;
@@ -818,7 +873,7 @@ export default function TasksPage() {
 
   const renderPersonView = () => (
     <div className="space-y-3">
-      {personGroups.map((pg) => (
+      {sortedPersonGroups.map((pg) => (
         <div key={`${pg.assignee_id}-${pg.assignee_name}`} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-gray-50 flex items-center justify-between">
             <div>
@@ -1072,9 +1127,16 @@ export default function TasksPage() {
               <option value="">Tất cả kế hoạch</option>
               {planOptions.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
-            <select value={assigneeFilter} onChange={(e) => { setAssigneeFilter(e.target.value); setPage(1); }} className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <select
+              value={assigneeFilter}
+              onChange={(e) => { setAssigneeFilter(e.target.value); setPage(1); }}
+              disabled={viewMode === 'mine'}
+              className={`w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm ${
+                viewMode === 'mine' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+              }`}
+            >
               <option value="">Tất cả người nhận</option>
-              {assignees.map((name) => <option key={name} value={name}>{name}</option>)}
+              {sortedAssignees.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
             <label className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 cursor-pointer">
               <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} className="rounded border-gray-300" />
@@ -1107,7 +1169,7 @@ export default function TasksPage() {
       ) : !canManageTasks || viewMode === 'mine' ? (
         renderTeacherView()
       ) : viewMode === 'person' ? (
-        personGroups.length === 0 ? <div className="text-center py-12 text-gray-400">Không có công việc nào</div> : renderPersonView()
+        sortedPersonGroups.length === 0 ? <div className="text-center py-12 text-gray-400">Không có công việc nào</div> : renderPersonView()
       ) : (
         (scopeAllDepartments && !listDeptFilter ? departmentGroups.length : documentGroups.length) === 0
           ? <div className="text-center py-12 text-gray-400">Không có công việc nào</div>
