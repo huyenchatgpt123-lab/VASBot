@@ -32,6 +32,19 @@ function addDays(d: Date, n: number): Date {
   return r;
 }
 
+/** Monday of the ISO-style week (T2–CN) containing `d`. */
+function startOfWeek(d: Date): Date {
+  const r = new Date(d);
+  r.setHours(0, 0, 0, 0);
+  let offset = r.getDay() - 1;
+  if (offset < 0) offset = 6;
+  return addDays(r, -offset);
+}
+
+function endOfWeek(d: Date): Date {
+  return addDays(startOfWeek(d), 6);
+}
+
 function formatDisplayDate(key: string): string {
   const d = parseDateKey(key);
   return d.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -125,10 +138,14 @@ export default function BghCalendarPage() {
   const daySectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const range = useMemo(() => {
-    const start = startOfMonth(viewMonth);
-    const end = endOfMonth(viewMonth);
-    return { start_date: formatDateKey(start), end_date: formatDateKey(end) };
-  }, [viewMonth]);
+    const monthStart = formatDateKey(startOfMonth(viewMonth));
+    const monthEnd = formatDateKey(endOfMonth(viewMonth));
+    const normalized = normalizeRange(filterStartDate, filterEndDate);
+    return {
+      start_date: normalized.start < monthStart ? normalized.start : monthStart,
+      end_date: normalized.end > monthEnd ? normalized.end : monthEnd,
+    };
+  }, [viewMonth, filterStartDate, filterEndDate]);
 
   useEffect(() => {
     documentsApi.getCampuses().then((res) => setCampuses(res.campuses)).catch(() => {});
@@ -193,12 +210,15 @@ export default function BghCalendarPage() {
       return;
     }
     if (preset === 'week') {
-      const weekEnd = addDays(today, 6);
+      const weekStart = startOfWeek(today);
+      const weekEnd = endOfWeek(today);
+      const weekStartKey = formatDateKey(weekStart);
+      const weekEndKey = formatDateKey(weekEnd);
       setViewMonth(startOfMonth(today));
-      setFilterStartDate(todayKey);
-      setFilterEndDate(formatDateKey(weekEnd));
+      setFilterStartDate(weekStartKey);
+      setFilterEndDate(weekEndKey);
       setSelectedDate(todayKey);
-      setAnchorDate(todayKey);
+      setAnchorDate(weekStartKey);
     }
   };
 
@@ -277,7 +297,7 @@ export default function BghCalendarPage() {
       {/* Header */}
       <div className="mb-5 shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">Thời gian biểu</h1>
-        <p className="text-gray-500 mt-1">Hoạt động và kế hoạch diễn ra tại trường · VA1, VA3, EMC</p>
+        <p className="text-gray-500 mt-1">Lịch hoạt động và kế hoạch diễn ra tại trường</p>
       </div>
 
       {/* Toolbar */}
@@ -472,7 +492,7 @@ export default function BghCalendarPage() {
               ) : rangePlansGrouped.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 text-center px-4">
                   <p className="text-sm text-gray-500">Không có hoạt động nào trong khoảng ngày này.</p>
-                  <p className="text-xs text-gray-400 mt-1">Thử đổi bộ lọc hoặc Admin → Trích lại trên trang Tài liệu.</p>
+                  <p className="text-xs text-gray-400 mt-1">Thử đổi bộ lọc hoặc chọn ngày khác.</p>
                 </div>
               ) : (
                 <div className="space-y-6">
