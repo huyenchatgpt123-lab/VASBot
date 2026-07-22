@@ -465,7 +465,7 @@ export default function BghCalendarPage() {
                   </h2>
                   <p className="text-sm text-gray-500 mt-0.5">
                     {totalRangePlans > 0
-                      ? `${totalRangePlans} hoạt động · bấm ngày trên lịch để đổi · Shift + bấm để chọn khoảng`
+                      ? `${totalRangePlans} hoạt động`
                       : isSingleDayRange
                         ? 'Không có hoạt động nào trong ngày này'
                         : 'Không có hoạt động nào trong khoảng đã chọn'}

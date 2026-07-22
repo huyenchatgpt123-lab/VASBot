@@ -2,9 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base, SessionLocal
+from app.jobs.openai_cost_scheduler import start_openai_cost_scheduler, stop_openai_cost_scheduler
 from app.routers import auth, documents, search, admin, tasks, feedback
 from app.models.user import User, UserRole
 from app.models.campus import Campus  # noqa: F401 — register ORM tables
+from app.models.openai_cost_cache import OpenAICostDaily, OpenAICostSync  # noqa: F401
 from app.models.position import Position
 from app.models.department import DEFAULT_DEPARTMENTS
 from app.repositories.position_repository import PositionRepository
@@ -234,6 +236,13 @@ def startup():
         _seed_admin_user(db)
     finally:
         db.close()
+
+    start_openai_cost_scheduler()
+
+
+@app.on_event("shutdown")
+def shutdown():
+    stop_openai_cost_scheduler()
 
 
 @app.get("/health")

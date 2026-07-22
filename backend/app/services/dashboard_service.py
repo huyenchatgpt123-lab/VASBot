@@ -8,7 +8,7 @@ from app.config import settings
 from app.models.user import User
 from app.models.document import Document
 from app.models.usage import OpenAIUsage
-from app.services.openai_billing_service import get_openai_costs_for_dashboard
+from app.services.openai_cost_cache_service import OpenAICostCacheService
 from app.services.storage_service import get_cloudinary_document_stats
 
 
@@ -18,7 +18,9 @@ class DashboardService:
 
     def get_dashboard(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> dict:
         start_dt, end_dt = self._parse_dates(start_date, end_date)
-        billing = get_openai_costs_for_dashboard(start_dt, end_dt)
+        cache_service = OpenAICostCacheService(self.db)
+        billing = cache_service.get_costs_for_range(start_dt, end_dt)
+        synced_at = billing.get("synced_at")
         if billing["source"] == "openai_billing" and billing["cost_usd"] is not None:
             cost_usd = billing["cost_usd"]
             cost_source = "openai_billing"
@@ -48,6 +50,7 @@ class DashboardService:
             "openai_cost_source": cost_source,
             "openai_cost_note": cost_note,
             "openai_line_items": line_items,
+            "openai_cost_synced_at": synced_at.isoformat() if synced_at else None,
             "cloudinary": cloudinary_stats,
         }
         activity = self._get_activity(start_dt, end_dt)

@@ -39,14 +39,8 @@ def _request_costs_page(params: list[tuple[str, str]]) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def fetch_openai_invoice_costs(start_dt: datetime, end_dt: datetime) -> Optional[dict]:
-    """
-    Fetch organization costs from OpenAI billing API for the given date range.
-    Returns None when admin key is missing; raises on HTTP errors (caller may fallback).
-    """
-    if not settings.OPENAI_ADMIN_API_KEY:
-        return None
-
+def _iter_cost_buckets(start_dt: datetime, end_dt: datetime):
+    """Yield (cost_date, line_item, cost_usd) from OpenAI Costs API. Raises on HTTP errors."""
     start_ts, end_ts = _date_range_timestamps(start_dt, end_dt)
     base_params: list[tuple[str, str]] = [
         ("start_time", str(start_ts)),
@@ -56,10 +50,7 @@ def fetch_openai_invoice_costs(start_dt: datetime, end_dt: datetime) -> Optional
         ("group_by", "line_item"),
     ]
 
-    line_item_totals: dict[str, float] = defaultdict(float)
-    total_usd = 0.0
     page: Optional[str] = None
-
     while True:
         params = list(base_params)
         if page:
@@ -68,6 +59,10 @@ def fetch_openai_invoice_costs(start_dt: datetime, end_dt: datetime) -> Optional
         payload = _request_costs_page(params)
 
         for bucket in payload.get("data", []):
+            start_time = bucket.get("start_time")
+            if start_time is None:
+                continue
+            cost_date = datetime.fromtimestamp(int(start_time), tz=timezone.utc).date()
             for result in bucket.get("result", []):
                 if result.get("object") != "organization.costs.result":
                     continue
@@ -75,15 +70,51 @@ def fetch_openai_invoice_costs(start_dt: datetime, end_dt: datetime) -> Optional
                 if str(amount.get("currency", "")).lower() != "usd":
                     continue
                 value = float(amount.get("value") or 0.0)
+                if value <= 0:
+                    continue
                 line_item = result.get("line_item") or "other"
-                line_item_totals[line_item] += value
-                total_usd += value
+                yield cost_date, line_item, value
 
         if not payload.get("has_more"):
             break
         page = payload.get("next_page")
         if not page:
             break
+
+
+def fetch_openai_daily_cost_rows(start_dt: datetime, end_dt: datetime) -> list[dict]:
+    """
+    Fetch per-day line items from OpenAI billing API.
+    Returns empty list when admin key is missing; raises on HTTP errors.
+    """
+    if not settings.OPENAI_ADMIN_API_KEY:
+        return []
+
+    rows: list[dict] = []
+    for cost_date, line_item, value in _iter_cost_buckets(start_dt, end_dt):
+        rows.append(
+            {
+                "cost_date": cost_date,
+                "line_item": line_item,
+                "cost_usd": round(value, 6),
+            }
+        )
+    return rows
+
+
+def fetch_openai_invoice_costs(start_dt: datetime, end_dt: datetime) -> Optional[dict]:
+    """
+    Fetch organization costs from OpenAI billing API for the given date range.
+    Returns None when admin key is missing; raises on HTTP errors (caller may fallback).
+    """
+    if not settings.OPENAI_ADMIN_API_KEY:
+        return None
+
+    line_item_totals: dict[str, float] = defaultdict(float)
+    total_usd = 0.0
+    for _cost_date, line_item, value in _iter_cost_buckets(start_dt, end_dt):
+        line_item_totals[line_item] += value
+        total_usd += value
 
     line_items = [
         {"line_item": name, "cost_usd": round(cost, 6)}

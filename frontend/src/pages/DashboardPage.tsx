@@ -75,6 +75,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activity, setActivity] = useState<ActivityData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshingCosts, setRefreshingCosts] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [activePreset, setActivePreset] = useState<PresetKey | 'custom'>('30d');
   const [startDate, setStartDate] = useState(() => {
@@ -110,6 +112,29 @@ export default function DashboardPage() {
     setActivePreset('custom');
     if (field === 'start') setStartDate(value);
     else setEndDate(value);
+  };
+
+  const handleRefreshOpenaiCosts = async () => {
+    setRefreshingCosts(true);
+    setRefreshMessage(null);
+    try {
+      const result = await adminApi.refreshOpenaiCosts();
+      setRefreshMessage({ text: result.message, ok: result.ok });
+      await loadDashboard();
+    } catch {
+      setRefreshMessage({ text: 'Không thể cập nhật chi phí OpenAI. Vui lòng thử lại.', ok: false });
+    } finally {
+      setRefreshingCosts(false);
+    }
+  };
+
+  const formatSyncedAt = (iso?: string | null) => {
+    if (!iso) return null;
+    try {
+      return new Date(iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+    } catch {
+      return iso;
+    }
   };
 
   if (loading && !stats) {
@@ -168,8 +193,8 @@ export default function DashboardPage() {
         <StatCard label="Tổng số trang" value={stats?.total_pages ?? 0} icon="📑" color="bg-indigo-100" />
         <StatCard label="Người dùng" value={stats?.total_users ?? 0} icon="👥" color="bg-green-100" />
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
               <p className="text-sm text-gray-500">Chi phí OpenAI</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
                 ${(stats?.openai_cost_usd ?? 0).toFixed(4)}
@@ -182,6 +207,24 @@ export default function DashboardPage() {
                   ? 'Theo hóa đơn OpenAI · trong khoảng thời gian đã chọn'
                   : 'Ước tính nội bộ (embedding) · trong khoảng thời gian đã chọn'}
               </p>
+              {stats?.openai_cost_synced_at && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Cập nhật lần cuối: {formatSyncedAt(stats.openai_cost_synced_at)}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handleRefreshOpenaiCosts}
+                disabled={refreshingCosts}
+                className="mt-3 px-3 py-1.5 text-xs font-medium rounded-lg bg-yellow-100 text-yellow-900 hover:bg-yellow-200 disabled:opacity-50 transition-colors"
+              >
+                {refreshingCosts ? 'Đang cập nhật...' : 'Cập nhật chi phí OpenAI'}
+              </button>
+              {refreshMessage && (
+                <p className={`text-xs mt-2 ${refreshMessage.ok ? 'text-green-700' : 'text-red-600'}`}>
+                  {refreshMessage.text}
+                </p>
+              )}
               {stats?.openai_cost_note && (
                 <p className="text-xs text-amber-600 mt-2">{stats.openai_cost_note}</p>
               )}
@@ -196,7 +239,7 @@ export default function DashboardPage() {
                 </ul>
               )}
             </div>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-yellow-100">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-yellow-100 shrink-0">
               💰
             </div>
           </div>

@@ -72,6 +72,7 @@ export interface DashboardStats {
   openai_cost_source: 'openai_billing' | 'internal';
   openai_cost_note?: string | null;
   openai_line_items?: OpenAILineItemCost[] | null;
+  openai_cost_synced_at?: string | null;
   cloudinary?: CloudinaryStats | null;
 }
 

@@ -9,6 +9,16 @@ export const adminApi = {
       activity: ActivityData[];
     };
   },
+  refreshOpenaiCosts: async () => {
+    const res = await api.post('/admin/dashboard/refresh-openai-costs');
+    return res.data as {
+      ok: boolean;
+      message: string;
+      synced_at?: string | null;
+      rows_upserted: number;
+      total_usd_synced?: number | null;
+    };
+  },
   getUsers: async (): Promise<User[]> => {
     const res = await api.get('/admin/users');
     return res.data;

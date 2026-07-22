@@ -8,8 +8,9 @@ from openpyxl import load_workbook
 
 from app.database import get_db
 from app.schemas.auth import UserResponse, UserCreate, UserUpdate
-from app.schemas.dashboard import DashboardResponse
+from app.schemas.dashboard import DashboardResponse, OpenAICostRefreshResponse
 from app.services.dashboard_service import DashboardService
+from app.services.openai_cost_cache_service import OpenAICostCacheService
 from app.services.auth_service import AuthService
 from app.services.task_service import TaskService
 from app.repositories.user_repository import UserRepository
@@ -36,6 +37,16 @@ def get_dashboard(
     service = DashboardService(db)
     data = service.get_dashboard(start_date=start_date, end_date=end_date)
     return DashboardResponse(**data)
+
+
+@router.post("/dashboard/refresh-openai-costs", response_model=OpenAICostRefreshResponse)
+def refresh_openai_costs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    service = OpenAICostCacheService(db)
+    result = service.refresh_from_openai()
+    return OpenAICostRefreshResponse(**result)
 
 
 @router.get("/users", response_model=List[UserResponse])
