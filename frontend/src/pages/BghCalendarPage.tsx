@@ -186,8 +186,9 @@ export default function BghCalendarPage() {
         <p className="text-gray-500 mt-1">Tổng quan kế hoạch theo ngày · VA1, VA3, EMC</p>
       </div>
 
-      <div className="mb-5 flex flex-col gap-3 items-center sm:items-start">
-        <div className="flex flex-wrap gap-2">
+      <div className="mb-6 flex flex-col items-center gap-4 w-full max-w-xl sm:max-w-2xl mx-auto">
+        <div className="w-full flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
           {([
             ['today', 'Hôm nay'],
             ['tomorrow', 'Ngày mai'],
@@ -214,8 +215,8 @@ export default function BghCalendarPage() {
               className="px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
             />
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+          </div>
+          <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
           <span className="text-sm text-gray-500">Trường:</span>
           <select
             value={campusFilter}
@@ -228,59 +229,70 @@ export default function BghCalendarPage() {
             ))}
           </select>
           {loading && <span className="text-xs text-gray-400">Đang tải...</span>}
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-center">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 w-full max-w-[340px]">
-          <div className="flex items-center justify-between mb-2">
+      <div className="flex justify-center px-1">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6 w-full max-w-xl sm:max-w-2xl">
+          <div className="flex items-center justify-between mb-5">
             <button
+              type="button"
               onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))}
-              className="px-2 py-0.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+              aria-label="Tháng trước"
             >
               ←
             </button>
-            <h2 className="text-sm font-semibold text-gray-900 capitalize">{monthLabel(viewMonth)}</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 capitalize px-2 text-center">
+              {monthLabel(viewMonth)}
+            </h2>
             <button
+              type="button"
               onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))}
-              className="px-2 py-0.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+              aria-label="Tháng sau"
             >
               →
             </button>
           </div>
 
-          <div className="grid grid-cols-7 gap-0.5 mb-0.5">
+          <div className="grid grid-cols-7 gap-2 mb-2">
             {WEEKDAYS.map((d) => (
-              <div key={d} className="text-center text-[10px] font-medium text-gray-500 py-0.5">{d}</div>
+              <div key={d} className="text-center text-sm font-semibold text-gray-500 py-1.5">{d}</div>
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-0.5">
+          <div className="grid grid-cols-7 gap-2">
             {weeks.flat().map((dateKey, idx) => {
               if (!dateKey) {
-                return <div key={`empty-${idx}`} className="h-9" />;
+                return <div key={`empty-${idx}`} className="aspect-square min-h-[52px] sm:min-h-[56px]" />;
               }
               const count = data?.day_counts[dateKey] ?? 0;
               const isSelected = showDayModal && dateKey === selectedDate;
               const isToday = dateKey === todayKey;
               const inWeek = weekHighlightDates.has(dateKey);
+              const hasPlans = count > 0;
 
               return (
                 <button
                   key={dateKey}
+                  type="button"
                   onClick={() => openDayModal(dateKey)}
-                  className={`h-9 rounded-md flex flex-col items-center justify-center text-xs transition-colors relative ${
+                  className={`aspect-square min-h-[52px] sm:min-h-[56px] rounded-xl flex flex-col items-center justify-center transition-all relative ${
                     isSelected
-                      ? 'bg-primary-600 text-white'
+                      ? 'bg-primary-600 text-white shadow-md scale-[1.02]'
                       : inWeek
-                        ? 'bg-primary-50 text-primary-800 hover:bg-primary-100'
-                        : 'hover:bg-gray-100 text-gray-800'
-                  } ${isToday && !isSelected ? 'ring-1 ring-primary-300' : ''}`}
+                        ? 'bg-primary-50 text-primary-900 hover:bg-primary-100'
+                        : hasPlans
+                          ? 'bg-primary-50/60 text-gray-900 hover:bg-primary-50'
+                          : 'text-gray-800 hover:bg-gray-100'
+                  } ${isToday && !isSelected ? 'ring-2 ring-primary-400 ring-offset-1' : ''}`}
                 >
-                  <span className="font-medium text-[11px] leading-none">{parseDateKey(dateKey).getDate()}</span>
-                  {count > 0 && (
-                    <span className={`text-[9px] mt-0.5 px-1 rounded-full leading-none ${
-                      isSelected ? 'bg-white/25 text-white' : 'bg-primary-100 text-primary-700'
+                  <span className="text-base sm:text-lg font-semibold leading-none">{parseDateKey(dateKey).getDate()}</span>
+                  {hasPlans && (
+                    <span className={`mt-1.5 min-w-[20px] px-2 py-0.5 rounded-full text-xs font-bold leading-none ${
+                      isSelected ? 'bg-white/30 text-white' : 'bg-primary-600 text-white'
                     }`}>
                       {count}
                     </span>
@@ -289,12 +301,12 @@ export default function BghCalendarPage() {
               );
             })}
           </div>
-          <p className="text-[10px] text-gray-400 mt-2 text-center">Bấm ngày để xem kế hoạch</p>
+          <p className="text-sm text-gray-400 mt-5 text-center">Chạm vào ngày có số để xem kế hoạch</p>
         </div>
       </div>
 
       {data && data.unscheduled_plans.length > 0 && (
-        <div className="mt-8 mx-auto max-w-xl bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="mt-8 mx-auto max-w-xl sm:max-w-2xl w-full bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Chưa xếp giờ</h2>
           <p className="text-xs text-gray-400 mb-4">Kế hoạch chưa trích được giờ bắt đầu từ tài liệu</p>
           <ul className="space-y-2">
@@ -333,7 +345,11 @@ export default function BghCalendarPage() {
                 <h3 className="text-lg font-semibold text-gray-900 capitalize">
                   {formatDisplayDate(selectedDate)}
                 </h3>
-                <p className="text-xs text-gray-400 mt-1">Kế hoạch trong ngày</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {dayPlans.length > 0
+                    ? `${dayPlans.length} kế hoạch trong ngày`
+                    : 'Không có kế hoạch đã xếp giờ'}
+                </p>
               </div>
               <button
                 onClick={() => setShowDayModal(false)}
@@ -350,7 +366,7 @@ export default function BghCalendarPage() {
                   Không có kế hoạch đã xếp giờ trong ngày này.
                 </p>
               ) : (
-                <ul className="space-y-3">
+                <ul className="space-y-3 max-w-2xl mx-auto">
                   {dayPlans.map((plan) => (
                     <PlanRow key={`${plan.document_id}-${plan.date}`} plan={plan} />
                   ))}
@@ -366,31 +382,35 @@ export default function BghCalendarPage() {
 
 function PlanRow({ plan }: { plan: BghCalendarPlan }) {
   return (
-    <li className="flex items-center gap-3 px-3 py-3 rounded-lg bg-gray-50 border border-gray-100">
-      <span className="text-sm font-semibold text-primary-700 shrink-0 tabular-nums w-12">
-        {formatTime(plan.start_time)}
-      </span>
-      <span className="text-sm text-gray-900 leading-snug flex-1 min-w-0">
-        {displayPlanName(plan.plan_name)}
-      </span>
-      <div className="flex flex-wrap gap-1 shrink-0">
-        {plan.campuses.map((code) => (
-          <span
-            key={code}
-            className="text-xs px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-medium"
-          >
-            {code}
-          </span>
-        ))}
+    <li className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-100 hover:border-primary-200 transition-colors">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <span className="text-base font-bold text-primary-700 shrink-0 tabular-nums w-14">
+          {formatTime(plan.start_time)}
+        </span>
+        <span className="text-base text-gray-900 leading-snug flex-1 min-w-0">
+          {displayPlanName(plan.plan_name)}
+        </span>
       </div>
-      <button
-        type="button"
-        onClick={() => openDocumentPreview(plan.document_id)}
-        title="Xem tài liệu"
-        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg shrink-0 transition-colors"
-      >
-        👁
-      </button>
+      <div className="flex items-center gap-2 pl-[3.75rem] sm:pl-0 shrink-0">
+        <div className="flex flex-wrap gap-1.5 flex-1 sm:flex-none">
+          {plan.campuses.map((code) => (
+            <span
+              key={code}
+              className="text-xs px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 font-semibold"
+            >
+              {code}
+            </span>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => openDocumentPreview(plan.document_id)}
+          title="Xem tài liệu"
+          className="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-xl shrink-0 transition-colors text-lg"
+        >
+          👁
+        </button>
+      </div>
     </li>
   );
 }
