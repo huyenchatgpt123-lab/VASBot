@@ -58,9 +58,10 @@ class DocumentService:
             if plan_title:
                 doc.plan_title = plan_title
 
-            plan_event_at = task_extractor.extract_plan_event_from_chunks(chunks)
-            if plan_event_at:
-                doc.plan_event_at = plan_event_at
+            plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
+            if plan_event:
+                doc.plan_event_at = plan_event.start
+                doc.plan_event_end_at = plan_event.end
 
             self.db.commit()
 
@@ -89,6 +90,7 @@ class DocumentService:
                 "filename": filename,
                 "plan_title": doc.plan_title,
                 "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
+                "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
                 "page_count": page_count,
                 "department": doc.department,
                 "month": doc.month,
@@ -129,11 +131,12 @@ class DocumentService:
                 chunks, _ = process_pdf(temp_path, doc.id)
 
             plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
-            plan_event_at = task_extractor.extract_plan_event_from_chunks(chunks)
+            plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
 
             if plan_title:
                 doc.plan_title = plan_title
-            doc.plan_event_at = plan_event_at
+            doc.plan_event_at = plan_event.start if plan_event else None
+            doc.plan_event_end_at = plan_event.end if plan_event else None
             self.db.commit()
             self.db.refresh(doc)
 
@@ -141,6 +144,7 @@ class DocumentService:
                 "document_id": doc.id,
                 "plan_title": doc.plan_title,
                 "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
+                "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
                 "message": "Đã trích xuất lại thông tin kế hoạch",
             }
         finally:

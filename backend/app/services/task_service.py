@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,43 @@ from app.utils.permissions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _naive_dt(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    return value.replace(tzinfo=None) if value.tzinfo else value
+
+
+def _expand_plan_occurrences(
+    plan_event_at: datetime,
+    plan_event_end_at: Optional[datetime],
+    query_start: datetime,
+    query_end: datetime,
+) -> List[tuple[str, str, bool, Optional[str]]]:
+    """Return list of (day_key, start_time_iso, is_continuation, event_end_date)."""
+    start = _naive_dt(plan_event_at)
+    if not start:
+        return []
+
+    end_date = _naive_dt(plan_event_end_at).date() if plan_event_end_at else start.date()
+    if end_date < start.date():
+        end_date = start.date()
+
+    event_end_key = end_date.strftime("%Y-%m-%d") if end_date > start.date() else None
+    occurrences: List[tuple[str, str, bool, Optional[str]]] = []
+    current = start.date()
+    while current <= end_date:
+        if query_start.date() <= current <= query_end.date():
+            if current == start.date():
+                dt = start
+                is_continuation = False
+            else:
+                dt = datetime(current.year, current.month, current.day, 0, 0, 0)
+                is_continuation = True
+            occurrences.append((current.strftime("%Y-%m-%d"), dt.isoformat(), is_continuation, event_end_key))
+        current += timedelta(days=1)
+    return occurrences
 
 
 def _parse_deadline(raw) -> Tuple[Optional[datetime], bool]:
@@ -426,18 +463,22 @@ class TaskService:
                     "date": None,
                     "start_time": None,
                     "campuses": campuses,
+                    "is_continuation": False,
+                    "event_end_date": None,
                 })
                 continue
 
-            dl = doc.plan_event_at.replace(tzinfo=None) if doc.plan_event_at.tzinfo else doc.plan_event_at
-            if start_dt <= dl <= end_dt:
-                day_key = dl.strftime("%Y-%m-%d")
+            for day_key, start_time, is_continuation, event_end_date in _expand_plan_occurrences(
+                doc.plan_event_at, doc.plan_event_end_at, start_dt, end_dt
+            ):
                 scheduled_plans.append({
                     "document_id": doc.id,
                     "plan_name": self._plan_display_name(doc),
                     "date": day_key,
-                    "start_time": dl.isoformat(),
+                    "start_time": start_time,
                     "campuses": campuses,
+                    "is_continuation": is_continuation,
+                    "event_end_date": event_end_date,
                 })
                 day_counts[day_key] = day_counts.get(day_key, 0) + 1
 

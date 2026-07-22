@@ -12,6 +12,8 @@ export interface BghCalendarPlan {
   date: string | null;
   start_time: string | null;
   campuses: string[];
+  is_continuation?: boolean;
+  event_end_date?: string | null;
 }
 
 export interface BghCalendarData {

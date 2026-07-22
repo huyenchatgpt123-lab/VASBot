@@ -147,6 +147,7 @@ def get_documents(
             "school_year": doc.school_year,
             "plan_title": doc.plan_title,
             "plan_event_at": doc.plan_event_at,
+            "plan_event_end_at": doc.plan_event_end_at,
             "created_at": doc.created_at,
         })
     return DocumentListResponse(

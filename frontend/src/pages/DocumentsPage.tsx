@@ -14,8 +14,18 @@ function getSchoolYearOptions() {
   return options;
 }
 
-function formatPlanEventAt(value: string | null | undefined): string {
-  if (!value) return '—';
+function formatPlanEventAt(start: string | null | undefined, end?: string | null): string {
+  if (!start) return '—';
+  const startLabel = formatPlanEventAtSingle(start);
+  if (!end) return startLabel;
+  const endD = new Date(end);
+  const startD = new Date(start);
+  if (Number.isNaN(endD.getTime()) || Number.isNaN(startD.getTime())) return startLabel;
+  if (endD.toDateString() === startD.toDateString()) return startLabel;
+  return `${startLabel} → ${formatPlanEventAtSingle(end)}`;
+}
+
+function formatPlanEventAtSingle(value: string): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
   const date = d.toLocaleDateString('vi-VN');
@@ -150,7 +160,9 @@ export default function DocumentsPage() {
     try {
       const result = await documentsApi.reExtractPlan(id);
       await loadDocuments();
-      alert(result.message + (result.plan_event_at ? `\nNgày: ${formatPlanEventAt(result.plan_event_at)}` : '\nKhông tìm thấy Thời gian:/Ngày: trong file.'));
+      alert(result.message + (result.plan_event_at
+        ? `\nNgày: ${formatPlanEventAt(result.plan_event_at, result.plan_event_end_at)}`
+        : '\nKhông tìm thấy Thời gian:/Ngày: trong file.'));
     } catch {
       alert('Trích xuất lại thất bại.');
     } finally {
@@ -276,7 +288,7 @@ export default function DocumentsPage() {
                   <span>Tháng: {doc.month || '—'}</span>
                   <span>Năm học: {doc.school_year || '—'}</span>
                   <span>Trang: {doc.page_count}</span>
-                  <span className="col-span-2">Ngày diễn ra: {formatPlanEventAt(doc.plan_event_at)}</span>
+                  <span className="col-span-2">Ngày diễn ra: {formatPlanEventAt(doc.plan_event_at, doc.plan_event_end_at)}</span>
                   <span className="col-span-2">
                     {new Date(doc.created_at).toLocaleDateString('vi-VN')} · {doc.uploader_name || '—'}
                   </span>
@@ -350,7 +362,7 @@ export default function DocumentsPage() {
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.month || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.school_year || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                      {formatPlanEventAt(doc.plan_event_at)}
+                      {formatPlanEventAt(doc.plan_event_at, doc.plan_event_end_at)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
                       {new Date(doc.created_at).toLocaleDateString('vi-VN')}

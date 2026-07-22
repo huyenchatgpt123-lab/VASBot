@@ -17,6 +17,8 @@ class BghCalendarPlan(BaseModel):
     date: Optional[str] = None
     start_time: Optional[str] = None
     campuses: List[str]
+    is_continuation: bool = False
+    event_end_date: Optional[str] = None
 
 
 class BghCalendarResponse(BaseModel):

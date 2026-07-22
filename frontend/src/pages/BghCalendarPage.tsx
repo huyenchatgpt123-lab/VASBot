@@ -73,6 +73,34 @@ function buildCalendarGrid(viewMonth: Date): (string | null)[][] {
   return weeks;
 }
 
+function datesInRange(startKey: string, endKey: string): string[] {
+  let start = parseDateKey(startKey);
+  let end = parseDateKey(endKey);
+  if (start > end) {
+    [start, end] = [end, start];
+  }
+  const keys: string[] = [];
+  let current = start;
+  while (current <= end) {
+    keys.push(formatDateKey(current));
+    current = addDays(current, 1);
+  }
+  return keys;
+}
+
+function normalizeRange(startKey: string, endKey: string): { start: string; end: string } {
+  const start = parseDateKey(startKey);
+  const end = parseDateKey(endKey);
+  if (start <= end) {
+    return { start: startKey, end: endKey };
+  }
+  return { start: endKey, end: startKey };
+}
+
+function formatShortDate(key: string): string {
+  return parseDateKey(key).toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' });
+}
+
 function displayPlanName(name: string): string {
   return name.replace(/\.(pdf|docx)$/i, '');
 }
@@ -86,7 +114,8 @@ export default function BghCalendarPage() {
   const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()));
   const [showDayModal, setShowDayModal] = useState(false);
   const [activePreset, setActivePreset] = useState<DatePreset>('today');
-  const [customDate, setCustomDate] = useState(formatDateKey(new Date()));
+  const [filterStartDate, setFilterStartDate] = useState(formatDateKey(new Date()));
+  const [filterEndDate, setFilterEndDate] = useState(formatDateKey(new Date()));
   const [campusFilter, setCampusFilter] = useState<number | ''>('');
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [data, setData] = useState<Awaited<ReturnType<typeof calendarApi.getBghCalendar>> | null>(null);
@@ -122,10 +151,13 @@ export default function BghCalendarPage() {
     }
   };
 
+  const filterRange = useMemo(
+    () => normalizeRange(filterStartDate, filterEndDate),
+    [filterStartDate, filterEndDate],
+  );
+
   const openDayModal = (dateKey: string) => {
     setSelectedDate(dateKey);
-    setActivePreset('custom');
-    setCustomDate(dateKey);
     setShowDayModal(true);
   };
 
@@ -133,30 +165,45 @@ export default function BghCalendarPage() {
     setActivePreset(preset);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const todayKey = formatDateKey(today);
 
     if (preset === 'today') {
       setViewMonth(startOfMonth(today));
-      setSelectedDate(formatDateKey(today));
+      setFilterStartDate(todayKey);
+      setFilterEndDate(todayKey);
+      setSelectedDate(todayKey);
       return;
     }
     if (preset === 'tomorrow') {
       const t = addDays(today, 1);
+      const tKey = formatDateKey(t);
       setViewMonth(startOfMonth(t));
-      setSelectedDate(formatDateKey(t));
+      setFilterStartDate(tKey);
+      setFilterEndDate(tKey);
+      setSelectedDate(tKey);
       return;
     }
     if (preset === 'week') {
+      const weekEnd = addDays(today, 6);
       setViewMonth(startOfMonth(today));
-      setSelectedDate(formatDateKey(today));
+      setFilterStartDate(todayKey);
+      setFilterEndDate(formatDateKey(weekEnd));
+      setSelectedDate(todayKey);
     }
   };
 
-  const handleCustomDate = (value: string) => {
-    setCustomDate(value);
+  const handleFilterStartDate = (value: string) => {
+    setFilterStartDate(value);
     setActivePreset('custom');
-    const d = parseDateKey(value);
-    setViewMonth(startOfMonth(d));
     setSelectedDate(value);
+    setViewMonth(startOfMonth(parseDateKey(value)));
+  };
+
+  const handleFilterEndDate = (value: string) => {
+    setFilterEndDate(value);
+    setActivePreset('custom');
+    const normalized = normalizeRange(filterStartDate, value);
+    setViewMonth(startOfMonth(parseDateKey(normalized.start)));
   };
 
   const weeks = useMemo(() => buildCalendarGrid(viewMonth), [viewMonth]);
@@ -168,14 +215,33 @@ export default function BghCalendarPage() {
       .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
   }, [data, selectedDate]);
 
-  const weekHighlightDates = useMemo(() => {
-    if (activePreset !== 'week') return new Set<string>();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const set = new Set<string>();
-    for (let i = 0; i < 7; i++) set.add(formatDateKey(addDays(today, i)));
-    return set;
-  }, [activePreset]);
+  const rangeHighlightDates = useMemo(
+    () => new Set(datesInRange(filterRange.start, filterRange.end)),
+    [filterRange.start, filterRange.end],
+  );
+
+  const rangePlansGrouped = useMemo(() => {
+    if (!data) return [] as { date: string; plans: BghCalendarPlan[] }[];
+    const rangeSet = rangeHighlightDates;
+    const grouped = new Map<string, BghCalendarPlan[]>();
+    for (const plan of data.scheduled_plans) {
+      if (!plan.date || !rangeSet.has(plan.date)) continue;
+      const list = grouped.get(plan.date) || [];
+      list.push(plan);
+      grouped.set(plan.date, list);
+    }
+    return datesInRange(filterRange.start, filterRange.end)
+      .filter((date) => grouped.has(date))
+      .map((date) => ({
+        date,
+        plans: (grouped.get(date) || []).sort((a, b) => (a.start_time || '').localeCompare(b.start_time || '')),
+      }));
+  }, [data, filterRange.start, filterRange.end, rangeHighlightDates]);
+
+  const totalRangePlans = useMemo(
+    () => rangePlansGrouped.reduce((sum, g) => sum + g.plans.length, 0),
+    [rangePlansGrouped],
+  );
 
   const todayKey = formatDateKey(new Date());
 
@@ -206,12 +272,19 @@ export default function BghCalendarPage() {
               {label}
             </button>
           ))}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Chọn ngày:</span>
+          <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
+            <span className="text-sm text-gray-500">Từ ngày:</span>
             <input
               type="date"
-              value={customDate}
-              onChange={(e) => handleCustomDate(e.target.value)}
+              value={filterRange.start}
+              onChange={(e) => handleFilterStartDate(e.target.value)}
+              className="px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+            />
+            <span className="text-sm text-gray-500">Đến ngày:</span>
+            <input
+              type="date"
+              value={filterRange.end}
+              onChange={(e) => handleFilterEndDate(e.target.value)}
               className="px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
             />
           </div>
@@ -271,7 +344,7 @@ export default function BghCalendarPage() {
               const count = data?.day_counts[dateKey] ?? 0;
               const isSelected = showDayModal && dateKey === selectedDate;
               const isToday = dateKey === todayKey;
-              const inWeek = weekHighlightDates.has(dateKey);
+              const inRange = rangeHighlightDates.has(dateKey);
               const hasPlans = count > 0;
 
               return (
@@ -282,8 +355,8 @@ export default function BghCalendarPage() {
                   className={`aspect-square min-h-[52px] sm:min-h-[56px] rounded-xl flex flex-col items-center justify-center transition-all relative ${
                     isSelected
                       ? 'bg-primary-600 text-white shadow-md scale-[1.02]'
-                      : inWeek
-                        ? 'bg-primary-50 text-primary-900 hover:bg-primary-100'
+                      : inRange
+                        ? 'bg-primary-50 text-primary-900 hover:bg-primary-100 ring-1 ring-primary-200'
                         : hasPlans
                           ? 'bg-primary-50/60 text-gray-900 hover:bg-primary-50'
                           : 'text-gray-800 hover:bg-gray-100'
@@ -301,9 +374,49 @@ export default function BghCalendarPage() {
               );
             })}
           </div>
-          <p className="text-sm text-gray-400 mt-5 text-center">Chạm vào ngày có số để xem kế hoạch</p>
+          <p className="text-sm text-gray-400 mt-5 text-center">Chọn khoảng ngày phía trên · chạm ô ngày để xem chi tiết</p>
         </div>
       </div>
+
+      {data && (
+        <div className="mt-8 mx-auto max-w-xl sm:max-w-2xl w-full bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Kế hoạch từ {formatShortDate(filterRange.start)} đến {formatShortDate(filterRange.end)}
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {totalRangePlans > 0
+                ? `${totalRangePlans} lượt kế hoạch trong khoảng đã chọn`
+                : 'Không có kế hoạch trong khoảng ngày này'}
+            </p>
+          </div>
+
+          {rangePlansGrouped.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-6">
+              Thử chọn khoảng ngày khác hoặc bấm Admin → Trích lại trên trang Tài liệu.
+            </p>
+          ) : (
+            <div className="space-y-6">
+              {rangePlansGrouped.map(({ date, plans }) => (
+                <div key={date}>
+                  <h3 className="text-sm font-semibold text-primary-700 mb-2 capitalize">
+                    {formatDisplayDate(date)}
+                  </h3>
+                  <ul className="space-y-2">
+                    {plans.map((plan) => (
+                      <PlanRow
+                        key={`${plan.document_id}-${plan.date}-${plan.start_time}`}
+                        plan={plan}
+                        compact
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {data && data.unscheduled_plans.length > 0 && (
         <div className="mt-8 mx-auto max-w-xl sm:max-w-2xl w-full bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6">
@@ -368,7 +481,7 @@ export default function BghCalendarPage() {
               ) : (
                 <ul className="space-y-3 max-w-2xl mx-auto">
                   {dayPlans.map((plan) => (
-                    <PlanRow key={`${plan.document_id}-${plan.date}`} plan={plan} />
+                    <PlanRow key={`${plan.document_id}-${plan.date}-${plan.start_time}`} plan={plan} />
                   ))}
                 </ul>
               )}
@@ -380,16 +493,31 @@ export default function BghCalendarPage() {
   );
 }
 
-function PlanRow({ plan }: { plan: BghCalendarPlan }) {
+function PlanRow({ plan, compact = false }: { plan: BghCalendarPlan; compact?: boolean }) {
+  const timeLabel = plan.is_continuation
+    ? 'Tiếp diễn'
+    : formatTime(plan.start_time);
+
   return (
-    <li className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-100 hover:border-primary-200 transition-colors">
+    <li className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-primary-200 transition-colors ${
+      compact ? 'px-3 py-2.5' : 'px-4 py-3.5'
+    }`}>
       <div className="flex items-center gap-3 flex-1 min-w-0">
-        <span className="text-base font-bold text-primary-700 shrink-0 tabular-nums w-14">
-          {formatTime(plan.start_time)}
+        <span className={`font-bold shrink-0 tabular-nums w-16 ${
+          plan.is_continuation ? 'text-xs text-gray-500' : 'text-base text-primary-700'
+        }`}>
+          {timeLabel}
         </span>
-        <span className="text-base text-gray-900 leading-snug flex-1 min-w-0">
-          {displayPlanName(plan.plan_name)}
-        </span>
+        <div className="flex-1 min-w-0">
+          <span className={`text-gray-900 leading-snug ${compact ? 'text-sm' : 'text-base'}`}>
+            {displayPlanName(plan.plan_name)}
+          </span>
+          {plan.event_end_date && !plan.is_continuation && (
+            <span className="block text-xs text-gray-400 mt-0.5">
+              Đến {formatShortDate(plan.event_end_date)}
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-2 pl-[3.75rem] sm:pl-0 shrink-0">
         <div className="flex flex-wrap gap-1.5 flex-1 sm:flex-none">

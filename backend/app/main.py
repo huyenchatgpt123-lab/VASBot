@@ -208,6 +208,11 @@ def startup():
             db.execute(text("ALTER TABLE documents ADD COLUMN plan_event_at TIMESTAMPTZ"))
             db.commit()
 
+        doc_columns = [c["name"] for c in inspector.get_columns("documents")]
+        if "plan_event_end_at" not in doc_columns:
+            db.execute(text("ALTER TABLE documents ADD COLUMN plan_event_end_at TIMESTAMPTZ"))
+            db.commit()
+
         task_columns = [c["name"] for c in inspector.get_columns("tasks")]
         if "department" not in task_columns:
             db.execute(text("ALTER TABLE tasks ADD COLUMN department VARCHAR(255)"))

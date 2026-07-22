@@ -49,6 +49,7 @@ export interface Document {
   school_year?: string;
   plan_title?: string | null;
   plan_event_at?: string | null;
+  plan_event_end_at?: string | null;
   created_at: string;
 }
 

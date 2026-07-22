@@ -1,7 +1,7 @@
 import json
 import re
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, NamedTuple
 from datetime import datetime, timezone, timedelta
 
 from openai import OpenAI
@@ -33,21 +33,18 @@ PLAN_EVENT_PROMPT = """Bạn đọc tài liệu kế hoạch/công tác và trí
 
 QUY TẮC:
 - Ưu tiên dòng "Thời gian:"; nếu không có thì dùng "Ngày:".
-- date → "YYYY-MM-DD". Ví dụ:
-  • "ngày 21 tháng 7 năm 2026" → 2026-07-21
-  • "ngày 24/7/2026" → 2026-07-24
-- time → "HH:MM" (24h) hoặc null nếu không có giờ. Ví dụ:
+- date → ngày BẮT ĐẦU "YYYY-MM-DD". end_date → ngày KẾT THÚC nếu có khoảng (từ ... đến ..., 23/7-25/7); null nếu chỉ một ngày.
+- time → "HH:MM" (24h) hoặc null. Ví dụ:
   • "09 giờ 00" → 09:00
-  • "8h30" → 08:30
-  • "14:00" → 14:00
-  • "09 giờ 00 - 11 giờ 00" → lấy giờ BẮT ĐẦU 09:00
+  • "09 giờ 00 - 11 giờ 00" trong cùng ngày → time=09:00, end_date=null
+  • "từ 23/7/2026 đến 25/7/2026" → date=2026-07-23, end_date=2026-07-25
+  • "ngày 21 tháng 7 năm 2026" → date=2026-07-21, end_date=null
 - Không dùng deadline công việc hay ngày upload.
-- Không giải thích.
 
 TRẢ VỀ JSON (không markdown):
-{"date":"YYYY-MM-DD","time":"HH:MM hoặc null"}
+{"date":"YYYY-MM-DD","end_date":"YYYY-MM-DD hoặc null","time":"HH:MM hoặc null"}
 
-Nếu không tìm thấy → {"date":null,"time":null}"""
+Nếu không tìm thấy → {"date":null,"end_date":null,"time":null}"""
 
 PLAN_TITLE_PROMPT = """Bạn đọc phần đầu tài liệu kế hoạch/công tác và trích xuất TIÊU ĐỀ CHÍNH THỨC của kế hoạch (dòng tiêu đề lớn, thường ở trang đầu).
 
@@ -75,6 +72,35 @@ _TIME_GIO_BARE_RE = re.compile(
     r"(?<!\d)(\d{1,2})\s*giờ(?:\s*(sáng|sang|chiều|chieu|trưa|tru|tối|toi))?",
     re.IGNORECASE,
 )
+_RANGE_INDICATOR_RE = re.compile(r"\b(?:đến|den|–|—)\b|(?<=\d)\s*-\s*(?=\d)", re.IGNORECASE)
+
+
+class PlanEventRange(NamedTuple):
+    start: datetime
+    end: Optional[datetime] = None
+
+
+def _date_tuple_to_datetime(day: int, month: int, year: int, hour: int = 0, minute: int = 0) -> datetime:
+    return datetime(year, month, day, hour, minute, 0)
+
+
+def _find_all_vn_dates(text: str) -> List[tuple[int, int, int]]:
+    dates: List[tuple[int, int, int]] = []
+    seen = set()
+
+    for match in _VN_DATE_WORDS_RE.finditer(text):
+        item = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        if item not in seen:
+            seen.add(item)
+            dates.append(item)
+
+    for match in _VN_DATE_SLASH_RE.finditer(text):
+        item = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        if item not in seen:
+            seen.add(item)
+            dates.append(item)
+
+    return dates
 
 
 def _parse_vn_date(text: str) -> Optional[tuple[int, int, int]]:
@@ -127,16 +153,25 @@ def _parse_vn_time(text: str) -> tuple[int, int]:
     return 0, 0
 
 
-def _parse_plan_event_line(line: str) -> Optional[datetime]:
-    date_parts = _parse_vn_date(line)
-    if not date_parts:
+def _parse_plan_event_line(line: str) -> Optional[PlanEventRange]:
+    dates = _find_all_vn_dates(line)
+    if not dates:
         return None
-    day, month, year = date_parts
+
     hour, minute = _parse_vn_time(line)
-    try:
-        return datetime(year, month, day, hour, minute, 0)
-    except ValueError:
-        return None
+    start_day, start_month, start_year = dates[0]
+    start = _date_tuple_to_datetime(start_day, start_month, start_year, hour, minute)
+
+    if len(dates) >= 2 and _RANGE_INDICATOR_RE.search(line):
+        end_day, end_month, end_year = dates[-1]
+        end = _date_tuple_to_datetime(end_day, end_month, end_year, 0, 0)
+        if end.date() < start.date():
+            start, end = end, start
+        if end.date() > start.date():
+            return PlanEventRange(start=start, end=end)
+        return PlanEventRange(start=start, end=None)
+
+    return PlanEventRange(start=start, end=None)
 
 
 def _build_plan_event_datetime(date_part: str, time_part: Optional[str] = None) -> Optional[datetime]:
@@ -156,7 +191,7 @@ def _build_plan_event_datetime(date_part: str, time_part: Optional[str] = None) 
         return None
 
 
-def _regex_extract_plan_event(text: str) -> Optional[datetime]:
+def _regex_extract_plan_event(text: str) -> Optional[PlanEventRange]:
     for match in _EVENT_LINE_RE.finditer(text):
         line = match.group(1).strip().rstrip(".")
         if not line:
@@ -167,14 +202,31 @@ def _regex_extract_plan_event(text: str) -> Optional[datetime]:
     return None
 
 
-def _parse_plan_event_json(raw: dict) -> Optional[datetime]:
+def _parse_plan_event_json(raw: dict) -> Optional[PlanEventRange]:
     date_val = raw.get("date")
     if not date_val or str(date_val).lower() == "null":
         return None
+
     time_val = raw.get("time")
     if time_val in (None, "", "null"):
         time_val = None
-    return _build_plan_event_datetime(str(date_val), str(time_val) if time_val else None)
+    start = _build_plan_event_datetime(str(date_val), str(time_val) if time_val else None)
+    if not start:
+        return None
+
+    end_val = raw.get("end_date")
+    if not end_val or str(end_val).lower() == "null":
+        return PlanEventRange(start=start, end=None)
+
+    end = _build_plan_event_datetime(str(end_val), None)
+    if not end:
+        return PlanEventRange(start=start, end=None)
+
+    if end.date() < start.date():
+        start, end = end, start
+    if end.date() <= start.date():
+        return PlanEventRange(start=start, end=None)
+    return PlanEventRange(start=start, end=end)
 
 
 def _try_fix_truncated_json(content: str) -> List[Dict]:
@@ -321,7 +373,7 @@ class TaskExtractor:
         combined = "\n".join(chunk.get("content", "") for chunk in head)
         return self.extract_plan_title(combined)
 
-    def extract_plan_event(self, text: str) -> Optional[datetime]:
+    def extract_plan_event(self, text: str) -> Optional[PlanEventRange]:
         snippet = text[:12000].strip()
         if not snippet:
             return None
@@ -338,7 +390,7 @@ class TaskExtractor:
                     {"role": "user", "content": f"NỘI DUNG TÀI LIỆU:\n{snippet}"},
                 ],
                 temperature=0,
-                max_tokens=120,
+                max_tokens=160,
             )
             content = (response.choices[0].message.content or "").strip()
             if content.startswith("```"):
@@ -351,7 +403,7 @@ class TaskExtractor:
             logger.warning(f"Plan event extraction error: {e}")
         return None
 
-    def extract_plan_event_from_chunks(self, chunks: List[Dict[str, Any]]) -> Optional[datetime]:
+    def extract_plan_event_from_chunks(self, chunks: List[Dict[str, Any]]) -> Optional[PlanEventRange]:
         if not chunks:
             return None
 
