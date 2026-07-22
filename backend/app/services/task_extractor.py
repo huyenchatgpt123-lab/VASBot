@@ -29,12 +29,18 @@ TRẢ VỀ JSON ARRAY (không giải thích gì thêm):
 
 Nếu không tìm thấy công việc nào → trả về: []"""
 
-PLAN_EVENT_PROMPT = """Bạn đọc phần đầu tài liệu kế hoạch/công tác và trích xuất NGÀY/GIỜ DIỄN RA kế hoạch từ các dòng bắt đầu bằng "Thời gian:" hoặc "Ngày:".
+PLAN_EVENT_PROMPT = """Bạn đọc tài liệu kế hoạch/công tác và trích xuất NGÀY/GIỜ DIỄN RA kế hoạch từ các dòng có "Thời gian:" hoặc "Ngày:" (có thể có dấu "-" đầu dòng).
 
 QUY TẮC:
 - Ưu tiên dòng "Thời gian:"; nếu không có thì dùng "Ngày:".
-- date: chuyển về "YYYY-MM-DD" (VD: ngày 24/7/2026 → 2026-07-24).
-- time: nếu có giờ rõ ràng (8h30, 14:00, 8 giờ sáng…) → "HH:MM" (24h); nếu chỉ có ngày → null.
+- date → "YYYY-MM-DD". Ví dụ:
+  • "ngày 21 tháng 7 năm 2026" → 2026-07-21
+  • "ngày 24/7/2026" → 2026-07-24
+- time → "HH:MM" (24h) hoặc null nếu không có giờ. Ví dụ:
+  • "09 giờ 00" → 09:00
+  • "8h30" → 08:30
+  • "14:00" → 14:00
+  • "09 giờ 00 - 11 giờ 00" → lấy giờ BẮT ĐẦU 09:00
 - Không dùng deadline công việc hay ngày upload.
 - Không giải thích.
 
@@ -57,31 +63,92 @@ _EVENT_LINE_RE = re.compile(
     r"(?:Thời\s*gian|Ngày)\s*:\s*(.+)",
     re.IGNORECASE,
 )
-_VN_DATE_RE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
-_TIME_H_RE = re.compile(r"(\d{1,2})\s*h\s*(\d{2})?", re.IGNORECASE)
-_TIME_COLON_RE = re.compile(r"(\d{1,2}):(\d{2})")
+_VN_DATE_SLASH_RE = re.compile(r"(?<!\d)(\d{1,2})/(\d{1,2})/(\d{4})(?!\d)")
+_VN_DATE_WORDS_RE = re.compile(
+    r"ngày\s*(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})",
+    re.IGNORECASE,
+)
+_TIME_COLON_RE = re.compile(r"(?<!\d)(\d{1,2}):(\d{2})(?!\d)")
+_TIME_H_RE = re.compile(r"(?<!\d)(\d{1,2})\s*h\s*(\d{2})?(?!\w)", re.IGNORECASE)
+_TIME_GIO_RE = re.compile(r"(?<!\d)(\d{1,2})\s*giờ\s*(\d{2})?(?!\w)", re.IGNORECASE)
+_TIME_GIO_BARE_RE = re.compile(
+    r"(?<!\d)(\d{1,2})\s*giờ(?:\s*(sáng|sang|chiều|chieu|trưa|tru|tối|toi))?",
+    re.IGNORECASE,
+)
+
+
+def _parse_vn_date(text: str) -> Optional[tuple[int, int, int]]:
+    match = _VN_DATE_WORDS_RE.search(text)
+    if match:
+        return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+    match = _VN_DATE_SLASH_RE.search(text)
+    if match:
+        return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+    stripped = text.strip()
+    try:
+        dt = datetime.strptime(stripped[:10], "%Y-%m-%d")
+        return dt.day, dt.month, dt.year
+    except ValueError:
+        return None
+
+
+def _apply_day_period(hour: int, period: Optional[str]) -> int:
+    if not period:
+        return hour
+    p = period.lower()
+    if p in ("chiều", "chieu", "tối", "toi") and 1 <= hour <= 11:
+        return hour + 12
+    if p in ("sáng", "sang", "trưa", "tru") and hour == 12:
+        return 0
+    return hour
+
+
+def _parse_vn_time(text: str) -> tuple[int, int]:
+    colon = _TIME_COLON_RE.search(text)
+    if colon:
+        return int(colon.group(1)), int(colon.group(2))
+
+    gio = _TIME_GIO_RE.search(text)
+    if gio:
+        return int(gio.group(1)), int(gio.group(2) or 0)
+
+    h_match = _TIME_H_RE.search(text)
+    if h_match:
+        return int(h_match.group(1)), int(h_match.group(2) or 0)
+
+    bare = _TIME_GIO_BARE_RE.search(text)
+    if bare:
+        hour = int(bare.group(1))
+        hour = _apply_day_period(hour, bare.group(2))
+        return hour, 0
+
+    return 0, 0
+
+
+def _parse_plan_event_line(line: str) -> Optional[datetime]:
+    date_parts = _parse_vn_date(line)
+    if not date_parts:
+        return None
+    day, month, year = date_parts
+    hour, minute = _parse_vn_time(line)
+    try:
+        return datetime(year, month, day, hour, minute, 0)
+    except ValueError:
+        return None
 
 
 def _build_plan_event_datetime(date_part: str, time_part: Optional[str] = None) -> Optional[datetime]:
-    match = _VN_DATE_RE.search(date_part)
-    if not match:
-        try:
-            return datetime.strptime(date_part[:10], "%Y-%m-%d").replace(hour=0, minute=0, second=0)
-        except ValueError:
-            return None
+    date_parts = _parse_vn_date(date_part)
+    if not date_parts:
+        return None
 
-    day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
-    hour, minute = 0, 0
-
+    day, month, year = date_parts
     if time_part:
-        hm = _TIME_COLON_RE.search(time_part)
-        if hm:
-            hour, minute = int(hm.group(1)), int(hm.group(2))
-        else:
-            h_match = _TIME_H_RE.search(time_part)
-            if h_match:
-                hour = int(h_match.group(1))
-                minute = int(h_match.group(2) or 0)
+        hour, minute = _parse_vn_time(time_part)
+    else:
+        hour, minute = _parse_vn_time(date_part)
 
     try:
         return datetime(year, month, day, hour, minute, 0)
@@ -91,14 +158,12 @@ def _build_plan_event_datetime(date_part: str, time_part: Optional[str] = None) 
 
 def _regex_extract_plan_event(text: str) -> Optional[datetime]:
     for match in _EVENT_LINE_RE.finditer(text):
-        line = match.group(1).strip()
+        line = match.group(1).strip().rstrip(".")
         if not line:
             continue
-        date_match = _VN_DATE_RE.search(line)
-        if not date_match:
-            continue
-        time_part = line[: date_match.start()] + line[date_match.end() :]
-        return _build_plan_event_datetime(date_match.group(0), time_part)
+        result = _parse_plan_event_line(line)
+        if result:
+            return result
     return None
 
 
@@ -257,7 +322,7 @@ class TaskExtractor:
         return self.extract_plan_title(combined)
 
     def extract_plan_event(self, text: str) -> Optional[datetime]:
-        snippet = text[:6000].strip()
+        snippet = text[:12000].strip()
         if not snippet:
             return None
 
@@ -270,7 +335,7 @@ class TaskExtractor:
                 model=settings.CHAT_MODEL,
                 messages=[
                     {"role": "system", "content": PLAN_EVENT_PROMPT},
-                    {"role": "user", "content": f"PHẦN ĐẦU TÀI LIỆU:\n{snippet}"},
+                    {"role": "user", "content": f"NỘI DUNG TÀI LIỆU:\n{snippet}"},
                 ],
                 temperature=0,
                 max_tokens=120,
@@ -289,7 +354,13 @@ class TaskExtractor:
     def extract_plan_event_from_chunks(self, chunks: List[Dict[str, Any]]) -> Optional[datetime]:
         if not chunks:
             return None
-        head = chunks[:8]
+
+        combined_all = "\n".join(chunk.get("content", "") for chunk in chunks)
+        regex_result = _regex_extract_plan_event(combined_all)
+        if regex_result:
+            return regex_result
+
+        head = chunks[:12]
         combined = "\n".join(chunk.get("content", "") for chunk in head)
         return self.extract_plan_event(combined)
 
