@@ -60,14 +60,21 @@ def _iter_cost_buckets(start_dt: datetime, end_dt: datetime):
 
         for bucket in payload.get("data", []):
             start_time = bucket.get("start_time")
+            if start_time is None and bucket.get("start_time_iso"):
+                start_time = datetime.fromisoformat(
+                    str(bucket["start_time_iso"]).replace("Z", "+00:00")
+                ).timestamp()
             if start_time is None:
                 continue
             cost_date = datetime.fromtimestamp(int(start_time), tz=timezone.utc).date()
-            for result in bucket.get("result", []):
-                if result.get("object") != "organization.costs.result":
+            # OpenAI returns "results" (plural); keep "result" as fallback
+            for result in bucket.get("results") or bucket.get("result") or []:
+                obj = result.get("object")
+                if obj and obj != "organization.costs.result":
                     continue
                 amount = result.get("amount") or {}
-                if str(amount.get("currency", "")).lower() != "usd":
+                currency = str(amount.get("currency") or "usd").lower()
+                if currency != "usd":
                     continue
                 value = float(amount.get("value") or 0.0)
                 if value <= 0:
