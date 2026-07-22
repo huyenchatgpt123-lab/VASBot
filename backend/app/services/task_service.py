@@ -58,6 +58,14 @@ class TaskService:
         from app.utils.name_matcher import match_user_by_name
         return match_user_by_name(self.db, name)
 
+    @staticmethod
+    def _plan_display_name(doc: Optional[Document]) -> Optional[str]:
+        if not doc:
+            return None
+        if doc.plan_title and doc.plan_title.strip():
+            return doc.plan_title.strip()
+        return doc.filename
+
     def _resolve_task_department(self, assignee_id: Optional[int]) -> str:
         if assignee_id:
             assignee = self.db.query(User).filter(User.id == assignee_id).first()
@@ -81,7 +89,7 @@ class TaskService:
             return {
                 "tasks": [],
                 "document_id": document_id,
-                "document_name": doc.filename,
+                "document_name": self._plan_display_name(doc),
                 "has_duplicates": False,
                 "duplicate_count": 0,
             }
@@ -109,7 +117,7 @@ class TaskService:
         return {
             "tasks": tasks_preview,
             "document_id": document_id,
-            "document_name": doc.filename,
+            "document_name": self._plan_display_name(doc),
             "has_duplicates": has_duplicates,
             "duplicate_count": existing_count,
         }
@@ -428,7 +436,7 @@ class TaskService:
             if not has_any_scheduled_time:
                 unscheduled_plans.append({
                     "document_id": doc.id,
-                    "plan_name": doc.filename,
+                    "plan_name": self._plan_display_name(doc),
                     "date": None,
                     "start_time": None,
                     "campuses": campuses,
@@ -439,7 +447,7 @@ class TaskService:
                 earliest = min(times)
                 scheduled_plans.append({
                     "document_id": doc.id,
-                    "plan_name": doc.filename,
+                    "plan_name": self._plan_display_name(doc),
                     "date": day_key,
                     "start_time": earliest.isoformat(),
                     "campuses": campuses,
@@ -461,7 +469,7 @@ class TaskService:
             doc_name = None
             document_department = None
             if task.document:
-                doc_name = task.document.filename
+                doc_name = self._plan_display_name(task.document)
                 document_department = task.document.department
             department = task.department or UNASSIGNED_DEPARTMENT
             result.append({

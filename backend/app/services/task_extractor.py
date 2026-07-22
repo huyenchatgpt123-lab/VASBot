@@ -29,6 +29,15 @@ TRẢ VỀ JSON ARRAY (không giải thích gì thêm):
 
 Nếu không tìm thấy công việc nào → trả về: []"""
 
+PLAN_TITLE_PROMPT = """Bạn đọc phần đầu tài liệu kế hoạch/công tác và trích xuất TIÊU ĐỀ CHÍNH THỨC của kế hoạch (dòng tiêu đề lớn, thường ở trang đầu).
+
+QUY TẮC:
+- Trả về đúng MỘT dòng tiêu đề như trong tài liệu (tiếng Việt, giữ số/tháng/năm học nếu có).
+- Không thêm giải thích, dấu ngoặc, markdown hay JSON.
+- Không dùng tên file.
+- Tối đa 120 ký tự.
+- Nếu không xác định được tiêu đề → trả về chuỗi rỗng."""
+
 
 def _try_fix_truncated_json(content: str) -> List[Dict]:
     """Try to recover tasks from truncated JSON response."""
@@ -138,6 +147,41 @@ class TaskExtractor:
                 unique_tasks.append(t)
 
         return unique_tasks
+
+    def extract_plan_title(self, text: str) -> Optional[str]:
+        snippet = text[:4000].strip()
+        if not snippet:
+            return None
+
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.CHAT_MODEL,
+                messages=[
+                    {"role": "system", "content": PLAN_TITLE_PROMPT},
+                    {"role": "user", "content": f"PHẦN ĐẦU TÀI LIỆU:\n{snippet}"},
+                ],
+                temperature=0,
+                max_tokens=150,
+            )
+            title = (response.choices[0].message.content or "").strip()
+            if title.startswith("```"):
+                title = title.split("\n", 1)[-1] if "\n" in title else title[3:]
+                title = title.rstrip("`").strip()
+            if not title:
+                return None
+            if len(title) > 120:
+                title = title[:120].rstrip()
+            return title
+        except Exception as e:
+            logger.warning(f"Plan title extraction error: {e}")
+            return None
+
+    def extract_plan_title_from_chunks(self, chunks: List[Dict[str, Any]]) -> Optional[str]:
+        if not chunks:
+            return None
+        head = chunks[:6]
+        combined = "\n".join(chunk.get("content", "") for chunk in head)
+        return self.extract_plan_title(combined)
 
 
 task_extractor = TaskExtractor()

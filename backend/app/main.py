@@ -199,6 +199,10 @@ def startup():
             db.execute(text("ALTER TABLE documents ADD COLUMN school_year VARCHAR(20)"))
             db.commit()
 
+        if "plan_title" not in doc_columns:
+            db.execute(text("ALTER TABLE documents ADD COLUMN plan_title VARCHAR(500)"))
+            db.commit()
+
         task_columns = [c["name"] for c in inspector.get_columns("tasks")]
         if "department" not in task_columns:
             db.execute(text("ALTER TABLE tasks ADD COLUMN department VARCHAR(255)"))

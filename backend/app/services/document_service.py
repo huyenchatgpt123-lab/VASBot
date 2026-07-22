@@ -9,6 +9,7 @@ from app.repositories.usage_repository import UsageRepository
 from app.utils.pdf_processor import process_pdf
 from app.utils.word_processor import process_docx
 from app.services.faiss_service import faiss_service
+from app.services.task_extractor import task_extractor
 from app.services.storage_service import (
     upload_document_file,
     delete_stored_file,
@@ -51,9 +52,14 @@ class DocumentService:
             else:
                 chunks, page_count = process_pdf(temp_path, doc.id)
             doc.page_count = page_count
+
+            plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
+            if plan_title:
+                doc.plan_title = plan_title
+
             self.db.commit()
 
-            document_names = {doc.id: filename}
+            document_names = {doc.id: plan_title or filename}
             usage = faiss_service.add_chunks(chunks, document_names)
 
             self.usage_repo.log_usage(
@@ -76,6 +82,7 @@ class DocumentService:
             return {
                 "id": doc.id,
                 "filename": filename,
+                "plan_title": doc.plan_title,
                 "page_count": page_count,
                 "department": doc.department,
                 "month": doc.month,

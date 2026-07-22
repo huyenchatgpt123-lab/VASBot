@@ -23,6 +23,7 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String(500), nullable=False)
+    plan_title = Column(String(500), nullable=True)
     filepath = Column(String(1000), nullable=False)
     page_count = Column(Integer, default=0)
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)

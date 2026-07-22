@@ -73,7 +73,7 @@ function buildCalendarGrid(viewMonth: Date): (string | null)[][] {
   return weeks;
 }
 
-function stripExtension(name: string): string {
+function displayPlanName(name: string): string {
   return name.replace(/\.(pdf|docx)$/i, '');
 }
 
@@ -313,7 +313,7 @@ export default function BghCalendarPage() {
                 className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-100"
               >
                 <span className="text-sm text-gray-900 flex-1 min-w-[200px]">
-                  {stripExtension(plan.plan_name)}
+                  {displayPlanName(plan.plan_name)}
                 </span>
                 <div className="flex flex-wrap gap-1">
                   {plan.campuses.map((code) => (
@@ -338,7 +338,7 @@ function PlanRow({ plan }: { plan: BghCalendarPlan }) {
         {formatTime(plan.start_time)}
       </span>
       <span className="text-sm text-gray-900 leading-snug">
-        {plan.plan_name.replace(/\.(pdf|docx)$/i, '')}
+        {displayPlanName(plan.plan_name)}
       </span>
     </li>
   );
