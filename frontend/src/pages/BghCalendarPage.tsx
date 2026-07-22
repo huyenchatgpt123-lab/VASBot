@@ -115,6 +115,7 @@ export default function BghCalendarPage() {
   const [activePreset, setActivePreset] = useState<DatePreset>('today');
   const [filterStartDate, setFilterStartDate] = useState(formatDateKey(new Date()));
   const [filterEndDate, setFilterEndDate] = useState(formatDateKey(new Date()));
+  const [anchorDate, setAnchorDate] = useState(formatDateKey(new Date()));
   const [campusFilter, setCampusFilter] = useState<number | ''>('');
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [data, setData] = useState<Awaited<ReturnType<typeof calendarApi.getBghCalendar>> | null>(null);
@@ -178,6 +179,7 @@ export default function BghCalendarPage() {
       setFilterStartDate(todayKey);
       setFilterEndDate(todayKey);
       setSelectedDate(todayKey);
+      setAnchorDate(todayKey);
       return;
     }
     if (preset === 'tomorrow') {
@@ -187,6 +189,7 @@ export default function BghCalendarPage() {
       setFilterStartDate(tKey);
       setFilterEndDate(tKey);
       setSelectedDate(tKey);
+      setAnchorDate(tKey);
       return;
     }
     if (preset === 'week') {
@@ -195,6 +198,7 @@ export default function BghCalendarPage() {
       setFilterStartDate(todayKey);
       setFilterEndDate(formatDateKey(weekEnd));
       setSelectedDate(todayKey);
+      setAnchorDate(todayKey);
     }
   };
 
@@ -202,6 +206,7 @@ export default function BghCalendarPage() {
     setFilterStartDate(value);
     setActivePreset('custom');
     setSelectedDate(value);
+    setAnchorDate(value);
     setViewMonth(startOfMonth(parseDateKey(value)));
   };
 
@@ -209,6 +214,7 @@ export default function BghCalendarPage() {
     setFilterEndDate(value);
     setActivePreset('custom');
     const normalized = normalizeRange(filterStartDate, value);
+    setAnchorDate(normalized.start);
     setViewMonth(startOfMonth(parseDateKey(normalized.start)));
   };
 
@@ -242,11 +248,25 @@ export default function BghCalendarPage() {
     [rangePlansGrouped],
   );
 
-  const selectCalendarDay = (dateKey: string) => {
+  const selectCalendarDay = (dateKey: string, shiftKey: boolean) => {
+    setActivePreset('custom');
     setSelectedDate(dateKey);
-    if (rangeHighlightDates.has(dateKey)) {
-      requestAnimationFrame(() => scrollToDay(dateKey));
+    setViewMonth(startOfMonth(parseDateKey(dateKey)));
+
+    if (shiftKey) {
+      const from = anchorDate || filterRange.start;
+      const normalized = normalizeRange(from, dateKey);
+      setFilterStartDate(normalized.start);
+      setFilterEndDate(normalized.end);
+      if (normalized.start !== normalized.end) {
+        requestAnimationFrame(() => scrollToDay(dateKey));
+      }
+      return;
     }
+
+    setAnchorDate(dateKey);
+    setFilterStartDate(dateKey);
+    setFilterEndDate(dateKey);
   };
 
   const isSingleDayRange = filterRange.start === filterRange.end;
@@ -372,7 +392,7 @@ export default function BghCalendarPage() {
                   <button
                     key={dateKey}
                     type="button"
-                    onClick={() => selectCalendarDay(dateKey)}
+                    onClick={(e) => selectCalendarDay(dateKey, e.shiftKey)}
                     className={`aspect-square min-h-[40px] sm:min-h-[44px] rounded-lg flex flex-col items-center justify-center transition-all relative ${
                       isFocused
                         ? 'bg-primary-600 text-white shadow-md ring-2 ring-primary-300 ring-offset-1 z-10'
@@ -405,6 +425,7 @@ export default function BghCalendarPage() {
                 <span className="w-3 h-3 rounded bg-primary-600" />
                 <span>Ngày đang xem</span>
               </div>
+              <p className="text-gray-400 pt-1">Bấm ngày để xem · Giữ Shift + bấm để chọn nhiều ngày</p>
             </div>
           </div>
         </aside>
@@ -424,8 +445,10 @@ export default function BghCalendarPage() {
                   </h2>
                   <p className="text-sm text-gray-500 mt-0.5">
                     {totalRangePlans > 0
-                      ? `${totalRangePlans} hoạt động · chọn ngày bên trái để xem chi tiết`
-                      : 'Không có hoạt động nào trong khoảng đã chọn'}
+                      ? `${totalRangePlans} hoạt động · bấm ngày trên lịch để đổi · Shift + bấm để chọn khoảng`
+                      : isSingleDayRange
+                        ? 'Không có hoạt động nào trong ngày này'
+                        : 'Không có hoạt động nào trong khoảng đã chọn'}
                   </p>
                 </div>
                 {data && data.unscheduled_plans.length > 0 && (
