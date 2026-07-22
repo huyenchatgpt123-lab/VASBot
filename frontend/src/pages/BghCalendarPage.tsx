@@ -180,13 +180,13 @@ export default function BghCalendarPage() {
   const todayKey = formatDateKey(new Date());
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <div className="mb-5 text-center sm:text-left">
         <h1 className="text-2xl font-bold text-gray-900">Lịch công việc BGH</h1>
         <p className="text-gray-500 mt-1">Tổng quan kế hoạch theo ngày · VA1, VA3, EMC</p>
       </div>
 
-      <div className="mb-6 flex flex-col gap-3">
+      <div className="mb-5 flex flex-col gap-3 items-center sm:items-start">
         <div className="flex flex-wrap gap-2">
           {([
             ['today', 'Hôm nay'],
@@ -231,68 +231,70 @@ export default function BghCalendarPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))}
-            className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
-            ←
-          </button>
-          <h2 className="text-lg font-semibold text-gray-900 capitalize">{monthLabel(viewMonth)}</h2>
-          <button
-            onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))}
-            className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-          >
-            →
-          </button>
-        </div>
+      <div className="flex justify-center">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 w-full max-w-[340px]">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))}
+              className="px-2 py-0.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              ←
+            </button>
+            <h2 className="text-sm font-semibold text-gray-900 capitalize">{monthLabel(viewMonth)}</h2>
+            <button
+              onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))}
+              className="px-2 py-0.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              →
+            </button>
+          </div>
 
-        <div className="grid grid-cols-7 gap-1 mb-1">
-          {WEEKDAYS.map((d) => (
-            <div key={d} className="text-center text-xs font-medium text-gray-500 py-1">{d}</div>
-          ))}
-        </div>
+          <div className="grid grid-cols-7 gap-0.5 mb-0.5">
+            {WEEKDAYS.map((d) => (
+              <div key={d} className="text-center text-[10px] font-medium text-gray-500 py-0.5">{d}</div>
+            ))}
+          </div>
 
-        <div className="grid grid-cols-7 gap-1">
-          {weeks.flat().map((dateKey, idx) => {
-            if (!dateKey) {
-              return <div key={`empty-${idx}`} className="aspect-square" />;
-            }
-            const count = data?.day_counts[dateKey] ?? 0;
-            const isSelected = showDayModal && dateKey === selectedDate;
-            const isToday = dateKey === todayKey;
-            const inWeek = weekHighlightDates.has(dateKey);
+          <div className="grid grid-cols-7 gap-0.5">
+            {weeks.flat().map((dateKey, idx) => {
+              if (!dateKey) {
+                return <div key={`empty-${idx}`} className="h-9" />;
+              }
+              const count = data?.day_counts[dateKey] ?? 0;
+              const isSelected = showDayModal && dateKey === selectedDate;
+              const isToday = dateKey === todayKey;
+              const inWeek = weekHighlightDates.has(dateKey);
 
-            return (
-              <button
-                key={dateKey}
-                onClick={() => openDayModal(dateKey)}
-                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-sm transition-colors relative ${
-                  isSelected
-                    ? 'bg-primary-600 text-white'
-                    : inWeek
-                      ? 'bg-primary-50 text-primary-800 hover:bg-primary-100'
-                      : 'hover:bg-gray-100 text-gray-800'
-                } ${isToday && !isSelected ? 'ring-2 ring-primary-300' : ''}`}
-              >
-                <span className="font-medium">{parseDateKey(dateKey).getDate()}</span>
-                {count > 0 && (
-                  <span className={`text-[10px] mt-0.5 px-1.5 rounded-full ${
-                    isSelected ? 'bg-white/25 text-white' : 'bg-primary-100 text-primary-700'
-                  }`}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={dateKey}
+                  onClick={() => openDayModal(dateKey)}
+                  className={`h-9 rounded-md flex flex-col items-center justify-center text-xs transition-colors relative ${
+                    isSelected
+                      ? 'bg-primary-600 text-white'
+                      : inWeek
+                        ? 'bg-primary-50 text-primary-800 hover:bg-primary-100'
+                        : 'hover:bg-gray-100 text-gray-800'
+                  } ${isToday && !isSelected ? 'ring-1 ring-primary-300' : ''}`}
+                >
+                  <span className="font-medium text-[11px] leading-none">{parseDateKey(dateKey).getDate()}</span>
+                  {count > 0 && (
+                    <span className={`text-[9px] mt-0.5 px-1 rounded-full leading-none ${
+                      isSelected ? 'bg-white/25 text-white' : 'bg-primary-100 text-primary-700'
+                    }`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-gray-400 mt-2 text-center">Bấm ngày để xem kế hoạch</p>
         </div>
-        <p className="text-xs text-gray-400 mt-3">Bấm vào ngày để xem kế hoạch · số = số kế hoạch</p>
       </div>
 
       {data && data.unscheduled_plans.length > 0 && (
-        <div className="mt-8 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="mt-8 mx-auto max-w-xl bg-white rounded-xl border border-gray-200 shadow-sm p-4">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Chưa xếp giờ</h2>
           <p className="text-xs text-gray-400 mb-4">Kế hoạch chưa trích được giờ bắt đầu từ tài liệu</p>
           <ul className="space-y-2">
@@ -323,10 +325,10 @@ export default function BghCalendarPage() {
           onClick={() => setShowDayModal(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col"
+            className="bg-white rounded-2xl shadow-xl w-[75vw] max-w-3xl h-[75vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 p-5 border-b border-gray-100">
+            <div className="flex items-start justify-between gap-3 p-6 border-b border-gray-100 shrink-0">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 capitalize">
                   {formatDisplayDate(selectedDate)}
@@ -342,7 +344,7 @@ export default function BghCalendarPage() {
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto flex-1">
+            <div className="p-6 overflow-y-auto flex-1">
               {dayPlans.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-8">
                   Không có kế hoạch đã xếp giờ trong ngày này.
