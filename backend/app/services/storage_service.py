@@ -105,6 +105,23 @@ def file_exists(filepath: str) -> bool:
     return os.path.exists(ref)
 
 
+def read_stored_file_bytes(filepath: str) -> bytes:
+    kind, resource_type, ref = parse_storage_ref(filepath)
+    if kind == "cloudinary":
+        _configure_cloudinary()
+        url, _ = cloudinary.utils.cloudinary_url(
+            ref,
+            resource_type=resource_type,
+            secure=True,
+            flags="attachment",
+        )
+        with urlopen(url) as response:
+            return response.read()
+
+    with open(ref, "rb") as f:
+        return f.read()
+
+
 def get_preview_url(filepath: str, filename: str) -> str:
     kind, resource_type, ref = parse_storage_ref(filepath)
     if kind != "cloudinary":

@@ -12,6 +12,8 @@ class DocumentResponse(BaseModel):
     department: Optional[str] = None
     month: Optional[int] = None
     school_year: Optional[str] = None
+    plan_title: Optional[str] = None
+    plan_event_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:
@@ -32,4 +34,13 @@ class DocumentUploadResponse(BaseModel):
     department: Optional[str] = None
     month: Optional[int] = None
     school_year: Optional[str] = None
+    plan_title: Optional[str] = None
+    plan_event_at: Optional[str] = None
+    message: str
+
+
+class PlanReExtractResponse(BaseModel):
+    document_id: int
+    plan_title: Optional[str] = None
+    plan_event_at: Optional[str] = None
     message: str

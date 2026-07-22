@@ -63,4 +63,13 @@ export const documentsApi = {
     const token = localStorage.getItem('token');
     return `${baseUrl}/documents/${id}/download?token=${token}`;
   },
+  reExtractPlan: async (id: number): Promise<{
+    document_id: number;
+    plan_title: string | null;
+    plan_event_at: string | null;
+    message: string;
+  }> => {
+    const res = await api.post(`/documents/${id}/re-extract-plan`);
+    return res.data;
+  },
 };

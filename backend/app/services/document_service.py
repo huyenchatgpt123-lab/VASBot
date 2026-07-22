@@ -14,6 +14,7 @@ from app.services.storage_service import (
     upload_document_file,
     delete_stored_file,
     write_temp_file,
+    read_stored_file_bytes,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,10 @@ class DocumentService:
             if plan_title:
                 doc.plan_title = plan_title
 
+            plan_event_at = task_extractor.extract_plan_event_from_chunks(chunks)
+            if plan_event_at:
+                doc.plan_event_at = plan_event_at
+
             self.db.commit()
 
             document_names = {doc.id: plan_title or filename}
@@ -83,6 +88,7 @@ class DocumentService:
                 "id": doc.id,
                 "filename": filename,
                 "plan_title": doc.plan_title,
+                "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
                 "page_count": page_count,
                 "department": doc.department,
                 "month": doc.month,
@@ -108,6 +114,38 @@ class DocumentService:
         delete_stored_file(doc.filepath)
 
         return self.doc_repo.delete(doc_id)
+
+    def re_extract_plan_metadata(self, doc_id: int) -> dict:
+        doc = self.doc_repo.get_by_id(doc_id)
+        if not doc:
+            raise ValueError("Tài liệu không tồn tại")
+
+        file_bytes = read_stored_file_bytes(doc.filepath)
+        temp_path = write_temp_file(file_bytes, doc.filename)
+        try:
+            if doc.filename.lower().endswith(".docx"):
+                chunks, _ = process_docx(temp_path, doc.id)
+            else:
+                chunks, _ = process_pdf(temp_path, doc.id)
+
+            plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
+            plan_event_at = task_extractor.extract_plan_event_from_chunks(chunks)
+
+            if plan_title:
+                doc.plan_title = plan_title
+            doc.plan_event_at = plan_event_at
+            self.db.commit()
+            self.db.refresh(doc)
+
+            return {
+                "document_id": doc.id,
+                "plan_title": doc.plan_title,
+                "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
+                "message": "Đã trích xuất lại thông tin kế hoạch",
+            }
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
     def get_all_documents(self):
         docs = self.doc_repo.get_all()

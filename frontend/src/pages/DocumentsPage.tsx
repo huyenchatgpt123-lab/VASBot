@@ -14,6 +14,15 @@ function getSchoolYearOptions() {
   return options;
 }
 
+function formatPlanEventAt(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  const date = d.toLocaleDateString('vi-VN');
+  const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  return `${date} ${time}`;
+}
+
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +34,8 @@ export default function DocumentsPage() {
   const [total, setTotal] = useState(0);
   const pageSize = 20;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { canUpload, canDeleteDocuments, scopeAllDepartments, user } = useAuth();
+  const { canUpload, canDeleteDocuments, scopeAllDepartments, user, isAdmin } = useAuth();
+  const [reExtractingId, setReExtractingId] = useState<number | null>(null);
 
   // Filters
   const [filterDept, setFilterDept] = useState('');
@@ -132,6 +142,20 @@ export default function DocumentsPage() {
   const handlePreview = (id: number) => {
     const url = documentsApi.getPreviewUrl(id);
     window.open(url, '_blank');
+  };
+
+  const handleReExtract = async (id: number) => {
+    if (!confirm('Trích xuất lại tiêu đề và ngày diễn ra kế hoạch từ file gốc?')) return;
+    setReExtractingId(id);
+    try {
+      const result = await documentsApi.reExtractPlan(id);
+      await loadDocuments();
+      alert(result.message + (result.plan_event_at ? `\nNgày: ${formatPlanEventAt(result.plan_event_at)}` : '\nKhông tìm thấy Thời gian:/Ngày: trong file.'));
+    } catch {
+      alert('Trích xuất lại thất bại.');
+    } finally {
+      setReExtractingId(null);
+    }
   };
 
   const totalPages = Math.ceil(total / pageSize);
@@ -252,6 +276,7 @@ export default function DocumentsPage() {
                   <span>Tháng: {doc.month || '—'}</span>
                   <span>Năm học: {doc.school_year || '—'}</span>
                   <span>Trang: {doc.page_count}</span>
+                  <span className="col-span-2">Ngày diễn ra: {formatPlanEventAt(doc.plan_event_at)}</span>
                   <span className="col-span-2">
                     {new Date(doc.created_at).toLocaleDateString('vi-VN')} · {doc.uploader_name || '—'}
                   </span>
@@ -270,6 +295,15 @@ export default function DocumentsPage() {
                       className="text-sm text-red-600 hover:text-red-700 font-medium"
                     >
                       Xóa
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleReExtract(doc.id)}
+                      disabled={reExtractingId === doc.id}
+                      className="text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50"
+                    >
+                      {reExtractingId === doc.id ? 'Đang trích...' : 'Trích lại'}
                     </button>
                   )}
                 </div>
@@ -291,6 +325,7 @@ export default function DocumentsPage() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Tổ</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Tháng</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Năm học</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Ngày diễn ra</th>
                   <th
                     className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
                     onClick={() => handleSort('created_at')}
@@ -314,6 +349,9 @@ export default function DocumentsPage() {
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.department || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.month || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.school_year || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                      {formatPlanEventAt(doc.plan_event_at)}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
                       {new Date(doc.created_at).toLocaleDateString('vi-VN')}
                     </td>
@@ -334,6 +372,16 @@ export default function DocumentsPage() {
                           className="text-sm text-red-600 hover:text-red-700 font-medium"
                         >
                           Xóa
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleReExtract(doc.id)}
+                          disabled={reExtractingId === doc.id}
+                          className="text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50"
+                          title="Trích xuất lại tiêu đề và ngày diễn ra"
+                        >
+                          {reExtractingId === doc.id ? '...' : 'Trích lại'}
                         </button>
                       )}
                       </div>

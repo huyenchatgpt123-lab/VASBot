@@ -308,7 +308,7 @@ export default function BghCalendarPage() {
       {data && data.unscheduled_plans.length > 0 && (
         <div className="mt-8 mx-auto max-w-xl sm:max-w-2xl w-full bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Chưa xếp giờ</h2>
-          <p className="text-xs text-gray-400 mb-4">Kế hoạch chưa trích được giờ bắt đầu từ tài liệu</p>
+          <p className="text-xs text-gray-400 mb-4">Kế hoạch chưa trích được dòng Thời gian: hoặc Ngày: từ tài liệu</p>
           <ul className="space-y-2">
             {data.unscheduled_plans.map((plan) => (
               <li

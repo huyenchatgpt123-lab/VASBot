@@ -397,7 +397,6 @@ class TaskService:
         end_date: str,
         campus_id: Optional[int] = None,
     ) -> dict:
-        from collections import defaultdict
         from sqlalchemy.orm import joinedload
         from app.models.campus import document_campuses
 
@@ -419,21 +418,8 @@ class TaskService:
 
         for doc in documents:
             campuses = sorted(c.code for c in doc.campuses)
-            tasks = self.db.query(Task).filter(Task.document_id == doc.id).all()
 
-            scheduled_by_date: dict[str, list] = defaultdict(list)
-            has_any_scheduled_time = False
-
-            for task in tasks:
-                if not task.has_scheduled_time or not task.deadline:
-                    continue
-                has_any_scheduled_time = True
-                dl = task.deadline.replace(tzinfo=None) if task.deadline.tzinfo else task.deadline
-                if start_dt <= dl <= end_dt:
-                    day_key = dl.strftime("%Y-%m-%d")
-                    scheduled_by_date[day_key].append(dl)
-
-            if not has_any_scheduled_time:
+            if not doc.plan_event_at:
                 unscheduled_plans.append({
                     "document_id": doc.id,
                     "plan_name": self._plan_display_name(doc),
@@ -443,13 +429,14 @@ class TaskService:
                 })
                 continue
 
-            for day_key, times in scheduled_by_date.items():
-                earliest = min(times)
+            dl = doc.plan_event_at.replace(tzinfo=None) if doc.plan_event_at.tzinfo else doc.plan_event_at
+            if start_dt <= dl <= end_dt:
+                day_key = dl.strftime("%Y-%m-%d")
                 scheduled_plans.append({
                     "document_id": doc.id,
                     "plan_name": self._plan_display_name(doc),
                     "date": day_key,
-                    "start_time": earliest.isoformat(),
+                    "start_time": dl.isoformat(),
                     "campuses": campuses,
                 })
                 day_counts[day_key] = day_counts.get(day_key, 0) + 1

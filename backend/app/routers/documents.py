@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from openai import AuthenticationError, APIConnectionError, RateLimitError
 
 from app.database import get_db
-from app.schemas.document import DocumentUploadResponse, DocumentListResponse
+from app.schemas.document import DocumentUploadResponse, DocumentListResponse, PlanReExtractResponse
 from app.services.document_service import DocumentService
 from app.repositories.document_repository import DocumentRepository
 from app.services.storage_service import (
@@ -19,7 +19,7 @@ from app.services.storage_service import (
 )
 from app.utils.auth import get_current_user, require_admin
 from app.utils.permissions import can_upload, can_upload_to_department, can_delete_document, has_scope_all_departments, is_admin
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.campus_repository import CampusRepository
 
@@ -145,6 +145,8 @@ def get_documents(
             "department": doc.department,
             "month": doc.month,
             "school_year": doc.school_year,
+            "plan_title": doc.plan_title,
+            "plan_event_at": doc.plan_event_at,
             "created_at": doc.created_at,
         })
     return DocumentListResponse(
@@ -153,6 +155,37 @@ def get_documents(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post("/{doc_id}/re-extract-plan", response_model=PlanReExtractResponse)
+def re_extract_plan_metadata(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chỉ Admin mới có quyền trích xuất lại")
+
+    repo = DocumentRepository(db)
+    doc = repo.get_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
+    if not file_exists(doc.filepath):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File không tồn tại trên server")
+
+    service = DocumentService(db)
+    try:
+        result = service.re_extract_plan_metadata(doc_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Lỗi re-extract kế hoạch {doc_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi trích xuất lại: {str(e)}",
+        )
+
+    return PlanReExtractResponse(**result)
 
 
 def _get_authenticated_document(doc_id: int, token: Optional[str], db: Session):

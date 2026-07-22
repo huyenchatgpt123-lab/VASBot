@@ -29,6 +29,20 @@ TRẢ VỀ JSON ARRAY (không giải thích gì thêm):
 
 Nếu không tìm thấy công việc nào → trả về: []"""
 
+PLAN_EVENT_PROMPT = """Bạn đọc phần đầu tài liệu kế hoạch/công tác và trích xuất NGÀY/GIỜ DIỄN RA kế hoạch từ các dòng bắt đầu bằng "Thời gian:" hoặc "Ngày:".
+
+QUY TẮC:
+- Ưu tiên dòng "Thời gian:"; nếu không có thì dùng "Ngày:".
+- date: chuyển về "YYYY-MM-DD" (VD: ngày 24/7/2026 → 2026-07-24).
+- time: nếu có giờ rõ ràng (8h30, 14:00, 8 giờ sáng…) → "HH:MM" (24h); nếu chỉ có ngày → null.
+- Không dùng deadline công việc hay ngày upload.
+- Không giải thích.
+
+TRẢ VỀ JSON (không markdown):
+{"date":"YYYY-MM-DD","time":"HH:MM hoặc null"}
+
+Nếu không tìm thấy → {"date":null,"time":null}"""
+
 PLAN_TITLE_PROMPT = """Bạn đọc phần đầu tài liệu kế hoạch/công tác và trích xuất TIÊU ĐỀ CHÍNH THỨC của kế hoạch (dòng tiêu đề lớn, thường ở trang đầu).
 
 QUY TẮC:
@@ -37,6 +51,65 @@ QUY TẮC:
 - Không dùng tên file.
 - Tối đa 120 ký tự.
 - Nếu không xác định được tiêu đề → trả về chuỗi rỗng."""
+
+
+_EVENT_LINE_RE = re.compile(
+    r"(?:Thời\s*gian|Ngày)\s*:\s*(.+)",
+    re.IGNORECASE,
+)
+_VN_DATE_RE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
+_TIME_H_RE = re.compile(r"(\d{1,2})\s*h\s*(\d{2})?", re.IGNORECASE)
+_TIME_COLON_RE = re.compile(r"(\d{1,2}):(\d{2})")
+
+
+def _build_plan_event_datetime(date_part: str, time_part: Optional[str] = None) -> Optional[datetime]:
+    match = _VN_DATE_RE.search(date_part)
+    if not match:
+        try:
+            return datetime.strptime(date_part[:10], "%Y-%m-%d").replace(hour=0, minute=0, second=0)
+        except ValueError:
+            return None
+
+    day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
+    hour, minute = 0, 0
+
+    if time_part:
+        hm = _TIME_COLON_RE.search(time_part)
+        if hm:
+            hour, minute = int(hm.group(1)), int(hm.group(2))
+        else:
+            h_match = _TIME_H_RE.search(time_part)
+            if h_match:
+                hour = int(h_match.group(1))
+                minute = int(h_match.group(2) or 0)
+
+    try:
+        return datetime(year, month, day, hour, minute, 0)
+    except ValueError:
+        return None
+
+
+def _regex_extract_plan_event(text: str) -> Optional[datetime]:
+    for match in _EVENT_LINE_RE.finditer(text):
+        line = match.group(1).strip()
+        if not line:
+            continue
+        date_match = _VN_DATE_RE.search(line)
+        if not date_match:
+            continue
+        time_part = line[: date_match.start()] + line[date_match.end() :]
+        return _build_plan_event_datetime(date_match.group(0), time_part)
+    return None
+
+
+def _parse_plan_event_json(raw: dict) -> Optional[datetime]:
+    date_val = raw.get("date")
+    if not date_val or str(date_val).lower() == "null":
+        return None
+    time_val = raw.get("time")
+    if time_val in (None, "", "null"):
+        time_val = None
+    return _build_plan_event_datetime(str(date_val), str(time_val) if time_val else None)
 
 
 def _try_fix_truncated_json(content: str) -> List[Dict]:
@@ -182,6 +255,43 @@ class TaskExtractor:
         head = chunks[:6]
         combined = "\n".join(chunk.get("content", "") for chunk in head)
         return self.extract_plan_title(combined)
+
+    def extract_plan_event(self, text: str) -> Optional[datetime]:
+        snippet = text[:6000].strip()
+        if not snippet:
+            return None
+
+        regex_result = _regex_extract_plan_event(snippet)
+        if regex_result:
+            return regex_result
+
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.CHAT_MODEL,
+                messages=[
+                    {"role": "system", "content": PLAN_EVENT_PROMPT},
+                    {"role": "user", "content": f"PHẦN ĐẦU TÀI LIỆU:\n{snippet}"},
+                ],
+                temperature=0,
+                max_tokens=120,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[-1] if "\n" in content else content[3:]
+                content = content.rstrip("`").strip()
+            raw = json.loads(content)
+            if isinstance(raw, dict):
+                return _parse_plan_event_json(raw)
+        except Exception as e:
+            logger.warning(f"Plan event extraction error: {e}")
+        return None
+
+    def extract_plan_event_from_chunks(self, chunks: List[Dict[str, Any]]) -> Optional[datetime]:
+        if not chunks:
+            return None
+        head = chunks[:8]
+        combined = "\n".join(chunk.get("content", "") for chunk in head)
+        return self.extract_plan_event(combined)
 
 
 task_extractor = TaskExtractor()
