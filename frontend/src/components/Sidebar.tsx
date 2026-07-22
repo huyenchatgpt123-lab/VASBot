@@ -6,7 +6,7 @@ import { feedbackApi } from '../api/feedback';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
-  { path: '/bgh-calendar', label: 'Lịch BGH', icon: '📅', bghOnly: true },
+  { path: '/bgh-calendar', label: 'Thời gian biểu', icon: '🗓️', bghOnly: true },
   { path: '/documents', label: 'Tài liệu', icon: '📄' },
   { path: '/tasks', label: 'Công việc', icon: '✅', showBadge: true },
   { path: '/feedback', label: 'Feedback', icon: '💡', showFeedbackBadge: true },
