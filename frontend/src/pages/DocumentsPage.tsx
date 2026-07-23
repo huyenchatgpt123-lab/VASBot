@@ -452,101 +452,136 @@ export default function DocumentsPage() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6 mx-auto min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload tài liệu</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-auto min-w-0 flex flex-col max-h-[min(92vh,640px)] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 shrink-0">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-gray-900">Upload tài liệu</h2>
+                <p className="text-xs text-gray-400 mt-0.5">PDF hoặc DOCX · điền đủ thông tin rồi tải lên</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicateWarning(null);
+                  setShowUploadModal(false);
+                }}
+                className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                aria-label="Đóng"
+              >
+                ✕
+              </button>
+            </div>
 
-            <div className="space-y-4 min-w-0">
+            {/* Body */}
+            <div className="px-5 py-4 space-y-3 min-w-0 overflow-y-auto">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tổ / Bộ phận *</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Tổ / Bộ phận *</label>
                 <select
                   value={uploadDept}
                   onChange={(e) => setUploadDept(e.target.value)}
                   disabled={!scopeAllDepartments}
-                  className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:bg-gray-50"
                 >
-                  <option value="">-- Chọn Tổ --</option>
+                  <option value="">Chọn tổ</option>
                   {departments.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tháng *</label>
-                <select
-                  value={uploadMonth}
-                  onChange={(e) => setUploadMonth(e.target.value)}
-                  className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                >
-                  <option value="">-- Chọn Tháng --</option>
-                  {MONTHS.map((m) => (
-                    <option key={m} value={m}>Tháng {m}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Tháng *</label>
+                  <select
+                    value={uploadMonth}
+                    onChange={(e) => setUploadMonth(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  >
+                    <option value="">Tháng</option>
+                    {MONTHS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Năm học *</label>
+                  <select
+                    value={uploadYear}
+                    onChange={(e) => setUploadYear(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  >
+                    <option value="">Năm học</option>
+                    {getSchoolYearOptions().map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Năm học *</label>
-                <select
-                  value={uploadYear}
-                  onChange={(e) => setUploadYear(e.target.value)}
-                  className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                >
-                  <option value="">-- Chọn Năm học --</option>
-                  {getSchoolYearOptions().map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Trường (địa điểm) *</label>
-                <p className="text-xs text-gray-400 mb-2">Chọn một hoặc nhiều trường mà kế hoạch này áp dụng</p>
-                <div className="flex flex-wrap gap-3">
-                  {campuses.map((c) => (
-                    <label key={c.id} className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={uploadCampusIds.includes(c.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setUploadCampusIds((prev) => [...prev, c.id]);
-                          } else {
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Trường *</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {campuses.map((c) => {
+                    const selected = uploadCampusIds.includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          if (selected) {
                             setUploadCampusIds((prev) => prev.filter((id) => id !== c.id));
+                          } else {
+                            setUploadCampusIds((prev) => [...prev, c.id]);
                           }
                         }}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      {c.code}
-                    </label>
-                  ))}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                          selected
+                            ? 'bg-primary-600 text-white border-primary-600'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
+                        }`}
+                      >
+                        {c.code}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="min-w-0">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Chọn file (PDF/DOCX) *</label>
-                <label className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 cursor-pointer transition-colors">
-                  {uploadFile ? 'Đổi file' : 'Chọn file'}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.docx"
-                    onChange={handleFileSelect}
-                    className="sr-only"
-                  />
-                </label>
-                {uploadFile ? (
-                  <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 min-w-0">
-                    <span className="shrink-0 text-sm leading-5" aria-hidden>📄</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-800 break-all line-clamp-2" title={uploadFile.name}>
-                        {uploadFile.name}
-                      </p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        {(uploadFile.size / 1024).toFixed(0)} KB
-                      </p>
-                    </div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Tệp đính kèm *</label>
+                <div
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 min-w-0 transition-colors ${
+                    uploadFile ? 'border-primary-200 bg-primary-50/40' : 'border-dashed border-gray-300 bg-gray-50/80'
+                  }`}
+                >
+                  <label className="shrink-0 inline-flex items-center px-2.5 py-1.5 text-xs font-semibold rounded-md bg-white border border-gray-200 text-primary-700 hover:bg-primary-50 cursor-pointer shadow-sm">
+                    {uploadFile ? 'Đổi' : 'Chọn file'}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.docx"
+                      onChange={handleFileSelect}
+                      className="sr-only"
+                    />
+                  </label>
+                  <div className="min-w-0 flex-1">
+                    {uploadFile ? (
+                      <>
+                        <p className="text-sm text-gray-800 truncate" title={uploadFile.name}>
+                          {uploadFile.name}
+                        </p>
+                        <p className="text-[11px] text-gray-400">
+                          {uploadFile.size >= 1024 * 1024
+                            ? `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB`
+                            : `${Math.max(1, Math.round(uploadFile.size / 1024))} KB`}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-400">Chưa chọn · PDF/DOCX</p>
+                    )}
+                  </div>
+                  {uploadFile && (
                     <button
                       type="button"
                       onClick={() => {
@@ -554,83 +589,81 @@ export default function DocumentsPage() {
                         setDuplicateWarning(null);
                         if (fileInputRef.current) fileInputRef.current.value = '';
                       }}
-                      className="shrink-0 text-xs text-gray-400 hover:text-red-600 pt-0.5"
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-gray-400 hover:text-red-600 hover:bg-white"
                       title="Bỏ chọn"
                     >
                       ✕
                     </button>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 mt-2">Chưa chọn file</p>
-                )}
+                  )}
+                </div>
               </div>
 
-              <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer min-w-0">
+              <label className="flex items-center gap-2.5 min-w-0 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={uploadIncludeCalendar}
                   onChange={(e) => setUploadIncludeCalendar(e.target.checked)}
-                  className="mt-0.5 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 shrink-0"
                 />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-gray-800">Đưa vào Thời gian biểu</span>
-                  <span className="block text-xs text-gray-500 mt-0.5 leading-relaxed">
-                    Bật nếu đây là kế hoạch cần hiện trên lịch BGH. Nếu AI không tìm thấy ngày/giờ, Admin sẽ cần chỉnh sửa sau.
-                  </span>
+                <span className="text-sm text-gray-700">
+                  Đưa vào Thời gian biểu
+                  <span className="text-gray-400 font-normal"> — lịch BGH</span>
                 </span>
               </label>
 
               {duplicateWarning && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2 min-w-0 overflow-hidden">
-                  <p className="text-sm font-medium text-amber-900">Đã có tài liệu cùng tên</p>
-                  <p className="text-xs text-amber-800 break-words">{duplicateWarning.message}</p>
-                  <p
-                    className="text-xs text-amber-700 break-all line-clamp-3"
-                    title={duplicateWarning.existing.plan_title || duplicateWarning.existing.filename}
-                  >
-                    Bản cũ: {duplicateWarning.existing.plan_title || duplicateWarning.existing.filename}
-                    {duplicateWarning.existing.department ? ` · ${duplicateWarning.existing.department}` : ''}
-                    {duplicateWarning.existing.created_at
-                      ? ` · ${new Date(duplicateWarning.existing.created_at).toLocaleDateString('vi-VN')}`
-                      : ''}
-                  </p>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setDuplicateWarning(null)}
-                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-900 hover:bg-amber-100"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleUploadSubmit(true)}
-                      disabled={uploading}
-                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-                    >
-                      {uploading ? 'Đang upload...' : 'Upload tiếp'}
-                    </button>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-amber-900">Trùng tên file</p>
+                      <p className="text-[11px] text-amber-800 mt-0.5 truncate" title={duplicateWarning.existing.filename}>
+                        Đã có: {duplicateWarning.existing.plan_title || duplicateWarning.existing.filename}
+                        {duplicateWarning.existing.created_at
+                          ? ` · ${new Date(duplicateWarning.existing.created_at).toLocaleDateString('vi-VN')}`
+                          : ''}
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setDuplicateWarning(null)}
+                        className="px-2 py-1 text-[11px] font-medium rounded-md border border-amber-300 text-amber-900 hover:bg-amber-100"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUploadSubmit(true)}
+                        disabled={uploading}
+                        className="px-2 py-1 text-[11px] font-medium rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        Upload tiếp
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/80 shrink-0">
               <button
+                type="button"
                 onClick={() => {
                   setDuplicateWarning(null);
                   setShowUploadModal(false);
                 }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-3.5 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
               >
-                Hủy
+                Đóng
               </button>
               <button
+                type="button"
                 onClick={() => handleUploadSubmit(false)}
                 disabled={uploading || !uploadFile || !uploadDept || !uploadMonth || !uploadYear || uploadCampusIds.length === 0}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
-                {uploading ? 'Đang upload...' : 'Upload'}
+                {uploading ? 'Đang tải lên...' : 'Upload'}
               </button>
             </div>
           </div>
