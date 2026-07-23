@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -26,6 +26,7 @@ class Document(Base):
     plan_title = Column(String(500), nullable=True)
     plan_event_at = Column(DateTime(timezone=True), nullable=True)
     plan_event_end_at = Column(DateTime(timezone=True), nullable=True)
+    include_in_calendar = Column(Boolean, nullable=False, default=False)
     filepath = Column(String(1000), nullable=False)
     page_count = Column(Integer, default=0)
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -36,3 +37,9 @@ class Document(Base):
 
     uploader = relationship("User", backref="documents")
     campuses = relationship("Campus", secondary="document_campuses", back_populates="documents")
+    plan_events = relationship(
+        "PlanEvent",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="PlanEvent.starts_at",
+    )

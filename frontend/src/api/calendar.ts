@@ -7,13 +7,17 @@ export interface Campus {
 }
 
 export interface BghCalendarPlan {
+  event_id?: number | null;
   document_id: number;
   plan_name: string;
   date: string | null;
   start_time: string | null;
+  end_time?: string | null;
   campuses: string[];
   is_continuation?: boolean;
   event_end_date?: string | null;
+  needs_review?: boolean;
+  source?: string;
 }
 
 export interface BghCalendarData {

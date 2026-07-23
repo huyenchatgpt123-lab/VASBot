@@ -46,4 +46,6 @@ class PlanReExtractResponse(BaseModel):
     plan_title: Optional[str] = None
     plan_event_at: Optional[str] = None
     plan_event_end_at: Optional[str] = None
+    event_count: int = 0
+    needs_review: bool = False
     message: str

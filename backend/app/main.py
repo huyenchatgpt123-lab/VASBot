@@ -7,6 +7,7 @@ from app.routers import auth, documents, search, admin, tasks, feedback
 from app.models.user import User, UserRole
 from app.models.campus import Campus  # noqa: F401 — register ORM tables
 from app.models.openai_cost_cache import OpenAICostDaily, OpenAICostSync  # noqa: F401
+from app.models.plan_event import PlanEvent  # noqa: F401
 from app.models.position import Position
 from app.models.department import DEFAULT_DEPARTMENTS
 from app.repositories.position_repository import PositionRepository
@@ -215,6 +216,13 @@ def startup():
             db.execute(text("ALTER TABLE documents ADD COLUMN plan_event_end_at TIMESTAMPTZ"))
             db.commit()
 
+        doc_columns = [c["name"] for c in inspector.get_columns("documents")]
+        if "include_in_calendar" not in doc_columns:
+            db.execute(text(
+                "ALTER TABLE documents ADD COLUMN include_in_calendar BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            db.commit()
+
         task_columns = [c["name"] for c in inspector.get_columns("tasks")]
         if "department" not in task_columns:
             db.execute(text("ALTER TABLE tasks ADD COLUMN department VARCHAR(255)"))
@@ -232,6 +240,9 @@ def startup():
         _migrate_user_positions(db)
         _migrate_user_departments(db)
         _migrate_task_departments(db)
+
+        from app.services.plan_event_service import PlanEventService
+        PlanEventService(db).migrate_from_documents()
 
         _seed_admin_user(db)
     finally:

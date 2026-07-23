@@ -8,3 +8,4 @@ from app.models.openai_cost_cache import OpenAICostDaily, OpenAICostSync  # noqa
 from app.models.task import Task, TaskStatus
 from app.models.feedback import Feedback, FeedbackStatus
 from app.models.campus import Campus
+from app.models.plan_event import PlanEvent  # noqa: F401

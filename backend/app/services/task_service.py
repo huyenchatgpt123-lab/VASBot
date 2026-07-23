@@ -443,7 +443,11 @@ class TaskService:
         doc_query = (
             self.db.query(Document)
             .join(document_campuses, document_campuses.c.document_id == Document.id)
-            .options(joinedload(Document.campuses))
+            .filter(Document.include_in_calendar.is_(True))
+            .options(
+                joinedload(Document.campuses),
+                joinedload(Document.plan_events),
+            )
         )
         if campus_id:
             doc_query = doc_query.filter(document_campuses.c.campus_id == campus_id)
@@ -455,35 +459,69 @@ class TaskService:
 
         for doc in documents:
             campuses = sorted(c.code for c in doc.campuses)
+            events = list(doc.plan_events or [])
 
-            if not doc.plan_event_at:
+            if not events:
                 unscheduled_plans.append({
+                    "event_id": None,
                     "document_id": doc.id,
                     "plan_name": self._plan_display_name(doc),
                     "date": None,
                     "start_time": None,
+                    "end_time": None,
                     "campuses": campuses,
                     "is_continuation": False,
                     "event_end_date": None,
+                    "needs_review": True,
+                    "source": "ai",
                 })
                 continue
 
-            for day_key, start_time, is_continuation, event_end_date in _expand_plan_occurrences(
-                doc.plan_event_at, doc.plan_event_end_at, start_dt, end_dt
-            ):
-                scheduled_plans.append({
-                    "document_id": doc.id,
-                    "plan_name": self._plan_display_name(doc),
-                    "date": day_key,
-                    "start_time": start_time,
-                    "campuses": campuses,
-                    "is_continuation": is_continuation,
-                    "event_end_date": event_end_date,
-                })
-                day_counts[day_key] = day_counts.get(day_key, 0) + 1
+            for event in events:
+                if not event.starts_at:
+                    unscheduled_plans.append({
+                        "event_id": event.id,
+                        "document_id": doc.id,
+                        "plan_name": event.title or self._plan_display_name(doc),
+                        "date": None,
+                        "start_time": None,
+                        "end_time": None,
+                        "campuses": campuses,
+                        "is_continuation": False,
+                        "event_end_date": None,
+                        "needs_review": True,
+                        "source": event.source or "ai",
+                    })
+                    continue
 
-        scheduled_plans.sort(key=lambda p: (p["date"] or "", p["start_time"] or ""))
-        unscheduled_plans.sort(key=lambda p: p["plan_name"])
+                for day_key, start_time, is_continuation, event_end_date in _expand_plan_occurrences(
+                    event.starts_at, event.ends_at, start_dt, end_dt
+                ):
+                    end_time = None
+                    if (
+                        not is_continuation
+                        and event.ends_at
+                        and _naive_dt(event.ends_at).date() == _naive_dt(event.starts_at).date()
+                    ):
+                        end_time = _naive_dt(event.ends_at).isoformat()
+
+                    scheduled_plans.append({
+                        "event_id": event.id,
+                        "document_id": doc.id,
+                        "plan_name": event.title or self._plan_display_name(doc),
+                        "date": day_key,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "campuses": campuses,
+                        "is_continuation": is_continuation,
+                        "event_end_date": event_end_date,
+                        "needs_review": bool(event.needs_review),
+                        "source": event.source or "ai",
+                    })
+                    day_counts[day_key] = day_counts.get(day_key, 0) + 1
+
+        scheduled_plans.sort(key=lambda p: (p["date"] or "", p["start_time"] or "", p["event_id"] or 0))
+        unscheduled_plans.sort(key=lambda p: (p["plan_name"] or "", p["event_id"] or 0))
 
         return {
             "scheduled_plans": scheduled_plans,

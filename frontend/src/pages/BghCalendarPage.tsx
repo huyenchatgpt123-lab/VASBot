@@ -518,7 +518,7 @@ export default function BghCalendarPage() {
                         <ul className="space-y-2">
                           {plans.map((plan) => (
                             <PlanRow
-                              key={`${plan.document_id}-${plan.date}-${plan.start_time}`}
+                              key={`${plan.event_id ?? 'doc'}-${plan.document_id}-${plan.date}-${plan.start_time}`}
                               plan={plan}
                             />
                           ))}
@@ -533,16 +533,23 @@ export default function BghCalendarPage() {
               {showUnscheduled && data && data.unscheduled_plans.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <h3 className="text-sm font-semibold text-amber-800 mb-1">Chưa có thời gian</h3>
-                  <p className="text-xs text-gray-400 mb-3">Tài liệu chưa trích được ngày/giờ diễn ra (Thời gian: hoặc Ngày:)</p>
+                  <p className="text-xs text-gray-400 mb-3">
+                    Cần Admin chỉnh sửa ngày/giờ (AI chưa trích được hoặc thiếu thông tin)
+                  </p>
                   <ul className="space-y-2">
                     {data.unscheduled_plans.map((plan) => (
                       <li
-                        key={plan.document_id}
+                        key={plan.event_id ?? `doc-${plan.document_id}`}
                         className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-100"
                       >
                         <span className="text-sm text-gray-900 flex-1 min-w-0">
                           {displayPlanName(plan.plan_name)}
                         </span>
+                        {plan.needs_review && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-medium">
+                            Cần chỉnh sửa
+                          </span>
+                        )}
                         <div className="flex flex-wrap gap-1">
                           {plan.campuses.map((code) => (
                             <span key={code} className="text-xs px-2 py-0.5 rounded-full bg-white text-amber-800 border border-amber-200">
@@ -564,11 +571,17 @@ export default function BghCalendarPage() {
 }
 
 function PlanRow({ plan }: { plan: BghCalendarPlan }) {
-  const timeLabel = plan.is_continuation ? 'Tiếp diễn' : formatTime(plan.start_time);
+  const timeLabel = plan.is_continuation
+    ? 'Tiếp diễn'
+    : plan.end_time
+      ? `${formatTime(plan.start_time)}–${formatTime(plan.end_time)}`
+      : formatTime(plan.start_time);
 
   return (
-    <li className="group flex items-start gap-3 px-4 py-3 rounded-xl bg-white border border-gray-100 hover:border-primary-200 hover:shadow-sm transition-all">
-      <div className={`shrink-0 w-14 pt-0.5 text-right tabular-nums font-bold ${
+    <li className={`group flex items-start gap-3 px-4 py-3 rounded-xl bg-white border hover:shadow-sm transition-all ${
+      plan.needs_review ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100 hover:border-primary-200'
+    }`}>
+      <div className={`shrink-0 min-w-[3.5rem] pt-0.5 text-right tabular-nums font-bold ${
         plan.is_continuation ? 'text-xs text-gray-400' : 'text-sm text-primary-700'
       }`}>
         {timeLabel}
@@ -577,6 +590,9 @@ function PlanRow({ plan }: { plan: BghCalendarPlan }) {
         <p className="text-sm font-medium text-gray-900 leading-snug group-hover:text-primary-900 transition-colors">
           {displayPlanName(plan.plan_name)}
         </p>
+        {plan.needs_review && (
+          <p className="text-xs text-amber-700 mt-0.5">Cần Admin chỉnh sửa</p>
+        )}
         {plan.event_end_date && !plan.is_continuation && (
           <p className="text-xs text-gray-400 mt-0.5">
             Đến {formatShortDate(plan.event_end_date)}

@@ -12,13 +12,17 @@ class CampusResponse(BaseModel):
 
 
 class BghCalendarPlan(BaseModel):
+    event_id: Optional[int] = None
     document_id: int
     plan_name: str
     date: Optional[str] = None
     start_time: Optional[str] = None
+    end_time: Optional[str] = None
     campuses: List[str]
     is_continuation: bool = False
     event_end_date: Optional[str] = None
+    needs_review: bool = False
+    source: str = "ai"
 
 
 class BghCalendarResponse(BaseModel):

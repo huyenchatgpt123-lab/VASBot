@@ -10,6 +10,7 @@ from app.utils.pdf_processor import process_pdf
 from app.utils.word_processor import process_docx
 from app.services.faiss_service import faiss_service
 from app.services.task_extractor import task_extractor
+from app.services.plan_event_service import PlanEventService
 from app.services.storage_service import (
     upload_document_file,
     delete_stored_file,
@@ -60,8 +61,15 @@ class DocumentService:
 
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
             if plan_event:
-                doc.plan_event_at = plan_event.start
-                doc.plan_event_end_at = plan_event.end
+                # Phase 1: put on calendar when date/time was extracted.
+                # Phase 3 will add upload checkbox for opt-in (including 0-event → needs_review).
+                PlanEventService(self.db).replace_ai_events_for_document(
+                    doc,
+                    title=plan_title or doc.plan_title,
+                    starts_at=plan_event.start,
+                    ends_at=plan_event.end,
+                    include_in_calendar=True,
+                )
 
             self.db.commit()
 
@@ -133,19 +141,29 @@ class DocumentService:
             plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
 
-            if plan_title:
-                doc.plan_title = plan_title
-            doc.plan_event_at = plan_event.start if plan_event else None
-            doc.plan_event_end_at = plan_event.end if plan_event else None
+            events = PlanEventService(self.db).replace_ai_events_for_document(
+                doc,
+                title=plan_title or doc.plan_title,
+                starts_at=plan_event.start if plan_event else None,
+                ends_at=plan_event.end if plan_event else None,
+                include_in_calendar=True,
+            )
             self.db.commit()
             self.db.refresh(doc)
 
+            primary = events[0] if events else None
             return {
                 "document_id": doc.id,
                 "plan_title": doc.plan_title,
                 "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
                 "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
-                "message": "Đã trích xuất lại thông tin kế hoạch",
+                "event_count": len(events),
+                "needs_review": bool(primary.needs_review) if primary else True,
+                "message": (
+                    "Đã trích xuất lại thông tin kế hoạch — cần chỉnh sửa ngày/giờ"
+                    if (primary and primary.needs_review)
+                    else "Đã trích xuất lại thông tin kế hoạch"
+                ),
             }
         finally:
             if os.path.exists(temp_path):
