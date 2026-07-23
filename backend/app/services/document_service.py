@@ -31,6 +31,7 @@ class DocumentService:
         self, file_content: bytes, filename: str, uploaded_by: int,
         department: str = None, month: int = None, school_year: str = None,
         campus_ids: Optional[List[int]] = None,
+        include_in_calendar: bool = False,
     ) -> dict:
         from app.repositories.campus_repository import CampusRepository
 
@@ -47,6 +48,7 @@ class DocumentService:
                 filename, storage_path, uploaded_by, 0,
                 department=department, month=month, school_year=school_year,
                 campuses=campuses,
+                include_in_calendar=include_in_calendar,
             )
 
             if filename.lower().endswith(".docx"):
@@ -60,16 +62,20 @@ class DocumentService:
                 doc.plan_title = plan_title
 
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
-            if plan_event:
-                # Phase 1: put on calendar when date/time was extracted.
-                # Phase 3 will add upload checkbox for opt-in (including 0-event → needs_review).
+            if include_in_calendar:
+                # Spec: opted-in → create event; 0 date → needs_review placeholder (admin must edit)
                 PlanEventService(self.db).replace_ai_events_for_document(
                     doc,
                     title=plan_title or doc.plan_title,
-                    starts_at=plan_event.start,
-                    ends_at=plan_event.end,
+                    starts_at=plan_event.start if plan_event else None,
+                    ends_at=plan_event.end if plan_event else None,
                     include_in_calendar=True,
                 )
+            elif plan_event:
+                # Keep denormalized plan fields for Documents page, but not on calendar
+                doc.plan_event_at = plan_event.start
+                doc.plan_event_end_at = plan_event.end
+                doc.include_in_calendar = False
 
             self.db.commit()
 
@@ -99,6 +105,7 @@ class DocumentService:
                 "plan_title": doc.plan_title,
                 "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
                 "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
+                "include_in_calendar": bool(doc.include_in_calendar),
                 "page_count": page_count,
                 "department": doc.department,
                 "month": doc.month,

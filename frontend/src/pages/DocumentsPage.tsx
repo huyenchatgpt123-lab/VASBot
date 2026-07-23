@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { documentsApi, UploadMetadata } from '../api/documents';
+import { documentsApi, UploadMetadata, DuplicateUploadDetail } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import { Document } from '../types';
+import axios from 'axios';
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -59,6 +60,8 @@ export default function DocumentsPage() {
   const [uploadMonth, setUploadMonth] = useState('');
   const [uploadYear, setUploadYear] = useState('');
   const [uploadCampusIds, setUploadCampusIds] = useState<number[]>([]);
+  const [uploadIncludeCalendar, setUploadIncludeCalendar] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicateUploadDetail | null>(null);
   const [departments, setDepartments] = useState<string[]>([]);
   const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
 
@@ -99,6 +102,8 @@ export default function DocumentsPage() {
     setUploadMonth('');
     setUploadYear('');
     setUploadCampusIds([]);
+    setUploadIncludeCalendar(false);
+    setDuplicateWarning(null);
     setShowUploadModal(true);
   };
 
@@ -110,10 +115,13 @@ export default function DocumentsPage() {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setUploadFile(file);
+    if (file) {
+      setUploadFile(file);
+      setDuplicateWarning(null);
+    }
   };
 
-  const handleUploadSubmit = async () => {
+  const handleUploadSubmit = async (force = false) => {
     if (!uploadFile || !uploadDept || !uploadMonth || !uploadYear || uploadCampusIds.length === 0) {
       alert('Vui lòng điền đầy đủ thông tin và chọn ít nhất một trường.');
       return;
@@ -124,14 +132,24 @@ export default function DocumentsPage() {
       month: parseInt(uploadMonth),
       school_year: uploadYear,
       campus_ids: uploadCampusIds,
+      include_in_calendar: uploadIncludeCalendar,
+      force,
     };
 
     setUploading(true);
     try {
       await documentsApi.upload(uploadFile, metadata);
+      setDuplicateWarning(null);
       setShowUploadModal(false);
       await loadDocuments();
-    } catch {
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        const detail = err.response.data?.detail;
+        if (detail && typeof detail === 'object' && detail.code === 'duplicate_filename') {
+          setDuplicateWarning(detail as DuplicateUploadDetail);
+          return;
+        }
+      }
       alert('Upload thất bại. Vui lòng thử lại.');
     } finally {
       setUploading(false);
@@ -519,17 +537,66 @@ export default function DocumentsPage() {
                   <p className="text-xs text-gray-500 mt-1">Đã chọn: {uploadFile.name}</p>
                 )}
               </div>
+
+              <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={uploadIncludeCalendar}
+                  onChange={(e) => setUploadIncludeCalendar(e.target.checked)}
+                  className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-gray-800">Đưa vào Thời gian biểu</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Bật nếu đây là kế hoạch cần hiện trên lịch BGH. Nếu AI không tìm thấy ngày/giờ, Admin sẽ cần chỉnh sửa sau.
+                  </span>
+                </span>
+              </label>
+
+              {duplicateWarning && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <p className="text-sm font-medium text-amber-900">Đã có tài liệu cùng tên</p>
+                  <p className="text-xs text-amber-800">{duplicateWarning.message}</p>
+                  <p className="text-xs text-amber-700">
+                    Bản cũ: {duplicateWarning.existing.plan_title || duplicateWarning.existing.filename}
+                    {duplicateWarning.existing.department ? ` · ${duplicateWarning.existing.department}` : ''}
+                    {duplicateWarning.existing.created_at
+                      ? ` · ${new Date(duplicateWarning.existing.created_at).toLocaleDateString('vi-VN')}`
+                      : ''}
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateWarning(null)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-900 hover:bg-amber-100"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUploadSubmit(true)}
+                      disabled={uploading}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {uploading ? 'Đang upload...' : 'Upload tiếp'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 mt-6">
               <button
-                onClick={() => setShowUploadModal(false)}
+                onClick={() => {
+                  setDuplicateWarning(null);
+                  setShowUploadModal(false);
+                }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Hủy
               </button>
               <button
-                onClick={handleUploadSubmit}
+                onClick={() => handleUploadSubmit(false)}
                 disabled={uploading || !uploadFile || !uploadDept || !uploadMonth || !uploadYear || uploadCampusIds.length === 0}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >

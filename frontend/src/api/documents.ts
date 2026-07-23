@@ -13,7 +13,22 @@ export interface UploadMetadata {
   month: number;
   school_year: string;
   campus_ids: number[];
+  include_in_calendar?: boolean;
+  force?: boolean;
 }
+
+export type DuplicateUploadDetail = {
+  code: 'duplicate_filename';
+  message: string;
+  filename: string;
+  existing: {
+    id: number;
+    filename: string;
+    plan_title?: string | null;
+    department?: string | null;
+    created_at?: string | null;
+  };
+};
 
 export const documentsApi = {
   getAll: async (params?: {
@@ -36,6 +51,8 @@ export const documentsApi = {
     formData.append('month', metadata.month.toString());
     formData.append('school_year', metadata.school_year);
     metadata.campus_ids.forEach((id) => formData.append('campus_ids', id.toString()));
+    formData.append('include_in_calendar', metadata.include_in_calendar ? 'true' : 'false');
+    formData.append('force', metadata.force ? 'true' : 'false');
     const res = await api.post('/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

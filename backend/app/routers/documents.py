@@ -52,6 +52,8 @@ async def upload_document(
     month: int = Form(...),
     school_year: str = Form(...),
     campus_ids: List[int] = Form(...),
+    include_in_calendar: bool = Form(False),
+    force: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -78,6 +80,27 @@ async def upload_document(
     if not campuses:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Vui lòng chọn ít nhất một trường (VA1, VA3, EMC)")
 
+    doc_repo = DocumentRepository(db)
+    if not force:
+        duplicates = doc_repo.find_by_filename(file.filename)
+        if duplicates:
+            dup = duplicates[0]
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "duplicate_filename",
+                    "message": f"Đã có tài liệu cùng tên «{file.filename}». Bạn có muốn upload tiếp không?",
+                    "filename": file.filename,
+                    "existing": {
+                        "id": dup.id,
+                        "filename": dup.filename,
+                        "plan_title": dup.plan_title,
+                        "department": dup.department,
+                        "created_at": dup.created_at.isoformat() if dup.created_at else None,
+                    },
+                },
+            )
+
     content = await file.read()
     service = DocumentService(db)
 
@@ -86,6 +109,7 @@ async def upload_document(
             content, file.filename, current_user.id,
             department=upload_department, month=month, school_year=school_year,
             campus_ids=[c.id for c in campuses],
+            include_in_calendar=include_in_calendar,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))

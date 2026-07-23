@@ -38,6 +38,7 @@ class DocumentUploadResponse(BaseModel):
     plan_title: Optional[str] = None
     plan_event_at: Optional[str] = None
     plan_event_end_at: Optional[str] = None
+    include_in_calendar: bool = False
     message: str
 
 

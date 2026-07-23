@@ -13,6 +13,15 @@ class DocumentRepository:
     def get_by_id(self, doc_id: int) -> Optional[Document]:
         return self.db.query(Document).filter(Document.id == doc_id).first()
 
+    def find_by_filename(self, filename: str) -> List[Document]:
+        """Exact filename match, case-insensitive."""
+        return (
+            self.db.query(Document)
+            .filter(Document.filename.ilike(filename))
+            .order_by(Document.created_at.desc())
+            .all()
+        )
+
     def get_all(self) -> List[Document]:
         return self.db.query(Document).order_by(Document.created_at.desc()).all()
 
@@ -50,6 +59,7 @@ class DocumentRepository:
         self, filename: str, filepath: str, uploaded_by: int, page_count: int,
         department: str = None, month: int = None, school_year: str = None,
         campuses: Optional[List[Campus]] = None,
+        include_in_calendar: bool = False,
     ) -> Document:
         doc = Document(
             filename=filename,
@@ -59,6 +69,7 @@ class DocumentRepository:
             department=department,
             month=month,
             school_year=school_year,
+            include_in_calendar=include_in_calendar,
         )
         if campuses:
             doc.campuses = campuses
