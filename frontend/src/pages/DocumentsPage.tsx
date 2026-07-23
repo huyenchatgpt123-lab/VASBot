@@ -453,17 +453,17 @@ export default function DocumentsPage() {
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-4 sm:p-6 mx-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6 mx-auto min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload tài liệu</h2>
 
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tổ / Bộ phận *</label>
                 <select
                   value={uploadDept}
                   onChange={(e) => setUploadDept(e.target.value)}
                   disabled={!scopeAllDepartments}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100"
+                  className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100"
                 >
                   <option value="">-- Chọn Tổ --</option>
                   {departments.map((d) => (
@@ -477,7 +477,7 @@ export default function DocumentsPage() {
                 <select
                   value={uploadMonth}
                   onChange={(e) => setUploadMonth(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 >
                   <option value="">-- Chọn Tháng --</option>
                   {MONTHS.map((m) => (
@@ -491,7 +491,7 @@ export default function DocumentsPage() {
                 <select
                   value={uploadYear}
                   onChange={(e) => setUploadYear(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 >
                   <option value="">-- Chọn Năm học --</option>
                   {getSchoolYearOptions().map((y) => (
@@ -524,40 +524,70 @@ export default function DocumentsPage() {
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Chọn file (PDF/DOCX) *</label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx"
-                  onChange={handleFileSelect}
-                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                />
-                {uploadFile && (
-                  <p className="text-xs text-gray-500 mt-1">Đã chọn: {uploadFile.name}</p>
+                <label className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 cursor-pointer transition-colors">
+                  {uploadFile ? 'Đổi file' : 'Chọn file'}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx"
+                    onChange={handleFileSelect}
+                    className="sr-only"
+                  />
+                </label>
+                {uploadFile ? (
+                  <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 min-w-0">
+                    <span className="shrink-0 text-sm leading-5" aria-hidden>📄</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-800 break-all line-clamp-2" title={uploadFile.name}>
+                        {uploadFile.name}
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {(uploadFile.size / 1024).toFixed(0)} KB
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadFile(null);
+                        setDuplicateWarning(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="shrink-0 text-xs text-gray-400 hover:text-red-600 pt-0.5"
+                      title="Bỏ chọn"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-2">Chưa chọn file</p>
                 )}
               </div>
 
-              <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer">
+              <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer min-w-0">
                 <input
                   type="checkbox"
                   checked={uploadIncludeCalendar}
                   onChange={(e) => setUploadIncludeCalendar(e.target.checked)}
-                  className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  className="mt-0.5 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
-                <span>
+                <span className="min-w-0">
                   <span className="block text-sm font-medium text-gray-800">Đưa vào Thời gian biểu</span>
-                  <span className="block text-xs text-gray-500 mt-0.5">
+                  <span className="block text-xs text-gray-500 mt-0.5 leading-relaxed">
                     Bật nếu đây là kế hoạch cần hiện trên lịch BGH. Nếu AI không tìm thấy ngày/giờ, Admin sẽ cần chỉnh sửa sau.
                   </span>
                 </span>
               </label>
 
               {duplicateWarning && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2 min-w-0 overflow-hidden">
                   <p className="text-sm font-medium text-amber-900">Đã có tài liệu cùng tên</p>
-                  <p className="text-xs text-amber-800">{duplicateWarning.message}</p>
-                  <p className="text-xs text-amber-700">
+                  <p className="text-xs text-amber-800 break-words">{duplicateWarning.message}</p>
+                  <p
+                    className="text-xs text-amber-700 break-all line-clamp-3"
+                    title={duplicateWarning.existing.plan_title || duplicateWarning.existing.filename}
+                  >
                     Bản cũ: {duplicateWarning.existing.plan_title || duplicateWarning.existing.filename}
                     {duplicateWarning.existing.department ? ` · ${duplicateWarning.existing.department}` : ''}
                     {duplicateWarning.existing.created_at
