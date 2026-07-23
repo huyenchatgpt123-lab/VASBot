@@ -9,7 +9,9 @@ from openai import AuthenticationError, APIConnectionError, RateLimitError
 
 from app.database import get_db
 from app.schemas.document import DocumentUploadResponse, DocumentListResponse, PlanReExtractResponse
+from app.schemas.calendar import PlanEventUpdateRequest, PlanEventCreateRequest, PlanEventResponse
 from app.services.document_service import DocumentService
+from app.services.plan_event_service import PlanEventService
 from app.repositories.document_repository import DocumentRepository
 from app.services.storage_service import (
     parse_storage_ref,
@@ -211,6 +213,71 @@ def re_extract_plan_metadata(
         )
 
     return PlanReExtractResponse(**result)
+
+
+@router.patch("/plan-events/{event_id}", response_model=PlanEventResponse)
+def update_plan_event(
+    event_id: int,
+    data: PlanEventUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    service = PlanEventService(db)
+    event = service.get_by_id(event_id)
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sự kiện không tồn tại")
+    try:
+        updated = service.update_event(
+            event,
+            title=data.title,
+            starts_at=data.starts_at,
+            ends_at=data.ends_at,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return PlanEventResponse(
+        id=updated.id,
+        document_id=updated.document_id,
+        title=updated.title,
+        starts_at=updated.starts_at,
+        ends_at=updated.ends_at,
+        source=updated.source,
+        needs_review=updated.needs_review,
+        message="Đã cập nhật ngày/giờ sự kiện",
+    )
+
+
+@router.post("/{doc_id}/plan-events", response_model=PlanEventResponse)
+def create_plan_event(
+    doc_id: int,
+    data: PlanEventCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    repo = DocumentRepository(db)
+    doc = repo.get_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
+    service = PlanEventService(db)
+    try:
+        created = service.create_manual_event(
+            doc,
+            title=data.title,
+            starts_at=data.starts_at,
+            ends_at=data.ends_at,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return PlanEventResponse(
+        id=created.id,
+        document_id=created.document_id,
+        title=created.title,
+        starts_at=created.starts_at,
+        ends_at=created.ends_at,
+        source=created.source,
+        needs_review=created.needs_review,
+        message="Đã thêm sự kiện vào Thời gian biểu",
+    )
 
 
 def _get_authenticated_document(doc_id: int, token: Optional[str], db: Session):

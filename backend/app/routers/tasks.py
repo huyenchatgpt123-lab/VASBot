@@ -7,12 +7,12 @@ from app.utils.auth import get_current_user
 from app.models.user import User, UserRole
 from app.services.task_service import TaskService
 from app.repositories.user_repository import UserRepository
+from app.schemas.calendar import BghCalendarResponse
 from app.utils.permissions import (
     is_admin,
     can_manage_tasks,
     has_scope_all_departments,
 )
-from app.schemas.calendar import BghCalendarResponse
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskStatusUpdate,
     TaskResponse, TaskListResponse, TaskExtractRequest,
@@ -78,7 +78,13 @@ def get_bgh_calendar(
     current_user: User = Depends(_require_bgh_calendar),
 ):
     service = TaskService(db)
-    return service.get_bgh_calendar(start_date, end_date, campus_id=campus_id)
+    data = service.get_bgh_calendar(start_date, end_date, campus_id=campus_id)
+    # BGH xem lịch đã xếp; cảnh báo thiếu giờ / cần sửa chỉ dành cho Admin
+    if not is_admin(current_user):
+        data["unscheduled_plans"] = []
+        for plan in data.get("scheduled_plans", []):
+            plan["needs_review"] = False
+    return data
 
 
 @router.get("/assignees")

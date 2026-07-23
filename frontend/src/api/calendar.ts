@@ -26,6 +26,23 @@ export interface BghCalendarData {
   day_counts: Record<string, number>;
 }
 
+export interface PlanEventPayload {
+  title: string;
+  starts_at: string;
+  ends_at?: string | null;
+}
+
+export interface PlanEventResult {
+  id: number;
+  document_id: number;
+  title: string;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  source: string;
+  needs_review: boolean;
+  message: string;
+}
+
 export const calendarApi = {
   getBghCalendar: async (params: {
     start_date: string;
@@ -33,6 +50,14 @@ export const calendarApi = {
     campus_id?: number;
   }): Promise<BghCalendarData> => {
     const res = await api.get('/tasks/bgh-calendar', { params });
+    return res.data;
+  },
+  updatePlanEvent: async (eventId: number, data: PlanEventPayload): Promise<PlanEventResult> => {
+    const res = await api.patch(`/documents/plan-events/${eventId}`, data);
+    return res.data;
+  },
+  createPlanEvent: async (documentId: number, data: PlanEventPayload): Promise<PlanEventResult> => {
+    const res = await api.post(`/documents/${documentId}/plan-events`, data);
     return res.data;
   },
 };

@@ -14,6 +14,74 @@ class PlanEventService:
     def __init__(self, db: Session):
         self.db = db
 
+    def get_by_id(self, event_id: int) -> Optional[PlanEvent]:
+        return self.db.query(PlanEvent).filter(PlanEvent.id == event_id).first()
+
+    def update_event(
+        self,
+        event: PlanEvent,
+        *,
+        title: str,
+        starts_at: datetime,
+        ends_at: Optional[datetime] = None,
+    ) -> PlanEvent:
+        title = title.strip()
+        if not title:
+            raise ValueError("Tiêu đề không được để trống")
+        if len(title) > 500:
+            title = title[:500]
+
+        if ends_at and starts_at and ends_at < starts_at:
+            starts_at, ends_at = ends_at, starts_at
+
+        # Same-day end with only date (00:00) → treat as multi-day end; keep as-is.
+        event.title = title
+        event.starts_at = starts_at
+        event.ends_at = ends_at
+        event.source = "manual"
+        event.needs_review = False
+
+        document = event.document or self.db.query(Document).filter(Document.id == event.document_id).first()
+        if document:
+            document.include_in_calendar = True
+            self.sync_document_summary(document)
+
+        self.db.commit()
+        self.db.refresh(event)
+        return event
+
+    def create_manual_event(
+        self,
+        document: Document,
+        *,
+        title: str,
+        starts_at: datetime,
+        ends_at: Optional[datetime] = None,
+    ) -> PlanEvent:
+        title = title.strip()
+        if not title:
+            raise ValueError("Tiêu đề không được để trống")
+        if len(title) > 500:
+            title = title[:500]
+        if ends_at and starts_at and ends_at < starts_at:
+            starts_at, ends_at = ends_at, starts_at
+
+        event = PlanEvent(
+            document_id=document.id,
+            title=title,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            source="manual",
+            needs_review=False,
+        )
+        self.db.add(event)
+        document.include_in_calendar = True
+        self.db.flush()
+        self.sync_document_summary(document)
+        self.db.commit()
+        self.db.refresh(event)
+        return event
+
     def list_for_document(self, document_id: int) -> List[PlanEvent]:
         return (
             self.db.query(PlanEvent)

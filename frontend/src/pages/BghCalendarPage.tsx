@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { calendarApi, BghCalendarPlan, Campus } from '../api/calendar';
 import { documentsApi } from '../api/documents';
+import { useAuth } from '../context/AuthContext';
 
 type DatePreset = 'today' | 'tomorrow' | 'week' | 'custom';
 
@@ -118,11 +119,17 @@ function displayPlanName(name: string): string {
   return name.replace(/\.(pdf|docx)$/i, '');
 }
 
+function toLocalDateTimeIso(date: string, time: string): string {
+  const t = time && time.length >= 4 ? time : '00:00';
+  return `${date}T${t.length === 5 ? `${t}:00` : t}`;
+}
+
 function openDocumentPreview(documentId: number) {
   window.open(documentsApi.getPreviewUrl(documentId), '_blank');
 }
 
 export default function BghCalendarPage() {
+  const { isAdmin } = useAuth();
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()));
   const [activePreset, setActivePreset] = useState<DatePreset>('today');
@@ -134,6 +141,8 @@ export default function BghCalendarPage() {
   const [data, setData] = useState<Awaited<ReturnType<typeof calendarApi.getBghCalendar>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [showUnscheduled, setShowUnscheduled] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<BghCalendarPlan | null>(null);
+  const [savingEvent, setSavingEvent] = useState(false);
   const listPanelRef = useRef<HTMLDivElement>(null);
   const daySectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -170,6 +179,50 @@ export default function BghCalendarPage() {
       setLoading(false);
     }
   };
+
+  const handleSaveEvent = async (payload: {
+    title: string;
+    startDate: string;
+    startTime: string;
+    endDate: string;
+    endTime: string;
+  }) => {
+    if (!editingPlan) return;
+    if (!payload.title.trim() || !payload.startDate) {
+      alert('Vui lòng nhập tiêu đề và ngày bắt đầu.');
+      return;
+    }
+    const starts_at = toLocalDateTimeIso(payload.startDate, payload.startTime || '00:00');
+    let ends_at: string | null = null;
+    if (payload.endDate) {
+      ends_at = toLocalDateTimeIso(payload.endDate, payload.endTime || '00:00');
+    } else if (payload.endTime) {
+      ends_at = toLocalDateTimeIso(payload.startDate, payload.endTime);
+    }
+
+    setSavingEvent(true);
+    try {
+      const body = {
+        title: payload.title.trim(),
+        starts_at,
+        ends_at,
+      };
+      if (editingPlan.event_id) {
+        await calendarApi.updatePlanEvent(editingPlan.event_id, body);
+      } else {
+        await calendarApi.createPlanEvent(editingPlan.document_id, body);
+      }
+      setEditingPlan(null);
+      await loadCalendar();
+    } catch {
+      alert('Không lưu được sự kiện. Vui lòng thử lại.');
+    } finally {
+      setSavingEvent(false);
+    }
+  };
+
+  const unscheduledForAdmin = isAdmin ? (data?.unscheduled_plans ?? []) : [];
+  const adminNeedsAttentionCount = unscheduledForAdmin.length;
 
   const filterRange = useMemo(
     () => normalizeRange(filterStartDate, filterEndDate),
@@ -471,16 +524,21 @@ export default function BghCalendarPage() {
                         : 'Không có hoạt động nào trong khoảng đã chọn'}
                   </p>
                 </div>
-                {data && data.unscheduled_plans.length > 0 && (
+                {isAdmin && adminNeedsAttentionCount > 0 && (
                   <button
                     type="button"
                     onClick={() => setShowUnscheduled((v) => !v)}
                     className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
                   >
-                    Chưa có thời gian ({data.unscheduled_plans.length})
+                    Cần cập nhật ngày/giờ ({adminNeedsAttentionCount})
                   </button>
                 )}
               </div>
+              {isAdmin && adminNeedsAttentionCount > 0 && (
+                <p className="text-xs text-amber-700 mt-2">
+                  Chỉ Admin thấy cảnh báo này — bổ sung ngày/giờ để kế hoạch hiện trên lịch BGH.
+                </p>
+              )}
             </div>
 
             {/* Scrollable activity list */}
@@ -520,6 +578,8 @@ export default function BghCalendarPage() {
                             <PlanRow
                               key={`${plan.event_id ?? 'doc'}-${plan.document_id}-${plan.date}-${plan.start_time}`}
                               plan={plan}
+                              isAdmin={isAdmin}
+                              onEdit={isAdmin ? () => setEditingPlan(plan) : undefined}
                             />
                           ))}
                         </ul>
@@ -529,15 +589,15 @@ export default function BghCalendarPage() {
                 </div>
               )}
 
-              {/* Unscheduled collapsible */}
-              {showUnscheduled && data && data.unscheduled_plans.length > 0 && (
+              {/* Unscheduled — Admin only */}
+              {isAdmin && showUnscheduled && unscheduledForAdmin.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h3 className="text-sm font-semibold text-amber-800 mb-1">Chưa có thời gian</h3>
+                  <h3 className="text-sm font-semibold text-amber-800 mb-1">Cần cập nhật ngày/giờ</h3>
                   <p className="text-xs text-gray-400 mb-3">
-                    Cần Admin chỉnh sửa ngày/giờ (AI chưa trích được hoặc thiếu thông tin)
+                    Kế hoạch đã chọn đưa vào Thời gian biểu nhưng chưa có ngày/giờ. Chỉ Admin có thể sửa.
                   </p>
                   <ul className="space-y-2">
-                    {data.unscheduled_plans.map((plan) => (
+                    {unscheduledForAdmin.map((plan) => (
                       <li
                         key={plan.event_id ?? `doc-${plan.document_id}`}
                         className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-100"
@@ -545,11 +605,9 @@ export default function BghCalendarPage() {
                         <span className="text-sm text-gray-900 flex-1 min-w-0">
                           {displayPlanName(plan.plan_name)}
                         </span>
-                        {plan.needs_review && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-medium">
-                            Cần chỉnh sửa
-                          </span>
-                        )}
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-medium">
+                          Cần chỉnh sửa
+                        </span>
                         <div className="flex flex-wrap gap-1">
                           {plan.campuses.map((code) => (
                             <span key={code} className="text-xs px-2 py-0.5 rounded-full bg-white text-amber-800 border border-amber-200">
@@ -557,6 +615,13 @@ export default function BghCalendarPage() {
                             </span>
                           ))}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditingPlan(plan)}
+                          className="text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+                        >
+                          Sửa
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -566,11 +631,28 @@ export default function BghCalendarPage() {
           </div>
         </main>
       </div>
+
+      {editingPlan && (
+        <EditPlanEventModal
+          plan={editingPlan}
+          saving={savingEvent}
+          onClose={() => !savingEvent && setEditingPlan(null)}
+          onSave={handleSaveEvent}
+        />
+      )}
     </div>
   );
 }
 
-function PlanRow({ plan }: { plan: BghCalendarPlan }) {
+function PlanRow({
+  plan,
+  isAdmin,
+  onEdit,
+}: {
+  plan: BghCalendarPlan;
+  isAdmin: boolean;
+  onEdit?: () => void;
+}) {
   const timeLabel = plan.is_continuation
     ? 'Tiếp diễn'
     : plan.end_time
@@ -579,7 +661,7 @@ function PlanRow({ plan }: { plan: BghCalendarPlan }) {
 
   return (
     <li className={`group flex items-start gap-3 px-4 py-3 rounded-xl bg-white border hover:shadow-sm transition-all ${
-      plan.needs_review ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100 hover:border-primary-200'
+      isAdmin && plan.needs_review ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100 hover:border-primary-200'
     }`}>
       <div className={`shrink-0 min-w-[3.5rem] pt-0.5 text-right tabular-nums font-bold ${
         plan.is_continuation ? 'text-xs text-gray-400' : 'text-sm text-primary-700'
@@ -590,8 +672,8 @@ function PlanRow({ plan }: { plan: BghCalendarPlan }) {
         <p className="text-sm font-medium text-gray-900 leading-snug group-hover:text-primary-900 transition-colors">
           {displayPlanName(plan.plan_name)}
         </p>
-        {plan.needs_review && (
-          <p className="text-xs text-amber-700 mt-0.5">Cần Admin chỉnh sửa</p>
+        {isAdmin && plan.needs_review && (
+          <p className="text-xs text-amber-700 mt-0.5">Cần cập nhật ngày/giờ</p>
         )}
         {plan.event_end_date && !plan.is_continuation && (
           <p className="text-xs text-gray-400 mt-0.5">
@@ -609,6 +691,16 @@ function PlanRow({ plan }: { plan: BghCalendarPlan }) {
           ))}
         </div>
       </div>
+      {isAdmin && onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          title="Sửa ngày/giờ"
+          className="shrink-0 px-2 h-9 text-xs font-medium text-amber-800 hover:bg-amber-50 rounded-lg transition-colors"
+        >
+          Sửa
+        </button>
+      )}
       <button
         type="button"
         onClick={() => openDocumentPreview(plan.document_id)}
@@ -618,5 +710,128 @@ function PlanRow({ plan }: { plan: BghCalendarPlan }) {
         👁
       </button>
     </li>
+  );
+}
+
+function EditPlanEventModal({
+  plan,
+  saving,
+  onClose,
+  onSave,
+}: {
+  plan: BghCalendarPlan;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (payload: {
+    title: string;
+    startDate: string;
+    startTime: string;
+    endDate: string;
+    endTime: string;
+  }) => void;
+}) {
+  const initialStart = plan.start_time ? new Date(plan.start_time) : null;
+  const initialEnd = plan.end_time
+    ? new Date(plan.end_time)
+    : plan.event_end_date
+      ? parseDateKey(plan.event_end_date)
+      : null;
+
+  const [title, setTitle] = useState(displayPlanName(plan.plan_name));
+  const [startDate, setStartDate] = useState(
+    plan.date || (initialStart && !Number.isNaN(initialStart.getTime()) ? formatDateKey(initialStart) : formatDateKey(new Date())),
+  );
+  const [startTime, setStartTime] = useState(() => {
+    if (!initialStart || Number.isNaN(initialStart.getTime())) return '';
+    if (initialStart.getHours() === 0 && initialStart.getMinutes() === 0) return '';
+    return `${String(initialStart.getHours()).padStart(2, '0')}:${String(initialStart.getMinutes()).padStart(2, '0')}`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    if (!initialEnd || Number.isNaN(initialEnd.getTime())) return '';
+    return formatDateKey(initialEnd);
+  });
+  const [endTime, setEndTime] = useState(() => {
+    if (!plan.end_time || !initialEnd || Number.isNaN(initialEnd.getTime())) return '';
+    return `${String(initialEnd.getHours()).padStart(2, '0')}:${String(initialEnd.getMinutes()).padStart(2, '0')}`;
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 sm:p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Cập nhật ngày/giờ</h2>
+        <p className="text-xs text-gray-500 mb-4">Chỉ Admin được chỉnh sửa sự kiện trên Thời gian biểu.</p>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày bắt đầu *</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ bắt đầu</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày kết thúc</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ kết thúc</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => onSave({ title, startDate, startTime, endDate, endTime })}
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+          >
+            {saving ? 'Đang lưu...' : 'Lưu'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

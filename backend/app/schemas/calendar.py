@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
+from datetime import datetime
 
 
 class CampusResponse(BaseModel):
@@ -29,3 +30,26 @@ class BghCalendarResponse(BaseModel):
     scheduled_plans: List[BghCalendarPlan]
     unscheduled_plans: List[BghCalendarPlan]
     day_counts: dict[str, int]
+
+
+class PlanEventUpdateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=500)
+    starts_at: datetime
+    ends_at: Optional[datetime] = None
+
+
+class PlanEventCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=500)
+    starts_at: datetime
+    ends_at: Optional[datetime] = None
+
+
+class PlanEventResponse(BaseModel):
+    id: int
+    document_id: int
+    title: str
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    source: str
+    needs_review: bool
+    message: str = "Đã cập nhật sự kiện"
