@@ -161,29 +161,50 @@ class DocumentService:
             plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
 
-            events = PlanEventService(self.db).replace_ai_events_for_document(
-                doc,
-                title=plan_title or doc.plan_title,
-                starts_at=plan_event.start if plan_event else None,
-                ends_at=plan_event.end if plan_event else None,
-                include_in_calendar=True,
-            )
+            on_calendar = bool(doc.include_in_calendar)
+            events = []
+
+            if on_calendar:
+                # Opted-in: refresh AI calendar event (0 date → needs_review)
+                events = PlanEventService(self.db).replace_ai_events_for_document(
+                    doc,
+                    title=plan_title or doc.plan_title,
+                    starts_at=plan_event.start if plan_event else None,
+                    ends_at=plan_event.end if plan_event else None,
+                    include_in_calendar=True,
+                )
+            else:
+                # Not on calendar: only update denormalized metadata (same as upload without opt-in)
+                if plan_title:
+                    doc.plan_title = plan_title
+                if plan_event:
+                    doc.plan_event_at = plan_event.start
+                    doc.plan_event_end_at = plan_event.end
+                else:
+                    doc.plan_event_at = None
+                    doc.plan_event_end_at = None
+                doc.include_in_calendar = False
+
             self.db.commit()
             self.db.refresh(doc)
 
             primary = events[0] if events else None
+            needs_review = bool(primary.needs_review) if primary else (on_calendar and not plan_event)
+            if on_calendar and primary and primary.needs_review:
+                message = "Đã trích xuất lại thông tin kế hoạch — cần chỉnh sửa ngày/giờ"
+            elif plan_event or plan_title:
+                message = "Đã trích xuất lại thông tin kế hoạch"
+            else:
+                message = "Đã chạy lại trích xuất — không tìm thấy tiêu đề/ngày trong file"
+
             return {
                 "document_id": doc.id,
                 "plan_title": doc.plan_title,
                 "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
                 "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
                 "event_count": len(events),
-                "needs_review": bool(primary.needs_review) if primary else True,
-                "message": (
-                    "Đã trích xuất lại thông tin kế hoạch — cần chỉnh sửa ngày/giờ"
-                    if (primary and primary.needs_review)
-                    else "Đã trích xuất lại thông tin kế hoạch"
-                ),
+                "needs_review": needs_review,
+                "message": message,
             }
         finally:
             if os.path.exists(temp_path):

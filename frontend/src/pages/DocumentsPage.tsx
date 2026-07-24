@@ -199,8 +199,9 @@ export default function DocumentsPage() {
       alert(result.message + (result.plan_event_at
         ? `\nNgày: ${formatPlanEventAt(result.plan_event_at, result.plan_event_end_at)}`
         : '\nKhông tìm thấy Thời gian:/Ngày: trong file.'));
-    } catch {
-      alert('Trích xuất lại thất bại.');
+    } catch (err: unknown) {
+      const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
+      alert(typeof detail === 'string' ? detail : 'Trích xuất lại thất bại.');
     } finally {
       setReExtractingId(null);
     }
