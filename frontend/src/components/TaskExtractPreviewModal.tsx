@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tasksApi, TaskExtractResult, TaskUser } from '../api/tasks';
+import { useAuth } from '../context/AuthContext';
 
 export type PreviewTaskRow = {
   title: string;
@@ -21,7 +22,24 @@ function toDateInputValue(deadline: string | null | undefined): string {
   return deadline.slice(0, 10);
 }
 
+function matchesSearch(u: TaskUser, q: string): boolean {
+  if (!q) return true;
+  return (
+    u.name.toLowerCase().includes(q) ||
+    (u.nickname || '').toLowerCase().includes(q) ||
+    (u.department || '').toLowerCase().includes(q)
+  );
+}
+
+function sortByName(a: TaskUser, b: TaskUser): number {
+  return a.name.localeCompare(b.name, 'vi');
+}
+
 export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: Props) {
+  const { user, canManageTasks, scopeAllDepartments } = useAuth();
+  const leadDept = user?.department || '';
+  const isTeamLead = canManageTasks && !scopeAllDepartments && !!leadDept;
+
   const [rows, setRows] = useState<PreviewTaskRow[]>(() =>
     (preview.tasks || []).map((t) => ({
       title: t.title || '',
@@ -34,6 +52,7 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
   );
   const [users, setUsers] = useState<TaskUser[]>([]);
   const [userSearch, setUserSearch] = useState('');
+  const [showAllDepts, setShowAllDepts] = useState(!isTeamLead);
   const [saving, setSaving] = useState(false);
   const [replaceMode, setReplaceMode] = useState(false);
 
@@ -41,18 +60,35 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
     tasksApi.getUsers().then(setUsers).catch(() => setUsers([]));
   }, []);
 
-  const filteredUsers = useMemo(() => {
+  const { myDeptUsers, otherDeptCount } = useMemo(() => {
     const q = userSearch.trim().toLowerCase();
-    if (!q) return users.slice(0, 80);
-    return users
-      .filter(
-        (u) =>
-          u.name.toLowerCase().includes(q) ||
-          (u.nickname || '').toLowerCase().includes(q) ||
-          (u.department || '').toLowerCase().includes(q),
-      )
-      .slice(0, 80);
-  }, [users, userSearch]);
+    const mine = users.filter((u) => u.department === leadDept).filter((u) => matchesSearch(u, q)).sort(sortByName);
+    return {
+      myDeptUsers: mine,
+      otherDeptCount: users.filter((u) => u.department !== leadDept).length,
+    };
+  }, [users, userSearch, leadDept]);
+
+  /** Admin / đã mở rộng: nhóm theo phòng ban */
+  const groupedAllUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    const map = new Map<string, TaskUser[]>();
+    for (const u of users) {
+      if (!matchesSearch(u, q)) continue;
+      const dept = u.department || 'Chưa gán';
+      if (!map.has(dept)) map.set(dept, []);
+      map.get(dept)!.push(u);
+    }
+    for (const list of map.values()) list.sort(sortByName);
+    const entries = Array.from(map.entries()).sort((a, b) => {
+      if (leadDept) {
+        if (a[0] === leadDept) return -1;
+        if (b[0] === leadDept) return 1;
+      }
+      return a[0].localeCompare(b[0], 'vi');
+    });
+    return entries;
+  }, [users, userSearch, leadDept]);
 
   const unmatchedCount = rows.filter((r) => !r.assignee_id).length;
 
@@ -68,6 +104,14 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
     const u = users.find((x) => x.id === userId);
     if (!u) return;
     updateRow(index, { assignee_id: u.id, assignee_name: u.name });
+  };
+
+  /** Giữ option cho người đã chọn nếu đang thu gọn và họ thuộc tổ khác */
+  const selectedOutsidePool = (assigneeId: number | null): TaskUser | null => {
+    if (!assigneeId || !isTeamLead || showAllDepts) return null;
+    const u = users.find((x) => x.id === assigneeId);
+    if (!u || u.department === leadDept) return null;
+    return u;
   };
 
   const handleSave = async () => {
@@ -119,6 +163,14 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
     }
   };
 
+  const renderUserOption = (u: TaskUser) => (
+    <option key={u.id} value={u.id}>
+      {u.name}
+      {u.nickname ? ` (${u.nickname})` : ''}
+      {!isTeamLead || showAllDepts ? (u.department ? ` · ${u.department}` : '') : ''}
+    </option>
+  );
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
@@ -143,6 +195,20 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
               className="border border-gray-200 rounded-md px-2 py-1 text-sm w-40"
             />
           </label>
+          {isTeamLead && (
+            <button
+              type="button"
+              onClick={() => setShowAllDepts((v) => !v)}
+              className="text-xs font-medium px-2.5 py-1 rounded-md border border-primary-200 text-primary-700 bg-primary-50 hover:bg-primary-100"
+            >
+              {showAllDepts
+                ? `Thu gọn — chỉ tổ ${leadDept}`
+                : `Xem thêm (${otherDeptCount} người tổ khác)`}
+            </button>
+          )}
+          {isTeamLead && !showAllDepts && (
+            <span className="text-[11px] text-gray-400">Đang hiện tổ {leadDept}</span>
+          )}
           {preview.has_duplicates && (
             <label className="flex items-center gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1 cursor-pointer">
               <input
@@ -162,78 +228,93 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
             </p>
           ) : (
             <div className="space-y-2">
-              {rows.map((row, index) => (
-                <div
-                  key={index}
-                  className="grid grid-cols-1 md:grid-cols-[1fr_1fr_140px_auto] gap-2 items-start border border-gray-100 rounded-lg p-3"
-                >
-                  <div>
-                    <label className="text-[11px] text-gray-400">Công việc</label>
-                    <input
-                      value={row.title}
-                      onChange={(e) => updateRow(index, { title: e.target.value })}
-                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400 flex items-center gap-1">
-                      Người nhận
-                      {row.assignee_id ? (
-                        <span className="text-green-600">✓ khớp</span>
-                      ) : (
-                        <span className="text-amber-600">? chưa khớp</span>
-                      )}
-                    </label>
-                    <input
-                      value={row.assignee_name}
-                      onChange={(e) =>
-                        updateRow(index, { assignee_name: e.target.value, assignee_id: null })
-                      }
-                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm mb-1"
-                    />
-                    <select
-                      value={row.assignee_id ?? ''}
-                      onChange={(e) => {
-                        const id = e.target.value ? Number(e.target.value) : null;
-                        if (id) assignUser(index, id);
-                        else updateRow(index, { assignee_id: null });
-                      }}
-                      className="w-full border border-gray-200 rounded-md px-2 py-1 text-xs text-gray-700"
-                    >
-                      <option value="">— Chọn tài khoản —</option>
-                      {filteredUsers.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                          {u.nickname ? ` (${u.nickname})` : ''}
-                          {u.department ? ` · ${u.department}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400">Deadline</label>
-                    <input
-                      type="date"
-                      value={toDateInputValue(row.deadline)}
-                      onChange={(e) =>
-                        updateRow(index, {
-                          deadline: e.target.value || null,
-                          has_scheduled_time: false,
-                        })
-                      }
-                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeRow(index)}
-                    className="md:mt-5 text-xs text-red-600 hover:bg-red-50 rounded-md px-2 py-1.5"
-                    title="Bỏ dòng"
+              {rows.map((row, index) => {
+                const outside = selectedOutsidePool(row.assignee_id);
+                return (
+                  <div
+                    key={index}
+                    className="grid grid-cols-1 md:grid-cols-[1fr_1fr_140px_auto] gap-2 items-start border border-gray-100 rounded-lg p-3"
                   >
-                    Bỏ
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <label className="text-[11px] text-gray-400">Công việc</label>
+                      <input
+                        value={row.title}
+                        onChange={(e) => updateRow(index, { title: e.target.value })}
+                        className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-gray-400 flex items-center gap-1">
+                        Người nhận
+                        {row.assignee_id ? (
+                          <span className="text-green-600">✓ khớp</span>
+                        ) : (
+                          <span className="text-amber-600">? chưa khớp</span>
+                        )}
+                      </label>
+                      <input
+                        value={row.assignee_name}
+                        onChange={(e) =>
+                          updateRow(index, { assignee_name: e.target.value, assignee_id: null })
+                        }
+                        className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm mb-1"
+                      />
+                      <select
+                        value={row.assignee_id ?? ''}
+                        onChange={(e) => {
+                          const id = e.target.value ? Number(e.target.value) : null;
+                          if (id) assignUser(index, id);
+                          else updateRow(index, { assignee_id: null });
+                        }}
+                        className="w-full border border-gray-200 rounded-md px-2 py-1 text-xs text-gray-700"
+                      >
+                        <option value="">— Chọn tài khoản —</option>
+                        {outside && (
+                          <optgroup label={`Đã chọn · ${outside.department || 'Khác'}`}>
+                            {renderUserOption(outside)}
+                          </optgroup>
+                        )}
+                        {isTeamLead && !showAllDepts ? (
+                          <optgroup label={`Tổ ${leadDept}`}>
+                            {myDeptUsers.map(renderUserOption)}
+                          </optgroup>
+                        ) : (
+                          groupedAllUsers.map(([dept, list]) => (
+                            <optgroup
+                              key={dept}
+                              label={dept === leadDept ? `Tổ ${dept} (của bạn)` : dept}
+                            >
+                              {list.map(renderUserOption)}
+                            </optgroup>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-gray-400">Deadline</label>
+                      <input
+                        type="date"
+                        value={toDateInputValue(row.deadline)}
+                        onChange={(e) =>
+                          updateRow(index, {
+                            deadline: e.target.value || null,
+                            has_scheduled_time: false,
+                          })
+                        }
+                        className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeRow(index)}
+                      className="md:mt-5 text-xs text-red-600 hover:bg-red-50 rounded-md px-2 py-1.5"
+                      title="Bỏ dòng"
+                    >
+                      Bỏ
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
