@@ -55,6 +55,7 @@ async def upload_document(
     school_year: str = Form(...),
     campus_ids: List[int] = Form(...),
     include_in_calendar: bool = Form(False),
+    extract_tasks: bool = Form(True),
     force: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -112,6 +113,7 @@ async def upload_document(
             department=upload_department, month=month, school_year=school_year,
             campus_ids=[c.id for c in campuses],
             include_in_calendar=include_in_calendar,
+            extract_tasks=extract_tasks,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))

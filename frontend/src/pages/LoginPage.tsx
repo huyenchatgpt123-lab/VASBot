@@ -34,7 +34,13 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const user = await login(email, password);
-      navigate(user.must_change_password ? '/change-password' : '/tasks');
+      if (user.must_change_password) {
+        navigate('/change-password');
+        return;
+      }
+      const isAdmin = user.role === 'admin';
+      const isBghOnly = Boolean(user.permissions?.scope_all_departments && !isAdmin);
+      navigate(isBghOnly ? '/bgh-calendar' : '/tasks');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(message || 'Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.');

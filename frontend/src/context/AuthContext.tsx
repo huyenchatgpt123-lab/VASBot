@@ -22,6 +22,9 @@ interface AuthContextType {
   changePassword: (data: ChangePasswordPayload) => Promise<User>;
   logout: () => void;
   isAdmin: boolean;
+  /** BGH (scope all) nhưng không phải Admin — không dùng module Công việc */
+  isBghOnly: boolean;
+  homePath: string;
   permissions: UserPermissions;
   canUpload: boolean;
   canManageTasks: boolean;
@@ -86,6 +89,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const isAdmin = user?.role === 'admin';
+  const scopeAllDepartments = isAdmin || permissions.scope_all_departments;
+  const isBghOnly = Boolean(user && scopeAllDepartments && !isAdmin);
+  const homePath = isBghOnly ? '/bgh-calendar' : '/tasks';
 
   return (
     <AuthContext.Provider
@@ -96,11 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changePassword,
         logout,
         isAdmin,
+        isBghOnly,
+        homePath,
         permissions,
         canUpload: isAdmin || permissions.can_upload,
         canManageTasks: isAdmin || permissions.can_manage_tasks,
         canDeleteDocuments: isAdmin || permissions.can_delete_documents,
-        scopeAllDepartments: isAdmin || permissions.scope_all_departments,
+        scopeAllDepartments,
       }}
     >
       {children}

@@ -72,7 +72,11 @@ export const tasksApi = {
     return res.data;
   },
 
-  saveTasks: async (documentId: number, tasks: any[], replace: boolean = false) => {
+  saveTasks: async (
+    documentId: number,
+    tasks: any[],
+    replace: boolean = false,
+  ): Promise<{ message: string; count: number }> => {
     const res = await api.post(`/tasks/save?document_id=${documentId}&replace=${replace}`, tasks);
     return res.data;
   },

@@ -8,7 +8,7 @@ interface ChangePasswordPageProps {
 }
 
 export default function ChangePasswordPage({ required = false }: ChangePasswordPageProps) {
-  const { user, changePassword, logout } = useAuth();
+  const { user, changePassword, logout, homePath } = useAuth();
   const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -39,7 +39,7 @@ export default function ChangePasswordPage({ required = false }: ChangePasswordP
         new_password: newPassword,
         confirm_password: confirmPassword,
       });
-      navigate('/tasks');
+      navigate(homePath);
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(typeof message === 'string' ? message : 'Không thể đổi mật khẩu');

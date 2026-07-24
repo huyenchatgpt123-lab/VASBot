@@ -8,12 +8,12 @@ import { tasksApi } from '../api/tasks';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, isBghOnly } = useAuth();
   const [showTaskWelcome, setShowTaskWelcome] = useState(false);
   const [incompleteTaskCount, setIncompleteTaskCount] = useState(0);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || isBghOnly) return;
     if (sessionStorage.getItem('showTaskWelcome') !== '1') return;
 
     const loadTaskCount = async () => {
@@ -30,7 +30,7 @@ export default function Layout() {
     };
 
     loadTaskCount();
-  }, [user]);
+  }, [user, isBghOnly]);
 
   const dismissTaskWelcome = () => {
     setShowTaskWelcome(false);

@@ -14,7 +14,43 @@ export interface UploadMetadata {
   school_year: string;
   campus_ids: number[];
   include_in_calendar?: boolean;
+  extract_tasks?: boolean;
   force?: boolean;
+}
+
+export interface TaskPreviewItem {
+  title: string;
+  assignee_name: string;
+  assignee_id?: number | null;
+  deadline?: string | null;
+  has_scheduled_time?: boolean;
+  status?: string;
+  document_id?: number;
+  note?: string | null;
+}
+
+export interface TaskPreviewPayload {
+  tasks: TaskPreviewItem[];
+  document_id: number;
+  document_name?: string | null;
+  has_duplicates: boolean;
+  duplicate_count: number;
+}
+
+export interface DocumentUploadResponse {
+  id: number;
+  filename: string;
+  page_count: number;
+  department?: string | null;
+  month?: number | null;
+  school_year?: string | null;
+  plan_title?: string | null;
+  plan_event_at?: string | null;
+  plan_event_end_at?: string | null;
+  include_in_calendar: boolean;
+  extract_tasks: boolean;
+  task_preview?: TaskPreviewPayload | null;
+  message: string;
 }
 
 export type DuplicateUploadDetail = {
@@ -44,7 +80,7 @@ export const documentsApi = {
     const res = await api.get('/documents', { params });
     return res.data;
   },
-  upload: async (file: File, metadata: UploadMetadata) => {
+  upload: async (file: File, metadata: UploadMetadata): Promise<DocumentUploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('department', metadata.department);
@@ -52,6 +88,7 @@ export const documentsApi = {
     formData.append('school_year', metadata.school_year);
     metadata.campus_ids.forEach((id) => formData.append('campus_ids', id.toString()));
     formData.append('include_in_calendar', metadata.include_in_calendar ? 'true' : 'false');
+    formData.append('extract_tasks', metadata.extract_tasks !== false ? 'true' : 'false');
     formData.append('force', metadata.force ? 'true' : 'false');
     const res = await api.post('/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

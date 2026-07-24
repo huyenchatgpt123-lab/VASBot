@@ -160,9 +160,21 @@ class TaskService:
         }
 
     def save_extracted_tasks(
-        self, document_id: int, tasks_data: List[Dict], replace: bool = False
+        self, document_id: int, tasks_data: List[Dict], replace: bool = False,
+        user: Optional[User] = None,
     ) -> List[Task]:
         """Save extracted tasks to DB. If replace=True, delete existing tasks from same document."""
+        doc = self.db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            raise ValueError("Tài liệu không tồn tại")
+
+        if user is not None:
+            if not is_admin(user) and not can_manage_tasks(user):
+                raise PermissionError("Bạn không có quyền lưu công việc")
+            if not is_admin(user) and not has_scope_all_departments(user):
+                if not user.department or doc.department != user.department:
+                    raise PermissionError("Chỉ được lưu công việc trong kế hoạch của tổ mình")
+
         if replace:
             self.repo.delete_by_document(document_id)
 
@@ -183,12 +195,17 @@ class TaskService:
                         )
 
             assignee_id = t.get("assignee_id")
-            if not assignee_id:
-                assignee_id = self._match_user(t["assignee_name"])
+            assignee_name = (t.get("assignee_name") or "").strip()
+            if not assignee_id and assignee_name:
+                assignee_id = self._match_user(assignee_name)
+            if assignee_id and not assignee_name:
+                assignee = self.db.query(User).filter(User.id == assignee_id).first()
+                if assignee:
+                    assignee_name = assignee.name
 
             tasks_to_create.append({
                 "title": t["title"],
-                "assignee_name": t["assignee_name"],
+                "assignee_name": assignee_name or "Chưa gán",
                 "assignee_id": assignee_id,
                 "deadline": deadline,
                 "has_scheduled_time": has_scheduled_time,
@@ -196,6 +213,7 @@ class TaskService:
                 "document_id": document_id,
                 "note": t.get("note"),
                 "department": self._resolve_task_department(assignee_id),
+                "created_by_id": user.id if user else None,
             })
 
         return self.repo.create_many(tasks_to_create)

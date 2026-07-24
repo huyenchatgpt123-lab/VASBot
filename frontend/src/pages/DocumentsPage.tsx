@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { documentsApi, UploadMetadata, DuplicateUploadDetail } from '../api/documents';
+import { documentsApi, UploadMetadata, DuplicateUploadDetail, TaskPreviewPayload } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import { Document } from '../types';
 import axios from 'axios';
+import TaskExtractPreviewModal from '../components/TaskExtractPreviewModal';
+import { TaskExtractResult } from '../api/tasks';
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -45,7 +47,7 @@ export default function DocumentsPage() {
   const [total, setTotal] = useState(0);
   const pageSize = 20;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { canUpload, canDeleteDocuments, scopeAllDepartments, user, isAdmin } = useAuth();
+  const { canUpload, canDeleteDocuments, scopeAllDepartments, user, isAdmin, canManageTasks } = useAuth();
   const [reExtractingId, setReExtractingId] = useState<number | null>(null);
 
   // Filters
@@ -61,6 +63,8 @@ export default function DocumentsPage() {
   const [uploadYear, setUploadYear] = useState('');
   const [uploadCampusIds, setUploadCampusIds] = useState<number[]>([]);
   const [uploadIncludeCalendar, setUploadIncludeCalendar] = useState(false);
+  const [uploadExtractTasks, setUploadExtractTasks] = useState(true);
+  const [taskPreview, setTaskPreview] = useState<TaskExtractResult | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<DuplicateUploadDetail | null>(null);
   const [departments, setDepartments] = useState<string[]>([]);
   const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
@@ -103,6 +107,7 @@ export default function DocumentsPage() {
     setUploadYear('');
     setUploadCampusIds([]);
     setUploadIncludeCalendar(false);
+    setUploadExtractTasks(canManageTasks);
     setDuplicateWarning(null);
     setShowUploadModal(true);
   };
@@ -133,14 +138,27 @@ export default function DocumentsPage() {
       school_year: uploadYear,
       campus_ids: uploadCampusIds,
       include_in_calendar: uploadIncludeCalendar,
+      extract_tasks: canManageTasks && uploadExtractTasks,
       force,
     };
 
     setUploading(true);
     try {
-      await documentsApi.upload(uploadFile, metadata);
+      const result = await documentsApi.upload(uploadFile, metadata);
       setDuplicateWarning(null);
       setShowUploadModal(false);
+
+      const preview = result.task_preview as TaskPreviewPayload | null | undefined;
+      if (canManageTasks && result.extract_tasks && preview) {
+        setTaskPreview({
+          tasks: preview.tasks || [],
+          document_id: preview.document_id || result.id,
+          document_name: preview.document_name || result.plan_title || result.filename,
+          has_duplicates: Boolean(preview.has_duplicates),
+          duplicate_count: preview.duplicate_count || 0,
+        });
+      }
+
       await loadDocuments();
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 409) {
@@ -611,6 +629,21 @@ export default function DocumentsPage() {
                 </span>
               </label>
 
+              {canManageTasks && (
+                <label className="flex items-center gap-2.5 min-w-0 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={uploadExtractTasks}
+                    onChange={(e) => setUploadExtractTasks(e.target.checked)}
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 shrink-0"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Trích xuất công việc
+                    <span className="text-gray-400 font-normal"> — duyệt trước khi lưu</span>
+                  </span>
+                </label>
+              )}
+
               {duplicateWarning && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 min-w-0">
                   <div className="flex items-start justify-between gap-2">
@@ -668,6 +701,14 @@ export default function DocumentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {taskPreview && (
+        <TaskExtractPreviewModal
+          preview={taskPreview}
+          onClose={() => setTaskPreview(null)}
+          onSaved={() => setTaskPreview(null)}
+        />
       )}
     </div>
   );

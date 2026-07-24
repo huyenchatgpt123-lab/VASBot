@@ -20,15 +20,19 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
-  const { isAdmin, scopeAllDepartments } = useAuth();
+  const { isAdmin, scopeAllDepartments, isBghOnly } = useAuth();
   const [taskCount, setTaskCount] = useState(0);
   const [feedbackCount, setFeedbackCount] = useState(0);
 
   useEffect(() => {
+    if (isBghOnly) {
+      setTaskCount(0);
+      return;
+    }
     loadTaskCount();
     const interval = setInterval(loadTaskCount, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isBghOnly]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -85,6 +89,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           .filter((item) => {
             if (item.adminOnly && !isAdmin) return false;
             if ('bghOnly' in item && item.bghOnly && !scopeAllDepartments) return false;
+            if (item.path === '/tasks' && isBghOnly) return false;
             return true;
           })
           .map((item) => (

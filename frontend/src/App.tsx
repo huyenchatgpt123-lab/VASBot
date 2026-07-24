@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { ProtectedRoute, AdminRoute, ChangePasswordRoute, BghRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, AdminRoute, ChangePasswordRoute, BghRoute, TasksRoute, HomeRedirect } from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -37,7 +37,14 @@ function App() {
             }
           >
             <Route path="/documents" element={<DocumentsPage />} />
-            <Route path="/tasks" element={<TasksPage />} />
+            <Route
+              path="/tasks"
+              element={
+                <TasksRoute>
+                  <TasksPage />
+                </TasksRoute>
+              }
+            />
             <Route
               path="/bgh-calendar"
               element={
@@ -65,8 +72,8 @@ function App() {
               }
             />
           </Route>
-          <Route path="/chat" element={<Navigate to="/tasks" replace />} />
-          <Route path="*" element={<Navigate to="/tasks" replace />} />
+          <Route path="/chat" element={<HomeRedirect />} />
+          <Route path="*" element={<HomeRedirect />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

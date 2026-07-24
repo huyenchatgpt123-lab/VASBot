@@ -144,11 +144,8 @@ def update_task_status(
 def extract_tasks(
     body: TaskExtractRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_task_manager),
 ):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền trích xuất")
-
     service = TaskService(db)
     try:
         result = service.extract_tasks_from_document(body.document_id)
@@ -164,14 +161,18 @@ def save_tasks(
     replace: bool = Query(False),
     tasks: List[TaskCreate] = ...,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_task_manager),
 ):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền lưu")
-
     service = TaskService(db)
     tasks_data = [t.model_dump() for t in tasks]
-    saved = service.save_extracted_tasks(document_id, tasks_data, replace=replace)
+    try:
+        saved = service.save_extracted_tasks(
+            document_id, tasks_data, replace=replace, user=current_user,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return {"message": f"Đã lưu {len(saved)} công việc", "count": len(saved)}
 
 

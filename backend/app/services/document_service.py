@@ -32,6 +32,7 @@ class DocumentService:
         department: str = None, month: int = None, school_year: str = None,
         campus_ids: Optional[List[int]] = None,
         include_in_calendar: bool = False,
+        extract_tasks: bool = True,
     ) -> dict:
         from app.repositories.campus_repository import CampusRepository
 
@@ -89,15 +90,25 @@ class DocumentService:
                 operation="embedding",
             )
 
-            try:
-                from app.services.task_service import TaskService
-                task_service = TaskService(self.db)
-                extraction = task_service.extract_tasks_from_document(doc.id)
-                if extraction["tasks"]:
-                    task_service.save_extracted_tasks(doc.id, extraction["tasks"], replace=False)
-                    logger.info(f"Auto-extracted {len(extraction['tasks'])} tasks from document {doc.id}")
-            except Exception as e:
-                logger.warning(f"Task auto-extraction failed for doc {doc.id}: {e}")
+            task_preview = None
+            if extract_tasks:
+                try:
+                    from app.services.task_service import TaskService
+                    task_preview = TaskService(self.db).extract_tasks_from_document(doc.id)
+                    logger.info(
+                        "Task extract preview for doc %s: %s rows (not saved)",
+                        doc.id,
+                        len(task_preview.get("tasks") or []),
+                    )
+                except Exception as e:
+                    logger.warning(f"Task extraction preview failed for doc {doc.id}: {e}")
+                    task_preview = {
+                        "tasks": [],
+                        "document_id": doc.id,
+                        "document_name": doc.plan_title or filename,
+                        "has_duplicates": False,
+                        "duplicate_count": 0,
+                    }
 
             return {
                 "id": doc.id,
@@ -106,6 +117,8 @@ class DocumentService:
                 "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
                 "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
                 "include_in_calendar": bool(doc.include_in_calendar),
+                "extract_tasks": bool(extract_tasks),
+                "task_preview": task_preview,
                 "page_count": page_count,
                 "department": doc.department,
                 "month": doc.month,
