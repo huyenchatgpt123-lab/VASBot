@@ -3,6 +3,7 @@ import os
 import tempfile
 import uuid
 from typing import Optional, Tuple
+from urllib.request import urlopen
 
 import cloudinary
 import cloudinary.uploader
