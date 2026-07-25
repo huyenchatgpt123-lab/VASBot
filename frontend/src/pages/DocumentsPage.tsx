@@ -4,7 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { Document } from '../types';
 import axios from 'axios';
 import TaskExtractPreviewModal from '../components/TaskExtractPreviewModal';
-import { TaskExtractResult } from '../api/tasks';
+import { TaskExtractResult, tasksApi } from '../api/tasks';
+
+type ReExtractChoice = 'tasks' | 'calendar' | null;
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -49,6 +51,7 @@ export default function DocumentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { canUpload, canDeleteDocuments, scopeAllDepartments, user, isAdmin, canManageTasks } = useAuth();
   const [reExtractingId, setReExtractingId] = useState<number | null>(null);
+  const [reExtractDocId, setReExtractDocId] = useState<number | null>(null);
 
   // Filters
   const [filterDept, setFilterDept] = useState('');
@@ -190,22 +193,73 @@ export default function DocumentsPage() {
     window.open(url, '_blank');
   };
 
-  const handleReExtract = async (id: number) => {
-    if (!confirm('Trích xuất lại tiêu đề và ngày diễn ra kế hoạch từ file gốc?')) return;
+  const openReExtractChooser = (id: number) => {
+    setReExtractDocId(id);
+  };
+
+  const closeReExtractChooser = () => {
+    if (reExtractingId) return;
+    setReExtractDocId(null);
+  };
+
+  const runReExtractTasks = async (id: number) => {
     setReExtractingId(id);
     try {
-      const result = await documentsApi.reExtractPlan(id);
-      await loadDocuments();
-      alert(result.message + (result.plan_event_at
-        ? `\nNgày: ${formatPlanEventAt(result.plan_event_at, result.plan_event_end_at)}`
-        : '\nKhông tìm thấy Thời gian:/Ngày: trong file.'));
+      const preview = await tasksApi.extract(id);
+      setReExtractDocId(null);
+      setTaskPreview({
+        tasks: preview.tasks || [],
+        document_id: preview.document_id || id,
+        document_name: preview.document_name || `Tài liệu #${id}`,
+        has_duplicates: Boolean(preview.has_duplicates),
+        duplicate_count: preview.duplicate_count || 0,
+      });
     } catch (err: unknown) {
       const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
-      alert(typeof detail === 'string' ? detail : 'Trích xuất lại thất bại.');
+      alert(typeof detail === 'string' ? detail : 'Trích xuất công việc thất bại.');
     } finally {
       setReExtractingId(null);
     }
   };
+
+  const runReExtractCalendar = async (id: number) => {
+    setReExtractingId(id);
+    try {
+      const result = await documentsApi.reExtractPlan(id, { put_on_calendar: true });
+      setReExtractDocId(null);
+      await loadDocuments();
+      alert(
+        result.message +
+          (result.plan_event_at
+            ? `\nNgày: ${formatPlanEventAt(result.plan_event_at, result.plan_event_end_at)}`
+            : '\nKhông tìm thấy Thời gian:/Ngày: trong file — kiểm tra/sửa trên Thời gian biểu.'),
+      );
+    } catch (err: unknown) {
+      const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
+      alert(typeof detail === 'string' ? detail : 'Trích lên Thời gian biểu thất bại.');
+    } finally {
+      setReExtractingId(null);
+    }
+  };
+
+  const handleReExtractChoice = async (choice: ReExtractChoice) => {
+    if (!reExtractDocId || !choice) return;
+    if (choice === 'tasks') {
+      if (!canManageTasks) {
+        alert('Bạn không có quyền trích xuất công việc.');
+        return;
+      }
+      await runReExtractTasks(reExtractDocId);
+      return;
+    }
+    if (!isAdmin) {
+      alert('Chỉ Admin mới trích lên Thời gian biểu.');
+      return;
+    }
+    await runReExtractCalendar(reExtractDocId);
+  };
+
+  const canReExtract = isAdmin || canManageTasks;
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -346,9 +400,9 @@ export default function DocumentsPage() {
                       Xóa
                     </button>
                   )}
-                  {isAdmin && (
+                  {canReExtract && (
                     <button
-                      onClick={() => handleReExtract(doc.id)}
+                      onClick={() => openReExtractChooser(doc.id)}
                       disabled={reExtractingId === doc.id}
                       className="text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50"
                     >
@@ -423,12 +477,12 @@ export default function DocumentsPage() {
                           Xóa
                         </button>
                       )}
-                      {isAdmin && (
+                      {canReExtract && (
                         <button
-                          onClick={() => handleReExtract(doc.id)}
+                          onClick={() => openReExtractChooser(doc.id)}
                           disabled={reExtractingId === doc.id}
                           className="text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50"
-                          title="Trích xuất lại tiêu đề và ngày diễn ra"
+                          title="Trích lại công việc hoặc Thời gian biểu"
                         >
                           {reExtractingId === doc.id ? '...' : 'Trích lại'}
                         </button>
@@ -698,6 +752,57 @@ export default function DocumentsPage() {
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 {uploading ? 'Đang tải lên...' : 'Upload'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reExtractDocId !== null && (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">Trích lại từ tài liệu</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Chọn loại trích xuất bạn muốn chạy lại.
+              </p>
+            </div>
+            <div className="p-5 space-y-3">
+              {canManageTasks && (
+                <button
+                  type="button"
+                  disabled={reExtractingId !== null}
+                  onClick={() => handleReExtractChoice('tasks')}
+                  className="w-full text-left rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50/50 px-4 py-3 disabled:opacity-50"
+                >
+                  <p className="text-sm font-semibold text-gray-900">Trích công việc</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    AI lấy danh sách việc giao người → duyệt trước khi lưu vào trang Công việc
+                  </p>
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  type="button"
+                  disabled={reExtractingId !== null}
+                  onClick={() => handleReExtractChoice('calendar')}
+                  className="w-full text-left rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50/50 px-4 py-3 disabled:opacity-50"
+                >
+                  <p className="text-sm font-semibold text-gray-900">Trích lên Thời gian biểu</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    AI lấy tiêu đề / ngày giờ → đưa hoặc cập nhật trên lịch BGH
+                  </p>
+                </button>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/80 flex justify-end">
+              <button
+                type="button"
+                onClick={closeReExtractChooser}
+                disabled={reExtractingId !== null}
+                className="px-3.5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+              >
+                {reExtractingId !== null ? 'Đang xử lý...' : 'Hủy'}
               </button>
             </div>
           </div>

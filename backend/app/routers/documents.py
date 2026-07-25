@@ -189,11 +189,15 @@ def get_documents(
 @router.post("/{doc_id}/re-extract-plan", response_model=PlanReExtractResponse)
 def re_extract_plan_metadata(
     doc_id: int,
+    put_on_calendar: bool = Query(
+        True,
+        description="True = đưa/cập nhật trên Thời gian biểu; False = chỉ cập nhật metadata",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chỉ Admin mới có quyền trích xuất lại")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chỉ Admin mới có quyền trích xuất lại lịch")
 
     repo = DocumentRepository(db)
     doc = repo.get_by_id(doc_id)
@@ -204,7 +208,7 @@ def re_extract_plan_metadata(
 
     service = DocumentService(db)
     try:
-        result = service.re_extract_plan_metadata(doc_id)
+        result = service.re_extract_plan_metadata(doc_id, put_on_calendar=put_on_calendar)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:

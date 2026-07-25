@@ -145,7 +145,12 @@ class DocumentService:
 
         return self.doc_repo.delete(doc_id)
 
-    def re_extract_plan_metadata(self, doc_id: int) -> dict:
+    def re_extract_plan_metadata(self, doc_id: int, *, put_on_calendar: bool = True) -> dict:
+        """
+        Re-extract plan title/date from file.
+        put_on_calendar=True → refresh/create calendar event (Thời gian biểu).
+        put_on_calendar=False → only update document metadata, stay off calendar.
+        """
         doc = self.doc_repo.get_by_id(doc_id)
         if not doc:
             raise ValueError("Tài liệu không tồn tại")
@@ -161,11 +166,9 @@ class DocumentService:
             plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
 
-            on_calendar = bool(doc.include_in_calendar)
             events = []
 
-            if on_calendar:
-                # Opted-in: refresh AI calendar event (0 date → needs_review)
+            if put_on_calendar:
                 events = PlanEventService(self.db).replace_ai_events_for_document(
                     doc,
                     title=plan_title or doc.plan_title,
@@ -174,7 +177,6 @@ class DocumentService:
                     include_in_calendar=True,
                 )
             else:
-                # Not on calendar: only update denormalized metadata (same as upload without opt-in)
                 if plan_title:
                     doc.plan_title = plan_title
                 if plan_event:
@@ -189,9 +191,11 @@ class DocumentService:
             self.db.refresh(doc)
 
             primary = events[0] if events else None
-            needs_review = bool(primary.needs_review) if primary else (on_calendar and not plan_event)
-            if on_calendar and primary and primary.needs_review:
-                message = "Đã trích xuất lại thông tin kế hoạch — cần chỉnh sửa ngày/giờ"
+            needs_review = bool(primary.needs_review) if primary else (put_on_calendar and not plan_event)
+            if put_on_calendar and primary and primary.needs_review:
+                message = "Đã trích lên Thời gian biểu — cần chỉnh sửa ngày/giờ"
+            elif put_on_calendar:
+                message = "Đã trích xuất và đưa lên Thời gian biểu"
             elif plan_event or plan_title:
                 message = "Đã trích xuất lại thông tin kế hoạch"
             else:
