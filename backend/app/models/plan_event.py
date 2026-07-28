@@ -13,6 +13,7 @@ class PlanEvent(Base):
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(500), nullable=False)
+    location = Column(String(300), nullable=True)
     starts_at = Column(DateTime(timezone=True), nullable=True, index=True)
     ends_at = Column(DateTime(timezone=True), nullable=True)
     source = Column(String(20), nullable=False, default="ai")  # ai | manual

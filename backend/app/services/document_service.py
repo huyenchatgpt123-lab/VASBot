@@ -70,6 +70,7 @@ class DocumentService:
                     title=plan_title or doc.plan_title,
                     starts_at=plan_event.start if plan_event else None,
                     ends_at=plan_event.end if plan_event else None,
+                    location=plan_event.location if plan_event else None,
                     include_in_calendar=True,
                 )
             elif plan_event:
@@ -174,6 +175,7 @@ class DocumentService:
                     title=plan_title or doc.plan_title,
                     starts_at=plan_event.start if plan_event else None,
                     ends_at=plan_event.end if plan_event else None,
+                    location=plan_event.location if plan_event else None,
                     include_in_calendar=True,
                 )
             else:

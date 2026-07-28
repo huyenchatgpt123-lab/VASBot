@@ -13,6 +13,7 @@ export interface BghCalendarPlan {
   date: string | null;
   start_time: string | null;
   end_time?: string | null;
+  location?: string | null;
   campuses: string[];
   is_continuation?: boolean;
   event_end_date?: string | null;
@@ -30,12 +31,14 @@ export interface PlanEventPayload {
   title: string;
   starts_at: string;
   ends_at?: string | null;
+  location?: string | null;
 }
 
 export interface PlanEventResult {
   id: number;
   document_id: number;
   title: string;
+  location?: string | null;
   starts_at?: string | null;
   ends_at?: string | null;
   source: string;

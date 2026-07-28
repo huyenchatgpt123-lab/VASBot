@@ -29,7 +29,7 @@ TRẢ VỀ JSON ARRAY (không giải thích gì thêm):
 
 Nếu không tìm thấy công việc nào → trả về: []"""
 
-PLAN_EVENT_PROMPT = """Bạn đọc tài liệu kế hoạch/công tác và trích xuất NGÀY/GIỜ DIỄN RA kế hoạch từ các dòng có "Thời gian:" hoặc "Ngày:" (có thể có dấu "-" đầu dòng).
+PLAN_EVENT_PROMPT = """Bạn đọc tài liệu kế hoạch/công tác và trích xuất NGÀY/GIỜ DIỄN RA và ĐỊA ĐIỂM từ các dòng có nhãn rõ.
 
 QUY TẮC:
 - Ưu tiên dòng "Thời gian:"; nếu không có thì dùng "Ngày:".
@@ -39,12 +39,14 @@ QUY TẮC:
   • "09 giờ 00 - 11 giờ 00" trong cùng ngày → time=09:00, end_date=null
   • "từ 23/7/2026 đến 25/7/2026" → date=2026-07-23, end_date=2026-07-25
   • "ngày 21 tháng 7 năm 2026" → date=2026-07-21, end_date=null
+- location → lấy từ dòng "Địa điểm:" (giữ nguyên text, tối đa 200 ký tự). null nếu không có.
 - Không dùng deadline công việc hay ngày upload.
+- Không lấy mã trường VA1/VA3/EMC làm địa điểm trừ khi nằm trong dòng Địa điểm.
 
 TRẢ VỀ JSON (không markdown):
-{"date":"YYYY-MM-DD","end_date":"YYYY-MM-DD hoặc null","time":"HH:MM hoặc null"}
+{"date":"YYYY-MM-DD","end_date":"YYYY-MM-DD hoặc null","time":"HH:MM hoặc null","location":"chuỗi hoặc null"}
 
-Nếu không tìm thấy → {"date":null,"end_date":null,"time":null}"""
+Nếu không tìm thấy ngày → {"date":null,"end_date":null,"time":null,"location":"... hoặc null"}"""
 
 PLAN_TITLE_PROMPT = """Bạn đọc phần đầu tài liệu kế hoạch/công tác và trích xuất TIÊU ĐỀ CHÍNH THỨC của kế hoạch (dòng tiêu đề lớn, thường ở trang đầu).
 
@@ -58,6 +60,10 @@ QUY TẮC:
 
 _EVENT_LINE_RE = re.compile(
     r"(?:Thời\s*gian|Ngày)\s*:\s*(.+)",
+    re.IGNORECASE,
+)
+_LOCATION_LINE_RE = re.compile(
+    r"(?:Địa\s*điểm|Dia\s*diem)\s*:\s*(.+)",
     re.IGNORECASE,
 )
 _VN_DATE_SLASH_RE = re.compile(r"(?<!\d)(\d{1,2})/(\d{1,2})/(\d{4})(?!\d)")
@@ -78,6 +84,25 @@ _RANGE_INDICATOR_RE = re.compile(r"\b(?:đến|den|–|—)\b|(?<=\d)\s*-\s*(?=\
 class PlanEventRange(NamedTuple):
     start: datetime
     end: Optional[datetime] = None
+    location: Optional[str] = None
+
+
+def _normalize_location(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    text = str(raw).strip().rstrip(".")
+    if not text or text.lower() == "null":
+        return None
+    text = re.sub(r"\s+", " ", text)
+    return text[:300] if len(text) > 300 else text
+
+
+def _regex_extract_location(text: str) -> Optional[str]:
+    for match in _LOCATION_LINE_RE.finditer(text):
+        loc = _normalize_location(match.group(1))
+        if loc:
+            return loc
+    return None
 
 
 def _date_tuple_to_datetime(day: int, month: int, year: int, hour: int = 0, minute: int = 0) -> datetime:
@@ -192,17 +217,19 @@ def _build_plan_event_datetime(date_part: str, time_part: Optional[str] = None) 
 
 
 def _regex_extract_plan_event(text: str) -> Optional[PlanEventRange]:
+    location = _regex_extract_location(text)
     for match in _EVENT_LINE_RE.finditer(text):
         line = match.group(1).strip().rstrip(".")
         if not line:
             continue
         result = _parse_plan_event_line(line)
         if result:
-            return result
+            return PlanEventRange(start=result.start, end=result.end, location=location)
     return None
 
 
 def _parse_plan_event_json(raw: dict) -> Optional[PlanEventRange]:
+    location = _normalize_location(raw.get("location"))
     date_val = raw.get("date")
     if not date_val or str(date_val).lower() == "null":
         return None
@@ -216,17 +243,17 @@ def _parse_plan_event_json(raw: dict) -> Optional[PlanEventRange]:
 
     end_val = raw.get("end_date")
     if not end_val or str(end_val).lower() == "null":
-        return PlanEventRange(start=start, end=None)
+        return PlanEventRange(start=start, end=None, location=location)
 
     end = _build_plan_event_datetime(str(end_val), None)
     if not end:
-        return PlanEventRange(start=start, end=None)
+        return PlanEventRange(start=start, end=None, location=location)
 
     if end.date() < start.date():
         start, end = end, start
     if end.date() <= start.date():
-        return PlanEventRange(start=start, end=None)
-    return PlanEventRange(start=start, end=end)
+        return PlanEventRange(start=start, end=None, location=location)
+    return PlanEventRange(start=start, end=end, location=location)
 
 
 def _try_fix_truncated_json(content: str) -> List[Dict]:
@@ -378,8 +405,15 @@ class TaskExtractor:
         if not snippet:
             return None
 
+        regex_location = _regex_extract_location(snippet)
         regex_result = _regex_extract_plan_event(snippet)
         if regex_result:
+            if regex_location and not regex_result.location:
+                return PlanEventRange(
+                    start=regex_result.start,
+                    end=regex_result.end,
+                    location=regex_location,
+                )
             return regex_result
 
         try:
@@ -390,7 +424,7 @@ class TaskExtractor:
                     {"role": "user", "content": f"NỘI DUNG TÀI LIỆU:\n{snippet}"},
                 ],
                 temperature=0,
-                max_tokens=160,
+                max_tokens=200,
             )
             content = (response.choices[0].message.content or "").strip()
             if content.startswith("```"):
@@ -398,7 +432,14 @@ class TaskExtractor:
                 content = content.rstrip("`").strip()
             raw = json.loads(content)
             if isinstance(raw, dict):
-                return _parse_plan_event_json(raw)
+                parsed = _parse_plan_event_json(raw)
+                if parsed and regex_location and not parsed.location:
+                    return PlanEventRange(
+                        start=parsed.start,
+                        end=parsed.end,
+                        location=regex_location,
+                    )
+                return parsed
         except Exception as e:
             logger.warning(f"Plan event extraction error: {e}")
         return None
@@ -408,13 +449,23 @@ class TaskExtractor:
             return None
 
         combined_all = "\n".join(chunk.get("content", "") for chunk in chunks)
+        regex_location = _regex_extract_location(combined_all)
         regex_result = _regex_extract_plan_event(combined_all)
         if regex_result:
+            if regex_location and not regex_result.location:
+                return PlanEventRange(
+                    start=regex_result.start,
+                    end=regex_result.end,
+                    location=regex_location,
+                )
             return regex_result
 
         head = chunks[:12]
         combined = "\n".join(chunk.get("content", "") for chunk in head)
-        return self.extract_plan_event(combined)
+        result = self.extract_plan_event(combined)
+        if result and regex_location and not result.location:
+            return PlanEventRange(start=result.start, end=result.end, location=regex_location)
+        return result
 
 
 task_extractor = TaskExtractor()

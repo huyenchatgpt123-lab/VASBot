@@ -234,6 +234,12 @@ def startup():
             db.execute(text("ALTER TABLE tasks ADD COLUMN has_scheduled_time BOOLEAN DEFAULT FALSE"))
             db.commit()
 
+        if inspector.has_table("plan_events"):
+            plan_event_columns = [c["name"] for c in inspector.get_columns("plan_events")]
+            if "location" not in plan_event_columns:
+                db.execute(text("ALTER TABLE plan_events ADD COLUMN location VARCHAR(300)"))
+                db.commit()
+
         _seed_positions(db)
         _seed_departments(db)
         CampusRepository(db).seed_defaults()

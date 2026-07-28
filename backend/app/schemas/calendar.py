@@ -19,6 +19,7 @@ class BghCalendarPlan(BaseModel):
     date: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
+    location: Optional[str] = None
     campuses: List[str]
     is_continuation: bool = False
     event_end_date: Optional[str] = None
@@ -36,18 +37,21 @@ class PlanEventUpdateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     starts_at: datetime
     ends_at: Optional[datetime] = None
+    location: Optional[str] = Field(None, max_length=300)
 
 
 class PlanEventCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     starts_at: datetime
     ends_at: Optional[datetime] = None
+    location: Optional[str] = Field(None, max_length=300)
 
 
 class PlanEventResponse(BaseModel):
     id: int
     document_id: int
     title: str
+    location: Optional[str] = None
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None
     source: str

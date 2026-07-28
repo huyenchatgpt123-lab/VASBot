@@ -186,6 +186,7 @@ export default function BghCalendarPage() {
     startTime: string;
     endDate: string;
     endTime: string;
+    location: string;
   }) => {
     if (!editingPlan) return;
     if (!payload.title.trim() || !payload.startDate) {
@@ -206,6 +207,7 @@ export default function BghCalendarPage() {
         title: payload.title.trim(),
         starts_at,
         ends_at,
+        location: payload.location.trim() || null,
       };
       if (editingPlan.event_id) {
         await calendarApi.updatePlanEvent(editingPlan.event_id, body);
@@ -604,13 +606,18 @@ export default function BghCalendarPage() {
                       >
                         <span className="text-sm text-gray-900 flex-1 min-w-0">
                           {displayPlanName(plan.plan_name)}
+                          {plan.location ? (
+                            <span className="block text-xs text-gray-500 font-normal mt-0.5">
+                              Địa điểm: {plan.location}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-medium">
                           Cần chỉnh sửa
                         </span>
                         <div className="flex flex-wrap gap-1">
                           {plan.campuses.map((code) => (
-                            <span key={code} className="text-xs px-2 py-0.5 rounded-full bg-white text-amber-800 border border-amber-200">
+                            <span key={code} className="text-xs px-2 py-0.5 rounded-full bg-white text-amber-800 border border-amber-200" title="Trường">
                               {code}
                             </span>
                           ))}
@@ -672,6 +679,13 @@ function PlanRow({
         <p className="text-sm font-medium text-gray-900 leading-snug group-hover:text-primary-900 transition-colors">
           {displayPlanName(plan.plan_name)}
         </p>
+        {plan.location ? (
+          <p className="text-xs text-gray-600 mt-0.5">
+            <span className="text-gray-400">Địa điểm:</span> {plan.location}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 mt-0.5">Địa điểm: —</p>
+        )}
         {isAdmin && plan.needs_review && (
           <p className="text-xs text-amber-700 mt-0.5">Cần cập nhật ngày/giờ</p>
         )}
@@ -680,11 +694,13 @@ function PlanRow({
             Đến {formatShortDate(plan.event_end_date)}
           </p>
         )}
-        <div className="flex flex-wrap gap-1 mt-2">
+        <div className="flex flex-wrap items-center gap-1 mt-2">
+          <span className="text-[10px] text-gray-400 mr-0.5">Trường:</span>
           {plan.campuses.map((code) => (
             <span
               key={code}
               className="text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100 font-medium"
+              title="Kế hoạch thuộc trường"
             >
               {code}
             </span>
@@ -728,6 +744,7 @@ function EditPlanEventModal({
     startTime: string;
     endDate: string;
     endTime: string;
+    location: string;
   }) => void;
 }) {
   const initialStart = plan.start_time ? new Date(plan.start_time) : null;
@@ -738,6 +755,7 @@ function EditPlanEventModal({
       : null;
 
   const [title, setTitle] = useState(displayPlanName(plan.plan_name));
+  const [location, setLocation] = useState(plan.location || '');
   const [startDate, setStartDate] = useState(
     plan.date || (initialStart && !Number.isNaN(initialStart.getTime()) ? formatDateKey(initialStart) : formatDateKey(new Date())),
   );
@@ -758,8 +776,10 @@ function EditPlanEventModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 sm:p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Cập nhật ngày/giờ</h2>
-        <p className="text-xs text-gray-500 mb-4">Chỉ Admin được chỉnh sửa sự kiện trên Thời gian biểu.</p>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Cập nhật sự kiện</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Địa điểm lấy từ file (Địa điểm:). Trường VA1/VA3/EMC chỉ để phân loại kế hoạch.
+        </p>
 
         <div className="space-y-3">
           <div>
@@ -771,6 +791,29 @@ function EditPlanEventModal({
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Địa điểm</label>
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="VD: Hội trường A, sân trường..."
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+            />
+          </div>
+          {plan.campuses.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-xs text-gray-400">Thuộc trường:</span>
+              {plan.campuses.map((code) => (
+                <span
+                  key={code}
+                  className="text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100 font-medium"
+                >
+                  {code}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Ngày bắt đầu *</label>
@@ -825,7 +868,7 @@ function EditPlanEventModal({
           <button
             type="button"
             disabled={saving}
-            onClick={() => onSave({ title, startDate, startTime, endDate, endTime })}
+            onClick={() => onSave({ title, startDate, startTime, endDate, endTime, location })}
             className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
           >
             {saving ? 'Đang lưu...' : 'Lưu'}

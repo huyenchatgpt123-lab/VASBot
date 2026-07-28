@@ -24,6 +24,7 @@ class PlanEventService:
         title: str,
         starts_at: datetime,
         ends_at: Optional[datetime] = None,
+        location: Optional[str] = None,
     ) -> PlanEvent:
         title = title.strip()
         if not title:
@@ -34,8 +35,12 @@ class PlanEventService:
         if ends_at and starts_at and ends_at < starts_at:
             starts_at, ends_at = ends_at, starts_at
 
-        # Same-day end with only date (00:00) → treat as multi-day end; keep as-is.
+        loc = (location or "").strip()
+        if len(loc) > 300:
+            loc = loc[:300]
+
         event.title = title
+        event.location = loc or None
         event.starts_at = starts_at
         event.ends_at = ends_at
         event.source = "manual"
@@ -57,6 +62,7 @@ class PlanEventService:
         title: str,
         starts_at: datetime,
         ends_at: Optional[datetime] = None,
+        location: Optional[str] = None,
     ) -> PlanEvent:
         title = title.strip()
         if not title:
@@ -66,9 +72,14 @@ class PlanEventService:
         if ends_at and starts_at and ends_at < starts_at:
             starts_at, ends_at = ends_at, starts_at
 
+        loc = (location or "").strip()
+        if len(loc) > 300:
+            loc = loc[:300]
+
         event = PlanEvent(
             document_id=document.id,
             title=title,
+            location=loc or None,
             starts_at=starts_at,
             ends_at=ends_at,
             source="manual",
@@ -98,6 +109,7 @@ class PlanEventService:
         starts_at: Optional[datetime],
         ends_at: Optional[datetime],
         include_in_calendar: bool = True,
+        location: Optional[str] = None,
     ) -> List[PlanEvent]:
         """
         Phase 1: replace AI-sourced events with a single extracted event (or a review placeholder).
@@ -112,10 +124,15 @@ class PlanEventService:
         if len(display_title) > 500:
             display_title = display_title[:500]
 
+        loc = (location or "").strip()
+        if len(loc) > 300:
+            loc = loc[:300]
+
         needs_review = starts_at is None
         event = PlanEvent(
             document_id=document.id,
             title=display_title,
+            location=loc or None,
             starts_at=starts_at,
             ends_at=ends_at if starts_at else None,
             source="ai",

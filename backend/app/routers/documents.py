@@ -238,6 +238,7 @@ def update_plan_event(
             title=data.title,
             starts_at=data.starts_at,
             ends_at=data.ends_at,
+            location=data.location,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -245,11 +246,12 @@ def update_plan_event(
         id=updated.id,
         document_id=updated.document_id,
         title=updated.title,
+        location=updated.location,
         starts_at=updated.starts_at,
         ends_at=updated.ends_at,
         source=updated.source,
         needs_review=updated.needs_review,
-        message="Đã cập nhật ngày/giờ sự kiện",
+        message="Đã cập nhật sự kiện",
     )
 
 
@@ -271,6 +273,7 @@ def create_plan_event(
             title=data.title,
             starts_at=data.starts_at,
             ends_at=data.ends_at,
+            location=data.location,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -278,6 +281,7 @@ def create_plan_event(
         id=created.id,
         document_id=created.document_id,
         title=created.title,
+        location=created.location,
         starts_at=created.starts_at,
         ends_at=created.ends_at,
         source=created.source,
