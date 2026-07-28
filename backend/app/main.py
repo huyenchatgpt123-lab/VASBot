@@ -239,6 +239,9 @@ def startup():
             if "location" not in plan_event_columns:
                 db.execute(text("ALTER TABLE plan_events ADD COLUMN location VARCHAR(300)"))
                 db.commit()
+            if "timeline" not in plan_event_columns:
+                db.execute(text("ALTER TABLE plan_events ADD COLUMN timeline JSON"))
+                db.commit()
 
         _seed_positions(db)
         _seed_departments(db)

@@ -660,6 +660,8 @@ function PlanRow({
   isAdmin: boolean;
   onEdit?: () => void;
 }) {
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const hasTimeline = Array.isArray(plan.timeline) && plan.timeline.length > 0;
   const timeLabel = plan.is_continuation
     ? 'Tiếp diễn'
     : plan.end_time
@@ -667,7 +669,7 @@ function PlanRow({
       : formatTime(plan.start_time);
 
   return (
-    <li className={`group flex items-start gap-3 px-4 py-3 rounded-xl bg-white border hover:shadow-sm transition-all ${
+    <li className={`group relative flex items-start gap-3 px-4 py-3 rounded-xl bg-white border hover:shadow-sm transition-all ${
       isAdmin && plan.needs_review ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100 hover:border-primary-200'
     }`}>
       <div className={`shrink-0 min-w-[3.5rem] pt-0.5 text-right tabular-nums font-bold ${
@@ -707,6 +709,23 @@ function PlanRow({
           ))}
         </div>
       </div>
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setTimelineOpen((v) => !v)}
+          title={hasTimeline ? 'Xem lịch trình' : 'Không có lịch trình'}
+          className="w-9 h-9 flex items-center justify-center text-base hover:bg-primary-50 rounded-lg transition-colors opacity-70 group-hover:opacity-100"
+        >
+          🗓️
+        </button>
+        {timelineOpen && (
+          <TimelinePopover
+            planName={displayPlanName(plan.plan_name)}
+            timeline={hasTimeline ? plan.timeline! : []}
+            onClose={() => setTimelineOpen(false)}
+          />
+        )}
+      </div>
       {isAdmin && onEdit && (
         <button
           type="button"
@@ -726,6 +745,65 @@ function PlanRow({
         👁
       </button>
     </li>
+  );
+}
+
+function TimelinePopover({
+  planName,
+  timeline,
+  onClose,
+}: {
+  planName: string;
+  timeline: { start: string; end?: string | null; title: string }[];
+  onClose: () => void;
+}) {
+  const empty = timeline.length === 0;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden />
+      <div
+        className="absolute right-0 top-full mt-1 z-50 w-72 max-w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white shadow-lg p-3"
+        role="dialog"
+        aria-label="Lịch trình"
+      >
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <p className="text-xs font-semibold text-gray-800 line-clamp-2">{planName}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-sm leading-none px-1"
+            aria-label="Đóng"
+          >
+            ×
+          </button>
+        </div>
+        {empty ? (
+          <p className="text-xs text-gray-500 py-2">Không có lịch trình</p>
+        ) : (
+          <div className="max-h-64 overflow-y-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                  <th className="py-1.5 pr-2 font-medium w-[5.5rem]">Giờ</th>
+                  <th className="py-1.5 font-medium">Việc</th>
+                </tr>
+              </thead>
+              <tbody>
+                {timeline.map((slot, idx) => (
+                  <tr key={`${slot.start}-${idx}`} className="border-b border-gray-50 last:border-0 align-top">
+                    <td className="py-1.5 pr-2 text-xs tabular-nums text-primary-700 whitespace-nowrap">
+                      {slot.end ? `${slot.start}–${slot.end}` : slot.start}
+                    </td>
+                    <td className="py-1.5 text-xs text-gray-800">{slot.title}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

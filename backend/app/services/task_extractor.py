@@ -39,7 +39,10 @@ QUY TẮC:
   • "09 giờ 00 - 11 giờ 00" trong cùng ngày → time=09:00, end_date=null
   • "từ 23/7/2026 đến 25/7/2026" → date=2026-07-23, end_date=2026-07-25
   • "ngày 21 tháng 7 năm 2026" → date=2026-07-21, end_date=null
-- location → lấy từ dòng "Địa điểm:" (giữ nguyên text, tối đa 200 ký tự). null nếu không có.
+- location → lấy từ mục "Địa điểm:" / "2. Địa điểm:" — CHỈ các địa điểm trong mục đó.
+  Dừng ngay trước mục tiếp theo (VD: "3. Tổ chức:", "Thời gian:", "Thành phần:").
+  Nhiều địa điểm → nối bằng "; ". Không giữ số thứ tự mục, không giữ nhãn "Tổ chức".
+  null nếu không có.
 - Không dùng deadline công việc hay ngày upload.
 - Không lấy mã trường VA1/VA3/EMC làm địa điểm trừ khi nằm trong dòng Địa điểm.
 
@@ -57,15 +60,37 @@ QUY TẮC:
 - Tối đa 120 ký tự.
 - Nếu không xác định được tiêu đề → trả về chuỗi rỗng."""
 
+PLAN_TIMELINE_PROMPT = """Bạn đọc tài liệu kế hoạch và trích xuất LỊCH TRÌNH / CHƯƠNG TRÌNH trong ngày (các mốc có khung giờ rõ).
+
+QUY TẮC:
+- Chỉ lấy dòng/khoảng có GIỜ rõ (VD: 8h–9h, 08:00-09:30, 9 giờ 00 - 11 giờ 00).
+- Mỗi mục: start (HH:MM), end (HH:MM hoặc null nếu chỉ một mốc), title (tóm tắt việc, dưới 80 ký tự).
+- Bỏ mục không có giờ. Không lấy phần địa điểm, tổ chức, mục đích.
+- Sắp xếp theo giờ tăng dần.
+- Tối đa 30 mục.
+
+TRẢ VỀ JSON ARRAY (không markdown):
+[{"start":"08:00","end":"09:00","title":"Việc A"},{"start":"09:00","end":null,"title":"Việc B"}]
+
+Nếu không có lịch trình theo giờ → []"""
+
 
 _EVENT_LINE_RE = re.compile(
     r"(?:Thời\s*gian|Ngày)\s*:\s*(.+)",
     re.IGNORECASE,
 )
-_LOCATION_LINE_RE = re.compile(
-    r"(?:Địa\s*điểm|Dia\s*diem)\s*:\s*(.+)",
+_LOCATION_HEADER_RE = re.compile(
+    r"(?:^|\n)\s*(?:\d+\.\s*)?(?:Địa\s*điểm|Dia\s*diem)\s*:\s*",
     re.IGNORECASE,
 )
+# Stop when next numbered section / labeled field begins (e.g. "3. Tổ chức:")
+_LOCATION_STOP_RE = re.compile(
+    r"(?=\n?\s*\d+\.\s+[^\n]{0,40}:)"
+    r"|(?=\n?\s*(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung|"
+    r"Mục\s*đích|Yêu\s*cầu|Kinh\s*phí|Người\s*phụ\s*trách|Ghi\s*chú)\s*:)",
+    re.IGNORECASE,
+)
+_LOCATION_BULLET_RE = re.compile(r"^[\-\u2013\u2014\u2022\*•]+\s*")
 _VN_DATE_SLASH_RE = re.compile(r"(?<!\d)(\d{1,2})/(\d{1,2})/(\d{4})(?!\d)")
 _VN_DATE_WORDS_RE = re.compile(
     r"ngày\s*(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})",
@@ -80,6 +105,27 @@ _TIME_GIO_BARE_RE = re.compile(
 )
 _RANGE_INDICATOR_RE = re.compile(r"\b(?:đến|den|–|—)\b|(?<=\d)\s*-\s*(?=\d)", re.IGNORECASE)
 
+# Timeline slot: "8h00 - 9h30: nội dung" / "08:00–09:00 Nội dung"
+_TIMELINE_SLOT_RE = re.compile(
+    r"(?P<h1>\d{1,2})\s*(?:[:hHgiờ]\s*(?P<m1>\d{2})?)?"
+    r"(?:\s*(?:giờ|g)\s*)?"
+    r"\s*(?:[-–—]|đến|den)\s*"
+    r"(?P<h2>\d{1,2})\s*(?:[:hHgiờ]\s*(?P<m2>\d{2})?)?"
+    r"(?:\s*(?:giờ|g)\s*)?"
+    r"\s*[:.\-–—]?\s*(?P<title>.+)",
+    re.IGNORECASE,
+)
+_TIMELINE_SINGLE_RE = re.compile(
+    r"(?P<h1>\d{1,2})\s*(?:[:hH]\s*(?P<m1>\d{2})|(?:\s*giờ\s*(?P<m1b>\d{2})?)|(?:\s*h\s*(?P<m1c>\d{2})?))?"
+    r"\s*[:.\-–—]\s*(?P<title>.+)",
+    re.IGNORECASE,
+)
+_TIMELINE_SECTION_RE = re.compile(
+    r"(?:^|\n)\s*(?:\d+\.\s*)?(?:Lịch\s*trình|Chương\s*trình|Nội\s*dung\s*chương\s*trình|"
+    r"Tiến\s*trình|Agenda)\s*:?\s*",
+    re.IGNORECASE,
+)
+
 
 class PlanEventRange(NamedTuple):
     start: datetime
@@ -87,19 +133,194 @@ class PlanEventRange(NamedTuple):
     location: Optional[str] = None
 
 
+def _hhmm(hour: int, minute: int) -> Optional[str]:
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _parse_timeline_minutes(h: Optional[str], *minute_groups: Optional[str]) -> tuple[int, int]:
+    hour = int(h or 0)
+    minute = 0
+    for m in minute_groups:
+        if m is not None and str(m).strip() != "":
+            minute = int(m)
+            break
+    return hour, minute
+
+
+def _clean_timeline_title(raw: str) -> Optional[str]:
+    text = raw.strip()
+    text = re.sub(r"^[\-\u2013\u2014\u2022\*•]+\s*", "", text)
+    text = re.sub(r"\s+", " ", text).strip(" .;,-")
+    if not text or len(text) < 2:
+        return None
+    # Skip if title looks like another time header only
+    if re.fullmatch(r"\d{1,2}\s*[hH:]?\d{0,2}", text):
+        return None
+    return text[:80]
+
+
+def _normalize_timeline_slots(slots: List[Dict[str, Any]]) -> List[Dict[str, Optional[str]]]:
+    cleaned: List[Dict[str, Optional[str]]] = []
+    seen = set()
+    for slot in slots:
+        start = slot.get("start")
+        end = slot.get("end")
+        title = _clean_timeline_title(str(slot.get("title") or ""))
+        if not start or not title:
+            continue
+        # Validate HH:MM
+        if not re.fullmatch(r"\d{2}:\d{2}", str(start)):
+            continue
+        if end and not re.fullmatch(r"\d{2}:\d{2}", str(end)):
+            end = None
+        key = (start, end or "", title)
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append({"start": str(start), "end": str(end) if end else None, "title": title})
+    cleaned.sort(key=lambda s: (s["start"] or "", s["end"] or ""))
+    return cleaned[:30]
+
+
+def _regex_extract_timeline(text: str) -> List[Dict[str, Optional[str]]]:
+    """Extract timed agenda lines from plan text (prefer Lịch trình / Chương trình section)."""
+    if not text or not text.strip():
+        return []
+
+    search_text = text
+    section_match = _TIMELINE_SECTION_RE.search(text)
+    if section_match:
+        rest = text[section_match.end() :]
+        stop = _LOCATION_STOP_RE.search(rest)
+        # Also stop at next major numbered section
+        numbered = re.search(r"(?=\n\s*\d+\.\s+[A-Za-zÀ-ỹ])", rest)
+        end_idx = len(rest)
+        if stop:
+            end_idx = min(end_idx, stop.start())
+        if numbered:
+            end_idx = min(end_idx, numbered.start())
+        search_text = rest[:end_idx] if end_idx < len(rest) else rest[:4000]
+    else:
+        search_text = text[:8000]
+
+    slots: List[Dict[str, Any]] = []
+    for line in re.split(r"[\n\r]+", search_text):
+        line = line.strip()
+        if not line or len(line) < 4:
+            continue
+
+        m = _TIMELINE_SLOT_RE.search(line)
+        if m:
+            h1, m1 = _parse_timeline_minutes(m.group("h1"), m.group("m1"))
+            h2, m2 = _parse_timeline_minutes(m.group("h2"), m.group("m2"))
+            start = _hhmm(h1, m1)
+            end = _hhmm(h2, m2)
+            title = _clean_timeline_title(m.group("title") or "")
+            if start and title:
+                slots.append({"start": start, "end": end, "title": title})
+            continue
+
+        # Single time point with title (avoid matching plain "2. Địa điểm")
+        m2 = _TIMELINE_SINGLE_RE.search(line)
+        if m2 and re.search(r"\d", line[:8]):
+            h1, minute = _parse_timeline_minutes(
+                m2.group("h1"), m2.group("m1"), m2.group("m1b"), m2.group("m1c")
+            )
+            # Require explicit time marker to reduce false positives
+            if not re.search(r"\d\s*[hH:]|giờ", line[:20], re.IGNORECASE):
+                continue
+            start = _hhmm(h1, minute)
+            title = _clean_timeline_title(m2.group("title") or "")
+            if start and title:
+                slots.append({"start": start, "end": None, "title": title})
+
+    return _normalize_timeline_slots(slots)
+
+
+def _parse_timeline_json(raw: Any) -> List[Dict[str, Optional[str]]]:
+    if not isinstance(raw, list):
+        return []
+    slots = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        start = item.get("start")
+        end = item.get("end")
+        if end in ("", "null", None):
+            end = None
+        title = item.get("title")
+        slots.append({"start": start, "end": end, "title": title})
+    return _normalize_timeline_slots(slots)
+
+
+def _clean_location_item(raw: str) -> Optional[str]:
+    text = raw.strip()
+    text = _LOCATION_BULLET_RE.sub("", text)
+    text = text.strip().rstrip(".;,")
+    text = re.sub(r"\s+", " ", text)
+    if not text or text.lower() == "null":
+        return None
+    # Drop leftover section headers accidentally captured
+    if re.match(
+        r"^\d+\.\s*(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung)",
+        text,
+        re.IGNORECASE,
+    ):
+        return None
+    if re.match(
+        r"^(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung)\s*:?\s*$",
+        text,
+        re.IGNORECASE,
+    ):
+        return None
+    return text[:200]
+
+
 def _normalize_location(raw: Optional[str]) -> Optional[str]:
     if not raw:
         return None
-    text = str(raw).strip().rstrip(".")
+    text = str(raw).strip()
     if not text or text.lower() == "null":
         return None
-    text = re.sub(r"\s+", " ", text)
-    return text[:300] if len(text) > 300 else text
+
+    # Cut off next numbered section / labeled field if still present
+    stop = _LOCATION_STOP_RE.search(text)
+    if stop:
+        text = text[: stop.start()]
+
+    # Prefer bullet / newline items; also split " - " when PDF flattened to one line
+    parts: List[str] = []
+    for line in re.split(r"[\n\r]+|(?=\s*[-–—•]\s+\S)", text):
+        piece = _clean_location_item(line)
+        if piece and piece not in parts:
+            parts.append(piece)
+
+    if not parts:
+        piece = _clean_location_item(text)
+        if piece:
+            parts = [piece]
+
+    if not parts:
+        return None
+
+    joined = "; ".join(parts)
+    return joined[:300] if len(joined) > 300 else joined
 
 
 def _regex_extract_location(text: str) -> Optional[str]:
-    for match in _LOCATION_LINE_RE.finditer(text):
-        loc = _normalize_location(match.group(1))
+    """
+    Extract only the Địa điểm block, stopping before the next section
+    (e.g. "3. Tổ chức:"). Supports multi-line bullet lists.
+    """
+    for match in _LOCATION_HEADER_RE.finditer(text):
+        rest = text[match.end() :]
+        stop = _LOCATION_STOP_RE.search(rest)
+        block = rest[: stop.start()] if stop else rest
+        # Limit runaway capture if stop pattern misses
+        block = block[:800]
+        loc = _normalize_location(block)
         if loc:
             return loc
     return None
@@ -466,6 +687,41 @@ class TaskExtractor:
         if result and regex_location and not result.location:
             return PlanEventRange(start=result.start, end=result.end, location=regex_location)
         return result
+
+    def extract_plan_timeline(self, text: str) -> List[Dict[str, Optional[str]]]:
+        snippet = (text or "")[:16000].strip()
+        if not snippet:
+            return []
+
+        regex_slots = _regex_extract_timeline(snippet)
+        if regex_slots:
+            return regex_slots
+
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.CHAT_MODEL,
+                messages=[
+                    {"role": "system", "content": PLAN_TIMELINE_PROMPT},
+                    {"role": "user", "content": f"NỘI DUNG TÀI LIỆU:\n{snippet[:12000]}"},
+                ],
+                temperature=0,
+                max_tokens=800,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[-1] if "\n" in content else content[3:]
+                content = content.rstrip("`").strip()
+            raw = json.loads(content)
+            return _parse_timeline_json(raw)
+        except Exception as e:
+            logger.warning(f"Plan timeline extraction error: {e}")
+            return []
+
+    def extract_plan_timeline_from_chunks(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Optional[str]]]:
+        if not chunks:
+            return []
+        combined = "\n".join(chunk.get("content", "") for chunk in chunks)
+        return self.extract_plan_timeline(combined)
 
 
 task_extractor = TaskExtractor()

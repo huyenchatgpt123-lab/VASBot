@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
 
@@ -110,6 +110,7 @@ class PlanEventService:
         ends_at: Optional[datetime],
         include_in_calendar: bool = True,
         location: Optional[str] = None,
+        timeline: Optional[List[Dict[str, Any]]] = None,
     ) -> List[PlanEvent]:
         """
         Phase 1: replace AI-sourced events with a single extracted event (or a review placeholder).
@@ -133,6 +134,7 @@ class PlanEventService:
             document_id=document.id,
             title=display_title,
             location=loc or None,
+            timeline=timeline or None,
             starts_at=starts_at,
             ends_at=ends_at if starts_at else None,
             source="ai",

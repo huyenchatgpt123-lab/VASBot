@@ -12,6 +12,12 @@ class CampusResponse(BaseModel):
         from_attributes = True
 
 
+class TimelineSlot(BaseModel):
+    start: str
+    end: Optional[str] = None
+    title: str
+
+
 class BghCalendarPlan(BaseModel):
     event_id: Optional[int] = None
     document_id: int
@@ -20,6 +26,7 @@ class BghCalendarPlan(BaseModel):
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     location: Optional[str] = None
+    timeline: Optional[List[TimelineSlot]] = None
     campuses: List[str]
     is_continuation: bool = False
     event_end_date: Optional[str] = None

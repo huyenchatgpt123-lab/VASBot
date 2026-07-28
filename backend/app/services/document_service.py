@@ -63,6 +63,7 @@ class DocumentService:
                 doc.plan_title = plan_title
 
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
+            timeline = task_extractor.extract_plan_timeline_from_chunks(chunks) if include_in_calendar else []
             if include_in_calendar:
                 # Spec: opted-in → create event; 0 date → needs_review placeholder (admin must edit)
                 PlanEventService(self.db).replace_ai_events_for_document(
@@ -71,6 +72,7 @@ class DocumentService:
                     starts_at=plan_event.start if plan_event else None,
                     ends_at=plan_event.end if plan_event else None,
                     location=plan_event.location if plan_event else None,
+                    timeline=timeline or None,
                     include_in_calendar=True,
                 )
             elif plan_event:
@@ -166,6 +168,11 @@ class DocumentService:
 
             plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
+            timeline = (
+                task_extractor.extract_plan_timeline_from_chunks(chunks)
+                if put_on_calendar
+                else []
+            )
 
             events = []
 
@@ -176,6 +183,7 @@ class DocumentService:
                     starts_at=plan_event.start if plan_event else None,
                     ends_at=plan_event.end if plan_event else None,
                     location=plan_event.location if plan_event else None,
+                    timeline=timeline or None,
                     include_in_calendar=True,
                 )
             else:

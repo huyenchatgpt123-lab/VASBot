@@ -6,6 +6,12 @@ export interface Campus {
   name: string;
 }
 
+export interface TimelineSlot {
+  start: string;
+  end?: string | null;
+  title: string;
+}
+
 export interface BghCalendarPlan {
   event_id?: number | null;
   document_id: number;
@@ -14,6 +20,7 @@ export interface BghCalendarPlan {
   start_time: string | null;
   end_time?: string | null;
   location?: string | null;
+  timeline?: TimelineSlot[] | null;
   campuses: string[];
   is_continuation?: boolean;
   event_end_date?: string | null;

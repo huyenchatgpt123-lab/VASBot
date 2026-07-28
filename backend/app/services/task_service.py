@@ -488,6 +488,7 @@ class TaskService:
                     "start_time": None,
                     "end_time": None,
                     "location": None,
+                    "timeline": None,
                     "campuses": campuses,
                     "is_continuation": False,
                     "event_end_date": None,
@@ -497,6 +498,7 @@ class TaskService:
                 continue
 
             for event in events:
+                timeline = event.timeline if isinstance(event.timeline, list) else None
                 if not event.starts_at:
                     unscheduled_plans.append({
                         "event_id": event.id,
@@ -506,6 +508,7 @@ class TaskService:
                         "start_time": None,
                         "end_time": None,
                         "location": event.location,
+                        "timeline": timeline,
                         "campuses": campuses,
                         "is_continuation": False,
                         "event_end_date": None,
@@ -533,6 +536,7 @@ class TaskService:
                         "start_time": start_time,
                         "end_time": end_time,
                         "location": event.location,
+                        "timeline": timeline,
                         "campuses": campuses,
                         "is_continuation": is_continuation,
                         "event_end_date": event_end_date,
