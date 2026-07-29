@@ -165,7 +165,7 @@ _TIMELINE_SECTION_RE = re.compile(
     r"(?:^|\n)\s*(?:[IVXLC]+\.\s*)?(?:\d+\.\s*)?(?:"
     r"Lịch\s*trình|Chương\s*trình(?:\s*làm\s*việc)?|Nội\s*dung\s*chương\s*trình|Tiến\s*trình|"
     r"Khung\s*giờ|Thời\s*khóa\s*biểu|Kế\s*hoạch\s*chi\s*tiết|"
-    r"Activity\s+Day\s+Agenda|Agenda|Schedule|Programme|Program|Timeline|Run\s*of\s*show|"
+    r"Activity\s+Day\s+Agenda|(?:\w+\s+)*Day\s+Agenda|Agenda|Schedule|Programme|Program|Timeline|Run\s*of\s*show|"
     r"Working\s+schedule"
     r")\s*:?\s*",
     re.IGNORECASE,
@@ -179,12 +179,15 @@ _TIMELINE_SECTION_STOP_RE = re.compile(
     re.IGNORECASE,
 )
 _TIMELINE_TABLE_HEADER_RE = re.compile(
-    r"^(?:time|key\s*activities|person\(s\)|persons?\s*in\s*charge|giờ|thời\s*gian|nội\s*dung|mục\s*tiêu|minh\s*chứng|người\s*phụ\s*trách)\b",
+    r"^(?:time|key\s*activities|person\(s\)|persons?\s*in\s*charge|giờ|thời\s*gian|nội\s*dung|mục\s*tiêu|minh\s*chứng|người\s*phụ\s*trách)\b"
+    r"|^time\s*\|",
     re.IGNORECASE,
 )
 _TIMELINE_PERSON_LINE_RE = re.compile(
     r"^(?:mrs?\.?|ms\.?|mr\.?|dr\.?)\s+\w+"
-    r"|^(?:students?|teachers?|marketing\s+department|ban\s+giám\s+hiệu)\s*$"
+    r"|^(?:students?|teachers?|subject\s+teachers?|marketing\s+department|"
+    r"coordination\s+department|it\s+department|student\s+production\s+team|"
+    r"audience|ban\s+giám\s+hiệu)\s*$"
     r"|^(?:mrs?\.?|ms\.?|mr\.?|dr\.?)\s+\w+(?:\s*,\s*(?:students?|teachers?|.+))?$",
     re.IGNORECASE,
 )
@@ -370,13 +373,41 @@ def _timeline_regex_is_weak(slots: List[Dict[str, Optional[str]]], search_text: 
     return False
 
 
+_PARTIAL_TIME_END_RE = re.compile(
+    r"\d{1,2}\s*(?:[:.hH]\s*\d{2})?\s*(?:[AaPp][Mm])?\s*[-–—]\s*$"
+)
+_CONTINUATION_TIME_RE = re.compile(
+    r"^\d{1,2}\s*(?:[:.hH]\s*\d{2})?\s*(?:[AaPp][Mm])?\s*$"
+)
+
+
+def _merge_split_time_lines(raw_lines: List[str]) -> List[str]:
+    """Merge lines where a time range was split across two lines by PDF extraction."""
+    merged: List[str] = []
+    i = 0
+    while i < len(raw_lines):
+        line = raw_lines[i]
+        if (
+            _PARTIAL_TIME_END_RE.search(line)
+            and i + 1 < len(raw_lines)
+            and _CONTINUATION_TIME_RE.match(raw_lines[i + 1])
+        ):
+            merged.append(line + " " + raw_lines[i + 1])
+            i += 2
+        else:
+            merged.append(line)
+            i += 1
+    return merged
+
+
 def _regex_extract_timeline(text: str) -> List[Dict[str, Optional[str]]]:
     """Extract timed agenda lines (VI/EN), prefer Agenda / Lịch trình section."""
     if not text or not text.strip():
         return []
 
     search_text, _has_section = _timeline_search_window(text)
-    lines = [ln.strip() for ln in re.split(r"[\n\r]+", search_text) if ln.strip()]
+    raw_lines = [ln.strip() for ln in re.split(r"[\n\r]+", search_text) if ln.strip()]
+    lines = _merge_split_time_lines(raw_lines)
     slots: List[Dict[str, Any]] = []
     i = 0
     while i < len(lines):
