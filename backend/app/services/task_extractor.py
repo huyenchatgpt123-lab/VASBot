@@ -102,10 +102,13 @@ _LOCATION_HEADER_RE = re.compile(
 )
 # Stop when next numbered section / labeled field begins (e.g. "3. Tổ chức:" / "- Tổ chức:")
 # Require a newline so trailing school numbers like "Việt Anh 3." are not treated as sections.
+# Also stop inline when a numbered heading follows on the same line (Word table flatten).
 _LOCATION_STOP_RE = re.compile(
     r"(?=\n\s*\d+\.\s+[^\n]{0,40}:)"
     r"|(?=\n\s*(?:[-–—•*]\s*)?(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung|"
-    r"Mục\s*đích|Yêu\s*cầu|Kinh\s*phí|Người\s*phụ\s*trách|Ghi\s*chú)\s*:)",
+    r"Mục\s*đích|Yêu\s*cầu|Kinh\s*phí|Người\s*phụ\s*trách|Phụ\s*trách|Ghi\s*chú)\s*[:;])"
+    r"|(?=\.\s*\d+\.\s*(?:Tổ\s*chức|Phụ\s*trách|Thành\s*phần|Nội\s*dung|Kinh\s*phí|"
+    r"Người\s*phụ\s*trách|Ghi\s*chú)\b)",
     re.IGNORECASE,
 )
 _LOCATION_BULLET_RE = re.compile(r"^[\-\u2013\u2014\u2022\*•]+\s*")
@@ -118,7 +121,7 @@ _LOCATION_NOISE_TIME_RE = re.compile(
 )
 _LOCATION_LABEL_NOISE_RE = re.compile(
     r"(?:^|;\s*)(?:\d+\.\s*)?(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung|"
-    r"Mục\s*đích|Yêu\s*cầu|Kinh\s*phí|Người\s*phụ\s*trách|Ghi\s*chú)\s*:?\s*",
+    r"Mục\s*đích|Yêu\s*cầu|Kinh\s*phí|Người\s*phụ\s*trách|Phụ\s*trách|Ghi\s*chú)\s*:?\s*",
     re.IGNORECASE,
 )
 _LOCATION_CAMPUS_ONLY_RE = re.compile(r"^(?:VA\s*[13]|EMC)$", re.IGNORECASE)
@@ -597,13 +600,13 @@ def _clean_location_item(raw: str) -> Optional[str]:
         return None
     # Drop leftover section headers accidentally captured
     if re.match(
-        r"^\d+\.\s*(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung)",
+        r"^\d+\.\s*(?:Tổ\s*chức|Phụ\s*trách|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung)",
         text,
         re.IGNORECASE,
     ):
         return None
     if re.match(
-        r"^(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung)\s*:?\s*$",
+        r"^(?:Tổ\s*chức|Phụ\s*trách|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung)\s*:?\s*$",
         text,
         re.IGNORECASE,
     ):

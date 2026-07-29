@@ -788,12 +788,13 @@ function PlanRow({
       </div>
       <button
         type="button"
-        onClick={onViewTimeline}
+        onClick={hasTimeline ? onViewTimeline : undefined}
+        disabled={!hasTimeline}
         title={hasTimeline ? 'Xem lịch trình trong ngày' : 'Không có lịch trình'}
         className={`shrink-0 w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
           hasTimeline
-            ? 'text-primary-700 hover:bg-primary-50 opacity-80 group-hover:opacity-100'
-            : 'text-gray-300 hover:bg-gray-50 opacity-60 group-hover:opacity-90'
+            ? 'text-primary-700 hover:bg-primary-50 opacity-80 group-hover:opacity-100 cursor-pointer'
+            : 'text-gray-300 opacity-40 cursor-not-allowed'
         }`}
       >
         🗓️
