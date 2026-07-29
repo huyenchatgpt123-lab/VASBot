@@ -60,17 +60,20 @@ QUY TẮC:
 - Tối đa 120 ký tự.
 - Nếu không xác định được tiêu đề → trả về chuỗi rỗng."""
 
-PLAN_TIMELINE_PROMPT = """Bạn đọc tài liệu kế hoạch và trích xuất LỊCH TRÌNH / CHƯƠNG TRÌNH trong ngày (các mốc có khung giờ rõ).
+PLAN_TIMELINE_PROMPT = """Bạn đọc tài liệu kế hoạch (tiếng Việt hoặc tiếng Anh) và trích xuất LỊCH TRÌNH / AGENDA trong ngày.
 
 QUY TẮC:
-- Chỉ lấy dòng/khoảng có GIỜ rõ (VD: 8h–9h, 08:00-09:30, 9 giờ 00 - 11 giờ 00).
-- Mỗi mục: start (HH:MM), end (HH:MM hoặc null nếu chỉ một mốc), title (tóm tắt việc, dưới 80 ký tự).
-- Bỏ mục không có giờ. Không lấy phần địa điểm, tổ chức, mục đích.
-- Sắp xếp theo giờ tăng dần.
-- Tối đa 30 mục.
+- Chỉ lấy các mục có khung giờ rõ. Hỗ trợ:
+  • VI: 8h–9h, 08:00-09:30, 9 giờ 00 - 11 giờ 00
+  • EN: 2:30 PM - 3:20 PM, 14:20 PM - 14:30 PM, 14:20-14:30
+- start/end luôn trả về HH:MM 24 giờ (VD: 2:30 PM → 14:30; 14:20 PM → 14:20).
+- title: CHỈ tiêu đề ngắn gọn (ưu tiên "Part N: …" / dòng đậm đầu), dưới 60 ký tự, giữ nghĩa.
+  Không lấy đoạn mô tả dài, không lấy Person(s) In charge / người phụ trách.
+- Bỏ dòng header bảng (Time, Key Activities, …). Bỏ mục không có giờ.
+- Sắp xếp theo giờ tăng dần. Tối đa 30 mục.
 
 TRẢ VỀ JSON ARRAY (không markdown):
-[{"start":"08:00","end":"09:00","title":"Việc A"},{"start":"09:00","end":null,"title":"Việc B"}]
+[{"start":"14:20","end":"14:30","title":"Part 1: Welcome to Wonderland"}]
 
 Nếu không có lịch trình theo giờ → []"""
 
@@ -133,24 +136,38 @@ _TIME_GIO_BARE_RE = re.compile(
 )
 _RANGE_INDICATOR_RE = re.compile(r"\b(?:đến|den|–|—)\b|(?<=\d)\s*-\s*(?=\d)", re.IGNORECASE)
 
-# Timeline slot: "8h00 - 9h30: nội dung" / "08:00–09:00 Nội dung"
+# Timeline: VN "8h00 - 9h30: nội dung" / EN "14:20 PM - 14:30 PM Part 1: …"
 _TIMELINE_SLOT_RE = re.compile(
-    r"(?P<h1>\d{1,2})\s*(?:[:hHgiờ]\s*(?P<m1>\d{2})?)?"
+    r"(?P<h1>\d{1,2})\s*(?:[:hH]\s*(?P<m1>\d{2})|(?:\s*giờ\s*(?P<m1b>\d{2})?))?"
     r"(?:\s*(?:giờ|g)\s*)?"
-    r"\s*(?:[-–—]|đến|den)\s*"
-    r"(?P<h2>\d{1,2})\s*(?:[:hHgiờ]\s*(?P<m2>\d{2})?)?"
+    r"\s*(?P<p1>[AaPp][Mm])?"
+    r"\s*(?:[-–—]|đến|den|to)\s*"
+    r"(?P<h2>\d{1,2})\s*(?:[:hH]\s*(?P<m2>\d{2})|(?:\s*giờ\s*(?P<m2b>\d{2})?))?"
     r"(?:\s*(?:giờ|g)\s*)?"
-    r"\s*[:.\-–—]?\s*(?P<title>.+)",
+    r"\s*(?P<p2>[AaPp][Mm])?"
+    r"\s*[:.\-–—]?\s*(?P<title>.*)$",
     re.IGNORECASE,
 )
 _TIMELINE_SINGLE_RE = re.compile(
     r"(?P<h1>\d{1,2})\s*(?:[:hH]\s*(?P<m1>\d{2})|(?:\s*giờ\s*(?P<m1b>\d{2})?)|(?:\s*h\s*(?P<m1c>\d{2})?))?"
+    r"\s*(?P<p1>[AaPp][Mm])?"
     r"\s*[:.\-–—]\s*(?P<title>.+)",
     re.IGNORECASE,
 )
 _TIMELINE_SECTION_RE = re.compile(
-    r"(?:^|\n)\s*(?:\d+\.\s*)?(?:Lịch\s*trình|Chương\s*trình|Nội\s*dung\s*chương\s*trình|"
-    r"Tiến\s*trình|Agenda)\s*:?\s*",
+    r"(?:^|\n)\s*(?:[IVXLC]+\.\s*)?(?:\d+\.\s*)?(?:"
+    r"Lịch\s*trình|Chương\s*trình|Nội\s*dung\s*chương\s*trình|Tiến\s*trình|"
+    r"Activity\s+Day\s+Agenda|Agenda|Schedule|Programme|Program|Timeline"
+    r")\s*:?\s*",
+    re.IGNORECASE,
+)
+_TIMELINE_TABLE_HEADER_RE = re.compile(
+    r"^(?:time|key\s*activities|person\(s\)|persons?\s*in\s*charge|giờ|nội\s*dung|người\s*phụ\s*trách)\b",
+    re.IGNORECASE,
+)
+_TIMELINE_PERSON_LINE_RE = re.compile(
+    r"^(?:mrs?\.?|ms\.?|mr\.?|dr\.?)\s+\w+"
+    r"|^(?:students?|teachers?|marketing\s+department|ban\s+giám\s+hiệu)\s*$",
     re.IGNORECASE,
 )
 
@@ -177,16 +194,61 @@ def _parse_timeline_minutes(h: Optional[str], *minute_groups: Optional[str]) -> 
     return hour, minute
 
 
+def _timeline_to_24h(hour: int, minute: int, period: Optional[str]) -> Optional[str]:
+    """Convert clock time to HH:MM 24h. Hour>=13 keeps value and ignores AM/PM."""
+    if minute < 0 or minute > 59 or hour < 0 or hour > 23:
+        return None
+    if period and hour <= 12:
+        p = period.strip().upper()
+        if p == "AM":
+            if hour == 12:
+                hour = 0
+        elif p == "PM":
+            if hour != 12:
+                hour += 12
+    return _hhmm(hour, minute)
+
+
 def _clean_timeline_title(raw: str) -> Optional[str]:
     text = raw.strip()
     text = re.sub(r"^[\-\u2013\u2014\u2022\*•]+\s*", "", text)
-    text = re.sub(r"\s+", " ", text).strip(" .;,-")
+    # Drop person-in-charge column residue
+    text = re.split(
+        r"\b(?:Person\(s\)|Persons?)\s+In\s+charge\b|\bNgười\s*phụ\s*trách\b",
+        text,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    text = re.sub(r"\s+", " ", text).strip(" .;,-|")
     if not text or len(text) < 2:
         return None
-    # Skip if title looks like another time header only
-    if re.fullmatch(r"\d{1,2}\s*[hH:]?\d{0,2}", text):
+    if _TIMELINE_TABLE_HEADER_RE.match(text):
         return None
-    return text[:80]
+    if _TIMELINE_PERSON_LINE_RE.match(text):
+        return None
+    if re.fullmatch(r"\d{1,2}\s*(?:[:hH]?\d{0,2})\s*(?:[AaPp][Mm])?", text):
+        return None
+
+    # Prefer short activity heading: "Part 1: Welcome to Wonderland"
+    part = re.match(
+        r"^((?:Part|Phần)\s*\d+\s*:\s*.{2,70}?)(?:\s+[–—-]\s+|\.\s+|$)",
+        text,
+        re.IGNORECASE,
+    )
+    if part:
+        text = part.group(1).strip()
+    else:
+        # Title - long description → keep left if short
+        split = re.split(r"\s+[–—-]\s+", text, maxsplit=1)
+        if len(split) == 2 and len(split[0]) <= 70 and len(split[1]) > 35:
+            text = split[0].strip()
+        elif ". " in text and len(text) > 70:
+            text = text.split(". ", 1)[0].strip()
+
+    text = text.strip(" .;,-")
+    if not text or len(text) < 2:
+        return None
+    return text[:60]
 
 
 def _normalize_timeline_slots(slots: List[Dict[str, Any]]) -> List[Dict[str, Optional[str]]]:
@@ -203,7 +265,7 @@ def _normalize_timeline_slots(slots: List[Dict[str, Any]]) -> List[Dict[str, Opt
             continue
         if end and not re.fullmatch(r"\d{2}:\d{2}", str(end)):
             end = None
-        key = (start, end or "", title)
+        key = (start, end or "", title.lower())
         if key in seen:
             continue
         seen.add(key)
@@ -213,7 +275,7 @@ def _normalize_timeline_slots(slots: List[Dict[str, Any]]) -> List[Dict[str, Opt
 
 
 def _regex_extract_timeline(text: str) -> List[Dict[str, Optional[str]]]:
-    """Extract timed agenda lines from plan text (prefer Lịch trình / Chương trình section)."""
+    """Extract timed agenda lines (VI/EN), prefer Agenda / Lịch trình section."""
     if not text or not text.strip():
         return []
 
@@ -222,47 +284,64 @@ def _regex_extract_timeline(text: str) -> List[Dict[str, Optional[str]]]:
     if section_match:
         rest = text[section_match.end() :]
         stop = _LOCATION_STOP_RE.search(rest)
-        # Also stop at next major numbered section
-        numbered = re.search(r"(?=\n\s*\d+\.\s+[A-Za-zÀ-ỹ])", rest)
+        # Stop at next major roman/arabic numbered section (not table rows)
+        numbered = re.search(r"(?=\n\s*(?:[IVXLC]+\.\s+|[5-9]\.\s+|[1-9]\d+\.\s+)[A-Za-zÀ-ỹ])", rest)
         end_idx = len(rest)
         if stop:
             end_idx = min(end_idx, stop.start())
         if numbered:
             end_idx = min(end_idx, numbered.start())
-        search_text = rest[:end_idx] if end_idx < len(rest) else rest[:4000]
+        search_text = rest[:end_idx] if end_idx < len(rest) else rest[:6000]
     else:
-        search_text = text[:8000]
+        search_text = text[:10000]
 
+    lines = [ln.strip() for ln in re.split(r"[\n\r]+", search_text) if ln.strip()]
     slots: List[Dict[str, Any]] = []
-    for line in re.split(r"[\n\r]+", search_text):
-        line = line.strip()
-        if not line or len(line) < 4:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if _TIMELINE_TABLE_HEADER_RE.match(line):
+            i += 1
             continue
 
         m = _TIMELINE_SLOT_RE.search(line)
         if m:
-            h1, m1 = _parse_timeline_minutes(m.group("h1"), m.group("m1"))
-            h2, m2 = _parse_timeline_minutes(m.group("h2"), m.group("m2"))
-            start = _hhmm(h1, m1)
-            end = _hhmm(h2, m2)
-            title = _clean_timeline_title(m.group("title") or "")
+            h1, m1 = _parse_timeline_minutes(m.group("h1"), m.group("m1"), m.group("m1b"))
+            h2, m2 = _parse_timeline_minutes(m.group("h2"), m.group("m2"), m.group("m2b"))
+            start = _timeline_to_24h(h1, m1, m.group("p1"))
+            end = _timeline_to_24h(h2, m2, m.group("p2") or m.group("p1"))
+            title_raw = (m.group("title") or "").strip()
+            # PDF table: time alone on line → title on next non-person line
+            look = i + 1
+            while not title_raw and look < len(lines):
+                nxt = lines[look]
+                look += 1
+                if _TIMELINE_TABLE_HEADER_RE.match(nxt) or _TIMELINE_PERSON_LINE_RE.match(nxt):
+                    continue
+                if _TIMELINE_SLOT_RE.search(nxt):
+                    break
+                title_raw = nxt
+                i = look - 1
+                break
+            title = _clean_timeline_title(title_raw)
             if start and title:
                 slots.append({"start": start, "end": end, "title": title})
+            i += 1
             continue
 
-        # Single time point with title (avoid matching plain "2. Địa điểm")
         m2 = _TIMELINE_SINGLE_RE.search(line)
-        if m2 and re.search(r"\d", line[:8]):
+        if m2 and re.search(r"\d", line[:10]):
+            if not re.search(r"\d\s*[hH:]|giờ|[AaPp][Mm]", line[:24], re.IGNORECASE):
+                i += 1
+                continue
             h1, minute = _parse_timeline_minutes(
                 m2.group("h1"), m2.group("m1"), m2.group("m1b"), m2.group("m1c")
             )
-            # Require explicit time marker to reduce false positives
-            if not re.search(r"\d\s*[hH:]|giờ", line[:20], re.IGNORECASE):
-                continue
-            start = _hhmm(h1, minute)
+            start = _timeline_to_24h(h1, minute, m2.group("p1"))
             title = _clean_timeline_title(m2.group("title") or "")
             if start and title:
                 slots.append({"start": start, "end": None, "title": title})
+        i += 1
 
     return _normalize_timeline_slots(slots)
 
