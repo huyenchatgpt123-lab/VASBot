@@ -154,10 +154,17 @@ _TIMELINE_SINGLE_RE = re.compile(
     r"\s*[:.\-–—]\s*(?P<title>.+)",
     re.IGNORECASE,
 )
+_TIMELINE_BEFORE_RE = re.compile(
+    r"^(?:trước|truoc)\s*"
+    r"(?P<h1>\d{1,2})\s*(?:[:.hH]\s*(?P<m1>\d{2})|(?:\s*giờ\s*(?P<m1b>\d{2})?)|(?:\s*h\s*(?P<m1c>\d{2})?))?"
+    r"\s*(?P<p1>[AaPp][Mm])?"
+    r"\s*[:.\-–—]?\s*(?P<title>.*)$",
+    re.IGNORECASE,
+)
 _TIMELINE_SECTION_RE = re.compile(
     r"(?:^|\n)\s*(?:[IVXLC]+\.\s*)?(?:\d+\.\s*)?(?:"
     r"Lịch\s*trình|Chương\s*trình(?:\s*làm\s*việc)?|Nội\s*dung\s*chương\s*trình|Tiến\s*trình|"
-    r"Khung\s*giờ|Thời\s*khóa\s*biểu|"
+    r"Khung\s*giờ|Thời\s*khóa\s*biểu|Kế\s*hoạch\s*chi\s*tiết|"
     r"Activity\s+Day\s+Agenda|Agenda|Schedule|Programme|Program|Timeline|Run\s*of\s*show|"
     r"Working\s+schedule"
     r")\s*:?\s*",
@@ -172,7 +179,7 @@ _TIMELINE_SECTION_STOP_RE = re.compile(
     re.IGNORECASE,
 )
 _TIMELINE_TABLE_HEADER_RE = re.compile(
-    r"^(?:time|key\s*activities|person\(s\)|persons?\s*in\s*charge|giờ|nội\s*dung|người\s*phụ\s*trách)\b",
+    r"^(?:time|key\s*activities|person\(s\)|persons?\s*in\s*charge|giờ|thời\s*gian|nội\s*dung|mục\s*tiêu|minh\s*chứng|người\s*phụ\s*trách)\b",
     re.IGNORECASE,
 )
 _TIMELINE_PERSON_LINE_RE = re.compile(
@@ -245,6 +252,16 @@ def _is_weak_timeline_title(title: str) -> bool:
 
 def _clean_timeline_title(raw: str) -> Optional[str]:
     text = raw.strip()
+    # Flattened PDF/DOCX table rows often look like "Nội dung | Mục tiêu | Minh chứng".
+    # Keep only the content cell to avoid polluting title with other columns.
+    if "|" in text:
+        cells = [c.strip() for c in text.split("|") if c.strip()]
+        if cells:
+            text = cells[0]
+    else:
+        cells = [c.strip() for c in re.split(r"\s{2,}", text) if c.strip()]
+        if len(cells) >= 3:
+            text = cells[0]
     text = re.sub(r"^[\-\u2013\u2014\u2022\*•]+\s*", "", text)
     # Drop person-in-charge column residue
     text = re.split(
@@ -382,7 +399,7 @@ def _regex_extract_timeline(text: str) -> List[Dict[str, Optional[str]]]:
                 look += 1
                 if _TIMELINE_TABLE_HEADER_RE.match(nxt) or _TIMELINE_PERSON_LINE_RE.match(nxt):
                     continue
-                if _TIMELINE_SLOT_RE.search(nxt):
+                if _TIMELINE_SLOT_RE.search(nxt) or _TIMELINE_BEFORE_RE.search(nxt):
                     break
                 title_raw = nxt
                 i = look - 1
@@ -390,6 +407,33 @@ def _regex_extract_timeline(text: str) -> List[Dict[str, Optional[str]]]:
             title = _clean_timeline_title(title_raw)
             if start and title:
                 slots.append({"start": start, "end": end, "title": title})
+            i += 1
+            continue
+
+        m_before = _TIMELINE_BEFORE_RE.search(line)
+        if m_before:
+            h1, minute = _parse_timeline_minutes(
+                m_before.group("h1"), m_before.group("m1"), m_before.group("m1b"), m_before.group("m1c")
+            )
+            start = _timeline_to_24h(h1, minute, m_before.group("p1"))
+            title_raw = (m_before.group("title") or "").strip()
+            look = i + 1
+            while not title_raw and look < len(lines):
+                nxt = lines[look]
+                look += 1
+                if (
+                    _TIMELINE_TABLE_HEADER_RE.match(nxt)
+                    or _TIMELINE_PERSON_LINE_RE.match(nxt)
+                ):
+                    continue
+                if _TIMELINE_SLOT_RE.search(nxt) or _TIMELINE_BEFORE_RE.search(nxt):
+                    break
+                title_raw = nxt
+                i = look - 1
+                break
+            title = _clean_timeline_title(title_raw)
+            if start and title:
+                slots.append({"start": start, "end": None, "title": title})
             i += 1
             continue
 

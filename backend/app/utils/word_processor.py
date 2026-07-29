@@ -6,12 +6,23 @@ from app.utils.chunking import chunk_text
 
 
 def extract_text_from_docx(filepath: str) -> List[Dict[str, Any]]:
-    """Extract text from Word document, treating every ~3000 chars as a 'page'."""
+    """Extract text from Word document, including table rows."""
     doc = DocxDocument(filepath)
     full_text = []
     for para in doc.paragraphs:
         if para.text.strip():
             full_text.append(para.text)
+    for table in doc.tables:
+        for row in table.rows:
+            cells = []
+            for cell in row.cells:
+                raw = " ".join(p.text.strip() for p in cell.paragraphs if p.text.strip())
+                value = " ".join(raw.split()).strip()
+                if value:
+                    cells.append(value)
+            if cells:
+                # Keep a stable delimiter so downstream timeline parsing can map columns.
+                full_text.append(" | ".join(cells))
 
     combined = "\n".join(full_text)
     chars_per_page = 3000
