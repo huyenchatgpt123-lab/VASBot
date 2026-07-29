@@ -9,7 +9,7 @@ from app.repositories.usage_repository import UsageRepository
 from app.utils.pdf_processor import process_pdf
 from app.utils.word_processor import process_docx
 from app.services.faiss_service import faiss_service
-from app.services.task_extractor import task_extractor
+from app.services.task_extractor import task_extractor, apply_timeline_time_fallback
 from app.services.plan_event_service import PlanEventService
 from app.services.storage_service import (
     upload_document_file,
@@ -64,13 +64,17 @@ class DocumentService:
 
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
             timeline = task_extractor.extract_plan_timeline_from_chunks(chunks) if include_in_calendar else []
+            starts_at = plan_event.start if plan_event else None
+            ends_at = plan_event.end if plan_event else None
+            if include_in_calendar and timeline:
+                starts_at, ends_at = apply_timeline_time_fallback(starts_at, ends_at, timeline)
             if include_in_calendar:
                 # Spec: opted-in → create event; 0 date → needs_review placeholder (admin must edit)
                 PlanEventService(self.db).replace_ai_events_for_document(
                     doc,
                     title=plan_title or doc.plan_title,
-                    starts_at=plan_event.start if plan_event else None,
-                    ends_at=plan_event.end if plan_event else None,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
                     location=plan_event.location if plan_event else None,
                     timeline=timeline or None,
                     include_in_calendar=True,
@@ -180,6 +184,10 @@ class DocumentService:
             ends_at = plan_event.end if plan_event else None
             display_title = plan_title or doc.plan_title
 
+            # Timeline used for clock fallback (1C) on preview and calendar extract (2C)
+            timeline = task_extractor.extract_plan_timeline_from_chunks(chunks)
+            starts_at, ends_at = apply_timeline_time_fallback(starts_at, ends_at, timeline)
+
             if preview_only:
                 return {
                     "document_id": doc.id,
@@ -197,12 +205,6 @@ class DocumentService:
                     ),
                 }
 
-            timeline = (
-                task_extractor.extract_plan_timeline_from_chunks(chunks)
-                if put_on_calendar
-                else []
-            )
-
             events = []
 
             if put_on_calendar:
@@ -219,8 +221,8 @@ class DocumentService:
                 if plan_title:
                     doc.plan_title = plan_title
                 if plan_event:
-                    doc.plan_event_at = plan_event.start
-                    doc.plan_event_end_at = plan_event.end
+                    doc.plan_event_at = starts_at
+                    doc.plan_event_end_at = ends_at
                 else:
                     doc.plan_event_at = None
                     doc.plan_event_end_at = None

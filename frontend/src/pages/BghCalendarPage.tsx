@@ -55,7 +55,22 @@ function formatTime(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
+  // Date-only events are stored at 00:00 — show em dash instead of midnight
+  if (d.getHours() === 0 && d.getMinutes() === 0) return '—';
   return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatPlanTimeLabel(plan: {
+  is_continuation?: boolean;
+  start_time: string | null;
+  end_time?: string | null;
+}): string {
+  if (plan.is_continuation) return 'Tiếp diễn';
+  const startLabel = formatTime(plan.start_time);
+  const endLabel = plan.end_time ? formatTime(plan.end_time) : '—';
+  if (startLabel === '—') return '—';
+  if (endLabel !== '—') return `${startLabel}–${endLabel}`;
+  return startLabel;
 }
 
 function monthLabel(d: Date): string {
@@ -728,11 +743,7 @@ function PlanRow({
   onViewTimeline: () => void;
 }) {
   const hasTimeline = Array.isArray(plan.timeline) && plan.timeline.length > 0;
-  const timeLabel = plan.is_continuation
-    ? 'Tiếp diễn'
-    : plan.end_time
-      ? `${formatTime(plan.start_time)}–${formatTime(plan.end_time)}`
-      : formatTime(plan.start_time);
+  const timeLabel = formatPlanTimeLabel(plan);
 
   return (
     <li className={`group flex items-start gap-3 px-4 py-3 rounded-xl bg-white border hover:shadow-sm transition-all ${
@@ -834,11 +845,7 @@ function TimelineModal({
     };
   }, [onClose]);
 
-  const eventTimeLabel = plan.is_continuation
-    ? 'Tiếp diễn'
-    : plan.end_time
-      ? `${formatTime(plan.start_time)}–${formatTime(plan.end_time)}`
-      : formatTime(plan.start_time);
+  const eventTimeLabel = formatPlanTimeLabel(plan);
 
   return (
     <div

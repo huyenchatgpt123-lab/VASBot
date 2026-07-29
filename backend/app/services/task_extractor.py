@@ -362,6 +362,88 @@ def _parse_timeline_json(raw: Any) -> List[Dict[str, Optional[str]]]:
     return _normalize_timeline_slots(slots)
 
 
+def _parse_hhmm_tuple(value: Optional[str]) -> Optional[tuple[int, int]]:
+    if not value or not re.fullmatch(r"\d{2}:\d{2}", str(value)):
+        return None
+    hour_s, minute_s = str(value).split(":")
+    hour, minute = int(hour_s), int(minute_s)
+    if hour > 23 or minute > 59:
+        return None
+    return hour, minute
+
+
+def timeline_day_bounds(
+    timeline: Optional[List[Dict[str, Any]]],
+) -> Optional[tuple[str, Optional[str]]]:
+    """
+    1C: one slot with range → that range; many slots → first start + last end (or last start).
+    """
+    if not timeline:
+        return None
+    slots = [s for s in timeline if isinstance(s, dict) and s.get("start")]
+    if not slots:
+        return None
+    start = str(slots[0]["start"])
+    if len(slots) == 1:
+        end_raw = slots[0].get("end")
+        end = str(end_raw) if end_raw else None
+    else:
+        last = slots[-1]
+        end_raw = last.get("end") or last.get("start")
+        end = str(end_raw) if end_raw else None
+        if end == start:
+            end = str(last["end"]) if last.get("end") else end
+    if not _parse_hhmm_tuple(start):
+        return None
+    if end and not _parse_hhmm_tuple(end):
+        end = None
+    return start, end
+
+
+def has_explicit_clock_time(dt: Optional[datetime]) -> bool:
+    """Date-only extractions are stored at 00:00 — treat that as 'no clock time' (4A)."""
+    if not dt:
+        return False
+    return bool(dt.hour or dt.minute or dt.second)
+
+
+def apply_timeline_time_fallback(
+    starts_at: Optional[datetime],
+    ends_at: Optional[datetime],
+    timeline: Optional[List[Dict[str, Any]]],
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """
+    If event has a date but no explicit clock time, fill start/end from timeline (1C, 4A).
+    Multi-day end dates are preserved; only the start clock is filled.
+    """
+    if not starts_at or has_explicit_clock_time(starts_at):
+        return starts_at, ends_at
+
+    bounds = timeline_day_bounds(timeline)
+    if not bounds:
+        return starts_at, ends_at
+
+    start_s, end_s = bounds
+    parsed_start = _parse_hhmm_tuple(start_s)
+    if not parsed_start:
+        return starts_at, ends_at
+    sh, sm = parsed_start
+    new_start = starts_at.replace(hour=sh, minute=sm, second=0, microsecond=0)
+
+    multi_day = ends_at is not None and ends_at.date() > starts_at.date()
+    if multi_day:
+        return new_start, ends_at
+
+    if end_s:
+        parsed_end = _parse_hhmm_tuple(end_s)
+        if parsed_end:
+            eh, em = parsed_end
+            new_end = starts_at.replace(hour=eh, minute=em, second=0, microsecond=0)
+            if new_end > new_start:
+                return new_start, new_end
+    return new_start, None
+
+
 def _clean_location_item(raw: str) -> Optional[str]:
     text = raw.strip()
     text = _LOCATION_BULLET_RE.sub("", text)
