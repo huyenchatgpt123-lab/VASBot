@@ -138,27 +138,37 @@ _RANGE_INDICATOR_RE = re.compile(r"\b(?:đến|den|–|—)\b|(?<=\d)\s*-\s*(?=\
 
 # Timeline: VN "8h00 - 9h30: nội dung" / EN "14:20 PM - 14:30 PM Part 1: …"
 _TIMELINE_SLOT_RE = re.compile(
-    r"(?P<h1>\d{1,2})\s*(?:[:hH]\s*(?P<m1>\d{2})|(?:\s*giờ\s*(?P<m1b>\d{2})?))?"
+    r"(?P<h1>\d{1,2})\s*(?:[:.hH]\s*(?P<m1>\d{2})|(?:\s*giờ\s*(?P<m1b>\d{2})?))?"
     r"(?:\s*(?:giờ|g)\s*)?"
     r"\s*(?P<p1>[AaPp][Mm])?"
     r"\s*(?:[-–—]|đến|den|to)\s*"
-    r"(?P<h2>\d{1,2})\s*(?:[:hH]\s*(?P<m2>\d{2})|(?:\s*giờ\s*(?P<m2b>\d{2})?))?"
+    r"(?P<h2>\d{1,2})\s*(?:[:.hH]\s*(?P<m2>\d{2})|(?:\s*giờ\s*(?P<m2b>\d{2})?))?"
     r"(?:\s*(?:giờ|g)\s*)?"
     r"\s*(?P<p2>[AaPp][Mm])?"
     r"\s*[:.\-–—]?\s*(?P<title>.*)$",
     re.IGNORECASE,
 )
 _TIMELINE_SINGLE_RE = re.compile(
-    r"(?P<h1>\d{1,2})\s*(?:[:hH]\s*(?P<m1>\d{2})|(?:\s*giờ\s*(?P<m1b>\d{2})?)|(?:\s*h\s*(?P<m1c>\d{2})?))?"
+    r"(?P<h1>\d{1,2})\s*(?:[:.hH]\s*(?P<m1>\d{2})|(?:\s*giờ\s*(?P<m1b>\d{2})?)|(?:\s*h\s*(?P<m1c>\d{2})?))?"
     r"\s*(?P<p1>[AaPp][Mm])?"
     r"\s*[:.\-–—]\s*(?P<title>.+)",
     re.IGNORECASE,
 )
 _TIMELINE_SECTION_RE = re.compile(
     r"(?:^|\n)\s*(?:[IVXLC]+\.\s*)?(?:\d+\.\s*)?(?:"
-    r"Lịch\s*trình|Chương\s*trình|Nội\s*dung\s*chương\s*trình|Tiến\s*trình|"
-    r"Activity\s+Day\s+Agenda|Agenda|Schedule|Programme|Program|Timeline"
+    r"Lịch\s*trình|Chương\s*trình(?:\s*làm\s*việc)?|Nội\s*dung\s*chương\s*trình|Tiến\s*trình|"
+    r"Khung\s*giờ|Thời\s*khóa\s*biểu|"
+    r"Activity\s+Day\s+Agenda|Agenda|Schedule|Programme|Program|Timeline|Run\s*of\s*show|"
+    r"Working\s+schedule"
     r")\s*:?\s*",
+    re.IGNORECASE,
+)
+# Stop only at high-level sections — do NOT stop on "Nội dung:" inside an agenda table.
+_TIMELINE_SECTION_STOP_RE = re.compile(
+    r"(?=\n\s*[IVXLC]+\.\s+[A-Za-zÀ-ỹ])"
+    r"|(?=\n\s*\d+\.\s+(?:Tổ\s*chức|Địa\s*điểm|Thành\s*phần|Mục\s*đích|Yêu\s*cầu|"
+    r"Kinh\s*phí|Ghi\s*chú|Phân\s*công|Nhiệm\s*vụ|Điều\s*kiện)\b)"
+    r"|(?=\n\s*(?:[-–—•*]\s*)?(?:Tổ\s*chức|Địa\s*điểm)\s*:)",
     re.IGNORECASE,
 )
 _TIMELINE_TABLE_HEADER_RE = re.compile(
@@ -167,7 +177,15 @@ _TIMELINE_TABLE_HEADER_RE = re.compile(
 )
 _TIMELINE_PERSON_LINE_RE = re.compile(
     r"^(?:mrs?\.?|ms\.?|mr\.?|dr\.?)\s+\w+"
-    r"|^(?:students?|teachers?|marketing\s+department|ban\s+giám\s+hiệu)\s*$",
+    r"|^(?:students?|teachers?|marketing\s+department|ban\s+giám\s+hiệu)\s*$"
+    r"|^(?:mrs?\.?|ms\.?|mr\.?|dr\.?)\s+\w+(?:\s*,\s*(?:students?|teachers?|.+))?$",
+    re.IGNORECASE,
+)
+_TIMELINE_TITLE_DATE_NOISE_RE = re.compile(
+    r"ngày\s*\d{1,2}\s*tháng\s*\d{1,2}"
+    r"|(?<!\d)\d{1,2}/\d{1,2}/\d{4}"
+    r"|\b(?:Thứ|Thu)\s*(?:Hai|Ba|Tư|Năm|Sáu|Bảy|CN|Chủ\s*nhật)\b"
+    r"|\bnăm\s*\d{4}\b",
     re.IGNORECASE,
 )
 
@@ -209,6 +227,22 @@ def _timeline_to_24h(hour: int, minute: int, period: Optional[str]) -> Optional[
     return _hhmm(hour, minute)
 
 
+def _is_weak_timeline_title(title: str) -> bool:
+    """Reject titles that are mostly event-date metadata, not an agenda activity."""
+    t = (title or "").strip()
+    if len(t) < 3:
+        return True
+    if re.match(r"^(?:thời\s*gian|ngày)\b", t, re.IGNORECASE):
+        return True
+    if _TIMELINE_TITLE_DATE_NOISE_RE.search(t):
+        without = _TIMELINE_TITLE_DATE_NOISE_RE.sub(" ", t)
+        without = re.sub(r"[,.;]", " ", without)
+        without = re.sub(r"\s+", " ", without).strip(" .;,-")
+        if len(without) < 10:
+            return True
+    return False
+
+
 def _clean_timeline_title(raw: str) -> Optional[str]:
     text = raw.strip()
     text = re.sub(r"^[\-\u2013\u2014\u2022\*•]+\s*", "", text)
@@ -226,7 +260,9 @@ def _clean_timeline_title(raw: str) -> Optional[str]:
         return None
     if _TIMELINE_PERSON_LINE_RE.match(text):
         return None
-    if re.fullmatch(r"\d{1,2}\s*(?:[:hH]?\d{0,2})\s*(?:[AaPp][Mm])?", text):
+    if re.fullmatch(r"\d{1,2}\s*(?:[:.hH]?\d{0,2})\s*(?:[AaPp][Mm])?", text):
+        return None
+    if re.match(r"^(?:thời\s*gian|ngày)\s*:?\s*", text, re.IGNORECASE):
         return None
 
     # Prefer short activity heading: "Part 1: Welcome to Wonderland"
@@ -247,6 +283,8 @@ def _clean_timeline_title(raw: str) -> Optional[str]:
 
     text = text.strip(" .;,-")
     if not text or len(text) < 2:
+        return None
+    if _is_weak_timeline_title(text):
         return None
     return text[:60]
 
@@ -274,27 +312,53 @@ def _normalize_timeline_slots(slots: List[Dict[str, Any]]) -> List[Dict[str, Opt
     return cleaned[:30]
 
 
+def _timeline_search_window(text: str) -> tuple[str, bool]:
+    """Return (search_text, found_agenda_section)."""
+    section_match = _TIMELINE_SECTION_RE.search(text)
+    if not section_match:
+        return text[:10000], False
+
+    rest = text[section_match.end() :]
+    stop = _TIMELINE_SECTION_STOP_RE.search(rest)
+    numbered = re.search(
+        r"(?=\n\s*(?:[IVXLC]+\.\s+|[6-9]\.\s+|[1-9]\d+\.\s+)[A-Za-zÀ-ỹ])",
+        rest,
+    )
+    end_idx = len(rest)
+    if stop:
+        end_idx = min(end_idx, stop.start())
+    if numbered:
+        end_idx = min(end_idx, numbered.start())
+    window = rest[:end_idx] if end_idx < len(rest) else rest[:6000]
+    return window, True
+
+
+def _count_raw_timeline_ranges(text: str) -> int:
+    return sum(1 for _ in _TIMELINE_SLOT_RE.finditer(text or ""))
+
+
+def _timeline_regex_is_weak(slots: List[Dict[str, Optional[str]]], search_text: str) -> bool:
+    """True → should also try AI (regex alone is insufficient / noisy)."""
+    if not slots:
+        return True
+    if len(slots) == 1 and _is_weak_timeline_title(str(slots[0].get("title") or "")):
+        return True
+    if slots and all(_is_weak_timeline_title(str(s.get("title") or "")) for s in slots):
+        return True
+    raw_count = _count_raw_timeline_ranges(search_text)
+    if raw_count >= 3 and len(slots) <= 1:
+        return True
+    if raw_count >= len(slots) + 2:
+        return True
+    return False
+
+
 def _regex_extract_timeline(text: str) -> List[Dict[str, Optional[str]]]:
     """Extract timed agenda lines (VI/EN), prefer Agenda / Lịch trình section."""
     if not text or not text.strip():
         return []
 
-    search_text = text
-    section_match = _TIMELINE_SECTION_RE.search(text)
-    if section_match:
-        rest = text[section_match.end() :]
-        stop = _LOCATION_STOP_RE.search(rest)
-        # Stop at next major roman/arabic numbered section (not table rows)
-        numbered = re.search(r"(?=\n\s*(?:[IVXLC]+\.\s+|[5-9]\.\s+|[1-9]\d+\.\s+)[A-Za-zÀ-ỹ])", rest)
-        end_idx = len(rest)
-        if stop:
-            end_idx = min(end_idx, stop.start())
-        if numbered:
-            end_idx = min(end_idx, numbered.start())
-        search_text = rest[:end_idx] if end_idx < len(rest) else rest[:6000]
-    else:
-        search_text = text[:10000]
-
+    search_text, _has_section = _timeline_search_window(text)
     lines = [ln.strip() for ln in re.split(r"[\n\r]+", search_text) if ln.strip()]
     slots: List[Dict[str, Any]] = []
     i = 0
@@ -331,7 +395,11 @@ def _regex_extract_timeline(text: str) -> List[Dict[str, Optional[str]]]:
 
         m2 = _TIMELINE_SINGLE_RE.search(line)
         if m2 and re.search(r"\d", line[:10]):
-            if not re.search(r"\d\s*[hH:]|giờ|[AaPp][Mm]", line[:24], re.IGNORECASE):
+            if not re.search(r"\d\s*[hH:.]|giờ|[AaPp][Mm]", line[:24], re.IGNORECASE):
+                i += 1
+                continue
+            # Skip numbered section headers like "2. Địa điểm: ..."
+            if re.match(r"^\d+\.\s+\S", line):
                 i += 1
                 continue
             h1, minute = _parse_timeline_minutes(
@@ -956,10 +1024,22 @@ class TaskExtractor:
         if not snippet:
             return []
 
+        search_window, _ = _timeline_search_window(snippet)
         regex_slots = _regex_extract_timeline(snippet)
-        if regex_slots:
+        if regex_slots and not _timeline_regex_is_weak(regex_slots, search_window):
             return regex_slots
 
+        ai_slots = self._ai_extract_timeline(snippet)
+        if not ai_slots:
+            return regex_slots
+        if not regex_slots:
+            return ai_slots
+        # Prefer the richer, non-weak result
+        if len(ai_slots) >= len(regex_slots):
+            return ai_slots
+        return regex_slots
+
+    def _ai_extract_timeline(self, snippet: str) -> List[Dict[str, Optional[str]]]:
         try:
             response = self.client.chat.completions.create(
                 model=settings.CHAT_MODEL,
