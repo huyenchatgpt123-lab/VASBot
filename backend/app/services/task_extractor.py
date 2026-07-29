@@ -75,6 +75,20 @@ TRẢ VỀ JSON ARRAY (không markdown):
 Nếu không có lịch trình theo giờ → []"""
 
 
+PLAN_LOCATION_PROMPT = """Bạn đọc tài liệu và trích xuất CHỈ ĐỊA ĐIỂM tổ chức sự kiện.
+
+QUY TẮC:
+- Lấy từ mục "Địa điểm:" / "2. Địa điểm:" / "- Địa điểm:" — CHỈ nội dung trong mục đó.
+- Dừng trước mục tiếp theo (Tổ chức, Thời gian, Thành phần, Nội dung, ...).
+- Giữ nguyên một địa chỉ kể cả khi có dấu "-" giữa (VD: "Hội trường A - Trường Việt Anh 3").
+- Nhiều địa điểm dạng danh sách → nối bằng "; ".
+- Không lấy giờ, ngày, thứ trong tuần, mã trường VA1/VA3/EMC đứng một mình.
+- Không giải thích. Không markdown.
+
+TRẢ VỀ JSON:
+{"location":"chuỗi địa điểm hoặc null"}"""
+
+
 _EVENT_LINE_RE = re.compile(
     r"(?:Thời\s*gian|Ngày)\s*:\s*(.+)",
     re.IGNORECASE,
@@ -92,6 +106,19 @@ _LOCATION_STOP_RE = re.compile(
     re.IGNORECASE,
 )
 _LOCATION_BULLET_RE = re.compile(r"^[\-\u2013\u2014\u2022\*•]+\s*")
+_LOCATION_NOISE_TIME_RE = re.compile(
+    r"(?<!\d)\d{1,2}\s*(?:[:hH]|giờ)\s*\d{0,2}"
+    r"|\b(?:Thứ|Thu)\s*(?:Hai|Ba|Tư|Năm|Sáu|Bảy|CN|Chu\s*nh[ậa]t)\b"
+    r"|ngày\s*\d{1,2}\s*tháng\s*\d{1,2}\s*năm\s*\d{4}"
+    r"|(?<!\d)\d{1,2}/\d{1,2}/\d{4}(?!\d)",
+    re.IGNORECASE,
+)
+_LOCATION_LABEL_NOISE_RE = re.compile(
+    r"(?:^|;\s*)(?:\d+\.\s*)?(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung|"
+    r"Mục\s*đích|Yêu\s*cầu|Kinh\s*phí|Người\s*phụ\s*trách|Ghi\s*chú)\s*:?\s*",
+    re.IGNORECASE,
+)
+_LOCATION_CAMPUS_ONLY_RE = re.compile(r"^(?:VA\s*[13]|EMC)$", re.IGNORECASE)
 _VN_DATE_SLASH_RE = re.compile(r"(?<!\d)(\d{1,2})/(\d{1,2})/(\d{4})(?!\d)")
 _VN_DATE_WORDS_RE = re.compile(
     r"ngày\s*(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})",
@@ -259,6 +286,7 @@ def _parse_timeline_json(raw: Any) -> List[Dict[str, Optional[str]]]:
 def _clean_location_item(raw: str) -> Optional[str]:
     text = raw.strip()
     text = _LOCATION_BULLET_RE.sub("", text)
+    text = _LOCATION_LABEL_NOISE_RE.sub(" ", text)
     text = text.strip().rstrip(".;,")
     text = re.sub(r"\s+", " ", text)
     if not text or text.lower() == "null":
@@ -276,7 +304,22 @@ def _clean_location_item(raw: str) -> Optional[str]:
         re.IGNORECASE,
     ):
         return None
+    # Campus code alone is school affiliation, not a place
+    if _LOCATION_CAMPUS_ONLY_RE.match(text):
+        return None
+    # Reject lines that are mostly datetime / weekday noise
+    without_noise = _LOCATION_NOISE_TIME_RE.sub(" ", text)
+    without_noise = re.sub(r"\s+", " ", without_noise).strip(" .;,-")
+    if not without_noise or len(without_noise) < 3:
+        return None
+    # If heavy time/date noise but still has place words, strip the noise bits
+    if _LOCATION_NOISE_TIME_RE.search(text) and len(without_noise) >= 8:
+        text = without_noise
     return text[:200]
+
+
+def _line_is_location_bullet(line: str) -> bool:
+    return bool(re.match(r"^[-–—•*]\s+\S", line.strip()))
 
 
 def _normalize_location(raw: Optional[str]) -> Optional[str]:
@@ -291,28 +334,36 @@ def _normalize_location(raw: Optional[str]) -> Optional[str]:
     if stop:
         text = text[: stop.start()]
 
-    # Prefer newline / bullet-list items. Keep internal " - " in a single address
-    # (e.g. "Hội trường ... - Trường ...").
-    parts: List[str] = []
-    for line in re.split(r"[\n\r]+", text):
-        line = line.strip()
-        if not line:
-            continue
-        # One line with multiple leading bullets: "- A - B" / "• A • B"
-        if re.match(r"^[-–—•*]\s+", line) and len(re.findall(r"(?:^|\s)[-–—•*]\s+\S", line)) >= 2:
-            for seg in re.split(r"(?=(?:^|\s)[-–—•*]\s+\S)", line):
-                piece = _clean_location_item(seg)
-                if piece and piece not in parts:
-                    parts.append(piece)
-            continue
-        piece = _clean_location_item(line)
-        if piece and piece not in parts:
-            parts.append(piece)
+    lines = [ln.strip() for ln in re.split(r"[\n\r]+", text) if ln.strip()]
+    if not lines:
+        return None
 
-    if not parts:
-        piece = _clean_location_item(text)
-        if piece:
-            parts = [piece]
+    # #2: Prefer first line when it already looks complete, unless following
+    # lines are a real bullet list of places.
+    first_clean = _clean_location_item(lines[0])
+    following_bullets = [ln for ln in lines[1:] if _line_is_location_bullet(ln)]
+    if first_clean and len(first_clean) >= 15 and not following_bullets:
+        return first_clean[:300]
+
+    # #5: Only split multi-location by newline bullet items — never by mid-line " - ".
+    parts: List[str] = []
+    if following_bullets or (lines and _line_is_location_bullet(lines[0]) and len(lines) > 1):
+        candidate_lines = lines
+        # If first line is header residue without bullet but rest are bullets, skip empty first
+        if first_clean and not _line_is_location_bullet(lines[0]) and following_bullets:
+            parts.append(first_clean)
+            candidate_lines = lines[1:]
+        for line in candidate_lines:
+            piece = _clean_location_item(line)
+            if piece and piece not in parts:
+                parts.append(piece)
+    else:
+        if first_clean:
+            parts = [first_clean]
+        else:
+            piece = _clean_location_item(text)
+            if piece:
+                parts = [piece]
 
     if not parts:
         return None
@@ -335,6 +386,14 @@ def _regex_extract_location(text: str) -> Optional[str]:
         loc = _normalize_location(block)
         if loc:
             return loc
+    return None
+
+
+def _parse_location_json(raw: Any) -> Optional[str]:
+    if isinstance(raw, dict):
+        return _normalize_location(raw.get("location"))
+    if isinstance(raw, str):
+        return _normalize_location(raw)
     return None
 
 
@@ -633,21 +692,56 @@ class TaskExtractor:
         combined = "\n".join(chunk.get("content", "") for chunk in head)
         return self.extract_plan_title(combined)
 
-    def extract_plan_event(self, text: str) -> Optional[PlanEventRange]:
-        snippet = text[:12000].strip()
+    def extract_plan_location(self, text: str) -> Optional[str]:
+        """Regex first; AI location-only fallback when regex misses."""
+        snippet = (text or "")[:12000].strip()
         if not snippet:
             return None
 
         regex_location = _regex_extract_location(snippet)
+        if regex_location:
+            return regex_location
+
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.CHAT_MODEL,
+                messages=[
+                    {"role": "system", "content": PLAN_LOCATION_PROMPT},
+                    {"role": "user", "content": f"NỘI DUNG TÀI LIỆU:\n{snippet[:8000]}"},
+                ],
+                temperature=0,
+                max_tokens=120,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[-1] if "\n" in content else content[3:]
+                content = content.rstrip("`").strip()
+            raw = json.loads(content)
+            return _parse_location_json(raw)
+        except Exception as e:
+            logger.warning(f"Plan location extraction error: {e}")
+            return None
+
+    def extract_plan_event(
+        self,
+        text: str,
+        *,
+        location: Optional[str] = None,
+    ) -> Optional[PlanEventRange]:
+        snippet = text[:12000].strip()
+        if not snippet:
+            return None
+
+        # #6: always resolve location (regex → AI location-only), independent of date match
+        if location is None:
+            location = self.extract_plan_location(snippet)
         regex_result = _regex_extract_plan_event(snippet)
         if regex_result:
-            if regex_location and not regex_result.location:
-                return PlanEventRange(
-                    start=regex_result.start,
-                    end=regex_result.end,
-                    location=regex_location,
-                )
-            return regex_result
+            return PlanEventRange(
+                start=regex_result.start,
+                end=regex_result.end,
+                location=regex_result.location or location,
+            )
 
         try:
             response = self.client.chat.completions.create(
@@ -666,13 +760,13 @@ class TaskExtractor:
             raw = json.loads(content)
             if isinstance(raw, dict):
                 parsed = _parse_plan_event_json(raw)
-                if parsed and regex_location and not parsed.location:
-                    return PlanEventRange(
-                        start=parsed.start,
-                        end=parsed.end,
-                        location=regex_location,
-                    )
-                return parsed
+                if not parsed:
+                    return None
+                return PlanEventRange(
+                    start=parsed.start,
+                    end=parsed.end,
+                    location=parsed.location or location,
+                )
         except Exception as e:
             logger.warning(f"Plan event extraction error: {e}")
         return None
@@ -682,23 +776,19 @@ class TaskExtractor:
             return None
 
         combined_all = "\n".join(chunk.get("content", "") for chunk in chunks)
-        regex_location = _regex_extract_location(combined_all)
+        # #6: location always attempted on full text (once)
+        location = self.extract_plan_location(combined_all)
         regex_result = _regex_extract_plan_event(combined_all)
         if regex_result:
-            if regex_location and not regex_result.location:
-                return PlanEventRange(
-                    start=regex_result.start,
-                    end=regex_result.end,
-                    location=regex_location,
-                )
-            return regex_result
+            return PlanEventRange(
+                start=regex_result.start,
+                end=regex_result.end,
+                location=regex_result.location or location,
+            )
 
         head = chunks[:12]
         combined = "\n".join(chunk.get("content", "") for chunk in head)
-        result = self.extract_plan_event(combined)
-        if result and regex_location and not result.location:
-            return PlanEventRange(start=result.start, end=result.end, location=regex_location)
-        return result
+        return self.extract_plan_event(combined, location=location)
 
     def extract_plan_timeline(self, text: str) -> List[Dict[str, Optional[str]]]:
         snippet = (text or "")[:16000].strip()
