@@ -80,13 +80,14 @@ _EVENT_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 _LOCATION_HEADER_RE = re.compile(
-    r"(?:^|\n)\s*(?:\d+\.\s*)?(?:Địa\s*điểm|Dia\s*diem)\s*:\s*",
+    r"(?:^|\n)\s*(?:[-–—•*]\s*)?(?:\d+\.\s*)?(?:Địa\s*điểm|Dia\s*diem)\s*:\s*",
     re.IGNORECASE,
 )
-# Stop when next numbered section / labeled field begins (e.g. "3. Tổ chức:")
+# Stop when next numbered section / labeled field begins (e.g. "3. Tổ chức:" / "- Tổ chức:")
+# Require a newline so trailing school numbers like "Việt Anh 3." are not treated as sections.
 _LOCATION_STOP_RE = re.compile(
-    r"(?=\n?\s*\d+\.\s+[^\n]{0,40}:)"
-    r"|(?=\n?\s*(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung|"
+    r"(?=\n\s*\d+\.\s+[^\n]{0,40}:)"
+    r"|(?=\n\s*(?:[-–—•*]\s*)?(?:Tổ\s*chức|Thời\s*gian|Ngày|Thành\s*phần|Nội\s*dung|"
     r"Mục\s*đích|Yêu\s*cầu|Kinh\s*phí|Người\s*phụ\s*trách|Ghi\s*chú)\s*:)",
     re.IGNORECASE,
 )
@@ -290,9 +291,20 @@ def _normalize_location(raw: Optional[str]) -> Optional[str]:
     if stop:
         text = text[: stop.start()]
 
-    # Prefer bullet / newline items; also split " - " when PDF flattened to one line
+    # Prefer newline / bullet-list items. Keep internal " - " in a single address
+    # (e.g. "Hội trường ... - Trường ...").
     parts: List[str] = []
-    for line in re.split(r"[\n\r]+|(?=\s*[-–—•]\s+\S)", text):
+    for line in re.split(r"[\n\r]+", text):
+        line = line.strip()
+        if not line:
+            continue
+        # One line with multiple leading bullets: "- A - B" / "• A • B"
+        if re.match(r"^[-–—•*]\s+", line) and len(re.findall(r"(?:^|\s)[-–—•*]\s+\S", line)) >= 2:
+            for seg in re.split(r"(?=(?:^|\s)[-–—•*]\s+\S)", line):
+                piece = _clean_location_item(seg)
+                if piece and piece not in parts:
+                    parts.append(piece)
+            continue
         piece = _clean_location_item(line)
         if piece and piece not in parts:
             parts.append(piece)
