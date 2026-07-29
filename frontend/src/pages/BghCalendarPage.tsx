@@ -185,77 +185,47 @@ export default function BghCalendarPage() {
     }
   };
 
-  const findPlanAfterReExtract = (
-    calendar: Awaited<ReturnType<typeof calendarApi.getBghCalendar>>,
-    documentId: number,
-    preferredDate: string | null,
-  ): BghCalendarPlan | null => {
-    const scheduled = calendar.scheduled_plans.filter((p) => p.document_id === documentId);
-    const unscheduled = calendar.unscheduled_plans.filter((p) => p.document_id === documentId);
-    if (preferredDate) {
-      const onDate = scheduled.find((p) => p.date === preferredDate && !p.is_continuation);
-      if (onDate) return onDate;
-      const anyOnDate = scheduled.find((p) => p.date === preferredDate);
-      if (anyOnDate) return anyOnDate;
-    }
-    return scheduled.find((p) => !p.is_continuation) || scheduled[0] || unscheduled[0] || null;
-  };
-
   const handleReExtractFromEdit = async () => {
     if (!editingPlan || savingEvent || reExtracting) return;
     setReExtracting(true);
     try {
       const result = await documentsApi.reExtractPlan(editingPlan.document_id, {
-        put_on_calendar: true,
+        preview_only: true,
       });
 
       let dateKey: string | null = null;
+      let endTime: string | null = null;
+      let eventEndDate: string | null = null;
+
       if (result.plan_event_at) {
-        const d = new Date(result.plan_event_at);
-        if (!Number.isNaN(d.getTime())) {
-          dateKey = formatDateKey(d);
-          setActivePreset('custom');
-          setSelectedDate(dateKey);
-          setAnchorDate(dateKey);
-          setFilterStartDate(dateKey);
-          setFilterEndDate(dateKey);
-          setViewMonth(startOfMonth(parseDateKey(dateKey)));
+        const startDt = new Date(result.plan_event_at);
+        if (!Number.isNaN(startDt.getTime())) {
+          dateKey = formatDateKey(startDt);
         }
       }
-
-      const fetchStart = dateKey || range.start_date;
-      const fetchEnd = dateKey || range.end_date;
-      const calendar = await loadCalendar({ start_date: fetchStart, end_date: fetchEnd });
-      const updated = calendar
-        ? findPlanAfterReExtract(calendar, editingPlan.document_id, dateKey)
-        : null;
-
-      if (updated) {
-        setEditingPlan(updated);
-      } else {
-        let endTime: string | null = null;
-        let eventEndDate: string | null = null;
-        if (result.plan_event_at && result.plan_event_end_at) {
-          const startDt = new Date(result.plan_event_at);
-          const endDt = new Date(result.plan_event_end_at);
-          if (!Number.isNaN(startDt.getTime()) && !Number.isNaN(endDt.getTime())) {
-            if (formatDateKey(startDt) === formatDateKey(endDt)) {
-              endTime = result.plan_event_end_at;
-            } else {
-              eventEndDate = formatDateKey(endDt);
-            }
+      if (result.plan_event_at && result.plan_event_end_at) {
+        const startDt = new Date(result.plan_event_at);
+        const endDt = new Date(result.plan_event_end_at);
+        if (!Number.isNaN(startDt.getTime()) && !Number.isNaN(endDt.getTime())) {
+          if (formatDateKey(startDt) === formatDateKey(endDt)) {
+            endTime = result.plan_event_end_at;
+          } else {
+            eventEndDate = formatDateKey(endDt);
           }
         }
-        setEditingPlan({
-          ...editingPlan,
-          plan_name: result.plan_title || editingPlan.plan_name,
-          date: dateKey,
-          start_time: result.plan_event_at,
-          end_time: endTime,
-          event_end_date: eventEndDate,
-          needs_review: !result.plan_event_at,
-        });
       }
+
+      // Preview only: fill form, keep same event_id, do not write DB / create event.
+      setEditingPlan({
+        ...editingPlan,
+        plan_name: result.plan_title || editingPlan.plan_name,
+        location: result.location ?? '',
+        date: dateKey,
+        start_time: result.plan_event_at,
+        end_time: endTime,
+        event_end_date: eventEndDate,
+        needs_review: Boolean(result.needs_review),
+      });
       setEditFormKey((k) => k + 1);
     } catch {
       alert('Trích lại lịch thất bại. Vui lòng thử lại.');
@@ -1125,7 +1095,7 @@ function EditPlanEventModal({
             type="button"
             onClick={onReExtract}
             disabled={busy}
-            title="Trích lại ngày/giờ/địa điểm/lịch trình từ tài liệu"
+            title="Trích lại từ tài liệu vào form — chưa lưu cho đến khi bấm Lưu"
             className="px-3 py-2 text-sm font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50"
           >
             {reExtracting ? 'Đang trích...' : 'Trích lại'}

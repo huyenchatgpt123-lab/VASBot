@@ -148,9 +148,16 @@ class DocumentService:
 
         return self.doc_repo.delete(doc_id)
 
-    def re_extract_plan_metadata(self, doc_id: int, *, put_on_calendar: bool = True) -> dict:
+    def re_extract_plan_metadata(
+        self,
+        doc_id: int,
+        *,
+        put_on_calendar: bool = True,
+        preview_only: bool = False,
+    ) -> dict:
         """
-        Re-extract plan title/date from file.
+        Re-extract plan title/date/location from file.
+        preview_only=True → return extracted fields without writing DB.
         put_on_calendar=True → refresh/create calendar event (Thời gian biểu).
         put_on_calendar=False → only update document metadata, stay off calendar.
         """
@@ -168,6 +175,28 @@ class DocumentService:
 
             plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
+            location = plan_event.location if plan_event else None
+            starts_at = plan_event.start if plan_event else None
+            ends_at = plan_event.end if plan_event else None
+            display_title = plan_title or doc.plan_title
+
+            if preview_only:
+                return {
+                    "document_id": doc.id,
+                    "plan_title": display_title,
+                    "plan_event_at": starts_at.isoformat() if starts_at else None,
+                    "plan_event_end_at": ends_at.isoformat() if ends_at else None,
+                    "location": location,
+                    "event_count": 0,
+                    "needs_review": starts_at is None,
+                    "preview_only": True,
+                    "message": (
+                        "Đã trích (xem trước) — bấm Lưu để cập nhật sự kiện"
+                        if (plan_event or plan_title)
+                        else "Không tìm thấy tiêu đề/ngày/địa điểm trong file"
+                    ),
+                }
+
             timeline = (
                 task_extractor.extract_plan_timeline_from_chunks(chunks)
                 if put_on_calendar
@@ -179,10 +208,10 @@ class DocumentService:
             if put_on_calendar:
                 events = PlanEventService(self.db).replace_ai_events_for_document(
                     doc,
-                    title=plan_title or doc.plan_title,
-                    starts_at=plan_event.start if plan_event else None,
-                    ends_at=plan_event.end if plan_event else None,
-                    location=plan_event.location if plan_event else None,
+                    title=display_title,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                    location=location,
                     timeline=timeline or None,
                     include_in_calendar=True,
                 )
@@ -216,8 +245,10 @@ class DocumentService:
                 "plan_title": doc.plan_title,
                 "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
                 "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
+                "location": (primary.location if primary else location),
                 "event_count": len(events),
                 "needs_review": needs_review,
+                "preview_only": False,
                 "message": message,
             }
         finally:

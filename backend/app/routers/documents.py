@@ -193,6 +193,10 @@ def re_extract_plan_metadata(
         True,
         description="True = đưa/cập nhật trên Thời gian biểu; False = chỉ cập nhật metadata",
     ),
+    preview_only: bool = Query(
+        False,
+        description="True = chỉ trả kết quả trích (không ghi DB), dùng cho form Sửa trên lịch",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -208,7 +212,11 @@ def re_extract_plan_metadata(
 
     service = DocumentService(db)
     try:
-        result = service.re_extract_plan_metadata(doc_id, put_on_calendar=put_on_calendar)
+        result = service.re_extract_plan_metadata(
+            doc_id,
+            put_on_calendar=put_on_calendar,
+            preview_only=preview_only,
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:

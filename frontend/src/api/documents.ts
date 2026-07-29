@@ -119,16 +119,22 @@ export const documentsApi = {
   },
   reExtractPlan: async (
     id: number,
-    options?: { put_on_calendar?: boolean },
+    options?: { put_on_calendar?: boolean; preview_only?: boolean },
   ): Promise<{
     document_id: number;
     plan_title: string | null;
     plan_event_at: string | null;
     plan_event_end_at: string | null;
+    location?: string | null;
     message: string;
+    preview_only?: boolean;
+    needs_review?: boolean;
   }> => {
     const res = await api.post(`/documents/${id}/re-extract-plan`, null, {
-      params: { put_on_calendar: options?.put_on_calendar !== false },
+      params: {
+        put_on_calendar: options?.preview_only ? false : options?.put_on_calendar !== false,
+        preview_only: Boolean(options?.preview_only),
+      },
     });
     return res.data;
   },
