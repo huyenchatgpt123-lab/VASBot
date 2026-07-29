@@ -142,8 +142,10 @@ export default function BghCalendarPage() {
   const [loading, setLoading] = useState(true);
   const [showUnscheduled, setShowUnscheduled] = useState(false);
   const [editingPlan, setEditingPlan] = useState<BghCalendarPlan | null>(null);
+  const [editFormKey, setEditFormKey] = useState(0);
   const [timelinePlan, setTimelinePlan] = useState<BghCalendarPlan | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
+  const [reExtracting, setReExtracting] = useState(false);
   const listPanelRef = useRef<HTMLDivElement>(null);
   const daySectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -165,19 +167,100 @@ export default function BghCalendarPage() {
     loadCalendar();
   }, [range.start_date, range.end_date, campusFilter]);
 
-  const loadCalendar = async () => {
+  const loadCalendar = async (override?: { start_date: string; end_date: string }) => {
     setLoading(true);
     try {
       const result = await calendarApi.getBghCalendar({
-        start_date: range.start_date,
-        end_date: range.end_date,
+        start_date: override?.start_date ?? range.start_date,
+        end_date: override?.end_date ?? range.end_date,
         campus_id: campusFilter || undefined,
       });
       setData(result);
+      return result;
     } catch {
       setData(null);
+      return null;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const findPlanAfterReExtract = (
+    calendar: Awaited<ReturnType<typeof calendarApi.getBghCalendar>>,
+    documentId: number,
+    preferredDate: string | null,
+  ): BghCalendarPlan | null => {
+    const scheduled = calendar.scheduled_plans.filter((p) => p.document_id === documentId);
+    const unscheduled = calendar.unscheduled_plans.filter((p) => p.document_id === documentId);
+    if (preferredDate) {
+      const onDate = scheduled.find((p) => p.date === preferredDate && !p.is_continuation);
+      if (onDate) return onDate;
+      const anyOnDate = scheduled.find((p) => p.date === preferredDate);
+      if (anyOnDate) return anyOnDate;
+    }
+    return scheduled.find((p) => !p.is_continuation) || scheduled[0] || unscheduled[0] || null;
+  };
+
+  const handleReExtractFromEdit = async () => {
+    if (!editingPlan || savingEvent || reExtracting) return;
+    setReExtracting(true);
+    try {
+      const result = await documentsApi.reExtractPlan(editingPlan.document_id, {
+        put_on_calendar: true,
+      });
+
+      let dateKey: string | null = null;
+      if (result.plan_event_at) {
+        const d = new Date(result.plan_event_at);
+        if (!Number.isNaN(d.getTime())) {
+          dateKey = formatDateKey(d);
+          setActivePreset('custom');
+          setSelectedDate(dateKey);
+          setAnchorDate(dateKey);
+          setFilterStartDate(dateKey);
+          setFilterEndDate(dateKey);
+          setViewMonth(startOfMonth(parseDateKey(dateKey)));
+        }
+      }
+
+      const fetchStart = dateKey || range.start_date;
+      const fetchEnd = dateKey || range.end_date;
+      const calendar = await loadCalendar({ start_date: fetchStart, end_date: fetchEnd });
+      const updated = calendar
+        ? findPlanAfterReExtract(calendar, editingPlan.document_id, dateKey)
+        : null;
+
+      if (updated) {
+        setEditingPlan(updated);
+      } else {
+        let endTime: string | null = null;
+        let eventEndDate: string | null = null;
+        if (result.plan_event_at && result.plan_event_end_at) {
+          const startDt = new Date(result.plan_event_at);
+          const endDt = new Date(result.plan_event_end_at);
+          if (!Number.isNaN(startDt.getTime()) && !Number.isNaN(endDt.getTime())) {
+            if (formatDateKey(startDt) === formatDateKey(endDt)) {
+              endTime = result.plan_event_end_at;
+            } else {
+              eventEndDate = formatDateKey(endDt);
+            }
+          }
+        }
+        setEditingPlan({
+          ...editingPlan,
+          plan_name: result.plan_title || editingPlan.plan_name,
+          date: dateKey,
+          start_time: result.plan_event_at,
+          end_time: endTime,
+          event_end_date: eventEndDate,
+          needs_review: !result.plan_event_at,
+        });
+      }
+      setEditFormKey((k) => k + 1);
+    } catch {
+      alert('Trích lại lịch thất bại. Vui lòng thử lại.');
+    } finally {
+      setReExtracting(false);
     }
   };
 
@@ -643,10 +726,13 @@ export default function BghCalendarPage() {
 
       {editingPlan && (
         <EditPlanEventModal
+          key={editFormKey}
           plan={editingPlan}
           saving={savingEvent}
-          onClose={() => !savingEvent && setEditingPlan(null)}
+          reExtracting={reExtracting}
+          onClose={() => !savingEvent && !reExtracting && setEditingPlan(null)}
           onSave={handleSaveEvent}
+          onReExtract={handleReExtractFromEdit}
         />
       )}
 
@@ -899,11 +985,14 @@ function TimelineModal({
 function EditPlanEventModal({
   plan,
   saving,
+  reExtracting,
   onClose,
   onSave,
+  onReExtract,
 }: {
   plan: BghCalendarPlan;
   saving: boolean;
+  reExtracting: boolean;
   onClose: () => void;
   onSave: (payload: {
     title: string;
@@ -913,7 +1002,9 @@ function EditPlanEventModal({
     endTime: string;
     location: string;
   }) => void;
+  onReExtract: () => void;
 }) {
+  const busy = saving || reExtracting;
   const initialStart = plan.start_time ? new Date(plan.start_time) : null;
   const initialEnd = plan.end_time
     ? new Date(plan.end_time)
@@ -955,7 +1046,8 @@ function EditPlanEventModal({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              disabled={busy}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
             />
           </div>
           <div>
@@ -964,8 +1056,9 @@ function EditPlanEventModal({
               type="text"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
+              disabled={busy}
               placeholder="VD: Hội trường A, sân trường..."
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
             />
           </div>
           {plan.campuses.length > 0 && (
@@ -988,7 +1081,8 @@ function EditPlanEventModal({
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                disabled={busy}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
               />
             </div>
             <div>
@@ -997,7 +1091,8 @@ function EditPlanEventModal({
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                disabled={busy}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
               />
             </div>
           </div>
@@ -1008,7 +1103,8 @@ function EditPlanEventModal({
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                disabled={busy}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
               />
             </div>
             <div>
@@ -1017,29 +1113,41 @@ function EditPlanEventModal({
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                disabled={busy}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
               />
             </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-6">
           <button
             type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            onClick={onReExtract}
+            disabled={busy}
+            title="Trích lại ngày/giờ/địa điểm/lịch trình từ tài liệu"
+            className="px-3 py-2 text-sm font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50"
           >
-            Hủy
+            {reExtracting ? 'Đang trích...' : 'Trích lại'}
           </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => onSave({ title, startDate, startTime, endDate, endTime, location })}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
-          >
-            {saving ? 'Đang lưu...' : 'Lưu'}
-          </button>
+          <div className="flex gap-3 ml-auto">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onSave({ title, startDate, startTime, endDate, endTime, location })}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+            >
+              {saving ? 'Đang lưu...' : 'Lưu'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
