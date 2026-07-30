@@ -189,6 +189,8 @@ export default function DocumentsPage() {
         onUploadProgress: setUploadPercent,
       });
       setDuplicateWarning(null);
+      // Keep the modal open until 100% is shown, then hand off to review modals.
+      await finishProgress();
       setShowUploadModal(false);
 
       const calPreview = result.calendar_preview || null;
@@ -209,7 +211,6 @@ export default function DocumentsPage() {
       }
 
       await loadDocuments();
-      await finishProgress();
     } catch (err) {
       failProgress();
       if (axios.isAxiosError(err) && err.response?.status === 409) {
@@ -255,6 +256,7 @@ export default function DocumentsPage() {
     startProgress('Đang trích xuất công việc...');
     try {
       const preview = await tasksApi.extract(id);
+      await finishProgress();
       setReExtractDocId(null);
       setTaskPreview({
         tasks: preview.tasks || [],
@@ -263,7 +265,6 @@ export default function DocumentsPage() {
         has_duplicates: Boolean(preview.has_duplicates),
         duplicate_count: preview.duplicate_count || 0,
       });
-      await finishProgress();
     } catch (err: unknown) {
       failProgress();
       const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
@@ -278,6 +279,7 @@ export default function DocumentsPage() {
     startProgress('Đang trích xuất lịch trình...');
     try {
       const result = await documentsApi.reExtractPlan(id, { preview_only: true });
+      await finishProgress();
       setReExtractDocId(null);
       openCalendarPreview({
         document_id: result.document_id || id,
@@ -787,6 +789,12 @@ export default function DocumentsPage() {
                   </div>
                 </div>
               )}
+
+              <OperationProgressBar
+                visible={opProgress.visible}
+                percent={opProgress.percent}
+                label={opProgress.label}
+              />
             </div>
 
             {/* Footer */}
@@ -850,6 +858,12 @@ export default function DocumentsPage() {
                   </p>
                 </button>
               )}
+
+              <OperationProgressBar
+                visible={opProgress.visible}
+                percent={opProgress.percent}
+                label={opProgress.label}
+              />
             </div>
             <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/80 flex justify-end">
               <button
@@ -889,12 +903,6 @@ export default function DocumentsPage() {
           }}
         />
       )}
-
-      <OperationProgressBar
-        visible={opProgress.visible}
-        percent={opProgress.percent}
-        label={opProgress.label}
-      />
     </div>
   );
 }

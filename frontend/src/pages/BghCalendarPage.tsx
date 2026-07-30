@@ -160,7 +160,6 @@ export default function BghCalendarPage() {
   const [loading, setLoading] = useState(true);
   const [showUnscheduled, setShowUnscheduled] = useState(false);
   const [editingPlan, setEditingPlan] = useState<BghCalendarPlan | null>(null);
-  const [editFormKey, setEditFormKey] = useState(0);
   const [timelinePlan, setTimelinePlan] = useState<BghCalendarPlan | null>(null);
   const [calendarPreview, setCalendarPreview] = useState<CalendarPreviewPayload | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
@@ -218,6 +217,7 @@ export default function BghCalendarPage() {
       const result = await documentsApi.reExtractPlan(editingPlan.document_id, {
         preview_only: true,
       });
+      await finishProgress();
       setCalendarPreview({
         document_id: result.document_id || editingPlan.document_id,
         plan_title: result.plan_title || editingPlan.plan_name,
@@ -227,7 +227,6 @@ export default function BghCalendarPage() {
         timeline: result.timeline || [],
         needs_review: Boolean(result.needs_review),
       });
-      await finishProgress();
     } catch {
       failProgress();
       alert('Trích lại lịch thất bại. Vui lòng thử lại.');
@@ -698,10 +697,11 @@ export default function BghCalendarPage() {
 
       {editingPlan && (
         <EditPlanEventModal
-          key={editFormKey}
+          key={editingPlan.event_id ?? `doc-${editingPlan.document_id}`}
           plan={editingPlan}
           saving={savingEvent}
           reExtracting={reExtracting}
+          progress={opProgress}
           onClose={() => !savingEvent && !reExtracting && setEditingPlan(null)}
           onSave={handleSaveEvent}
           onReExtract={handleReExtractFromEdit}
@@ -726,12 +726,6 @@ export default function BghCalendarPage() {
           }}
         />
       )}
-
-      <OperationProgressBar
-        visible={opProgress.visible}
-        percent={opProgress.percent}
-        label={opProgress.label}
-      />
     </div>
   );
 }
@@ -969,6 +963,7 @@ function EditPlanEventModal({
   plan,
   saving,
   reExtracting,
+  progress,
   onClose,
   onSave,
   onReExtract,
@@ -976,6 +971,7 @@ function EditPlanEventModal({
   plan: BghCalendarPlan;
   saving: boolean;
   reExtracting: boolean;
+  progress: { visible: boolean; percent: number; label: string };
   onClose: () => void;
   onSave: (payload: {
     title: string;
@@ -1102,6 +1098,13 @@ function EditPlanEventModal({
             </div>
           </div>
         </div>
+
+        <OperationProgressBar
+          visible={progress.visible}
+          percent={progress.percent}
+          label={progress.label}
+          className="mt-4"
+        />
 
         <div className="flex flex-wrap items-center justify-between gap-3 mt-6">
           <button
