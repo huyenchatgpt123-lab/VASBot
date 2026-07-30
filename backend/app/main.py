@@ -3,17 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base, SessionLocal
 from app.jobs.openai_cost_scheduler import start_openai_cost_scheduler, stop_openai_cost_scheduler
-from app.routers import auth, documents, search, admin, tasks, feedback
+from app.routers import auth, documents, search, admin, tasks, feedback, substitutes
 from app.models.user import User, UserRole
 from app.models.campus import Campus  # noqa: F401 — register ORM tables
 from app.models.openai_cost_cache import OpenAICostDaily, OpenAICostSync  # noqa: F401
 from app.models.plan_event import PlanEvent  # noqa: F401
+from app.models.timetable import ClassRoom, TimetableSlot, SubstituteAssignment  # noqa: F401
 from app.models.position import Position
 from app.models.department import DEFAULT_DEPARTMENTS
 from app.repositories.position_repository import PositionRepository
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.campus_repository import CampusRepository
 from app.utils.auth import hash_password
+from app.db.timetable_schema import sync_timetable_schema
 
 app = FastAPI(
     title="VABot API",
@@ -35,6 +37,7 @@ app.include_router(search.router)
 app.include_router(admin.router)
 app.include_router(tasks.router)
 app.include_router(feedback.router)
+app.include_router(substitutes.router)
 
 DEFAULT_ADMIN_EMAIL = "admin@vietanhschool.edu.vn"
 
@@ -242,6 +245,8 @@ def startup():
             if "timeline" not in plan_event_columns:
                 db.execute(text("ALTER TABLE plan_events ADD COLUMN timeline JSON"))
                 db.commit()
+
+        sync_timetable_schema(db, engine)
 
         _seed_positions(db)
         _seed_departments(db)

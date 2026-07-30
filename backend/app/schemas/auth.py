@@ -20,6 +20,8 @@ class UserCreate(BaseModel):
     department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
+    teacher_code: Optional[str] = None
+    campus_id: Optional[int] = None
 
 
 class UserUpdate(BaseModel):
@@ -32,6 +34,8 @@ class UserUpdate(BaseModel):
     department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
+    teacher_code: Optional[str] = None
+    campus_id: Optional[int] = None
 
 
 class UserResponse(BaseModel):
@@ -44,6 +48,9 @@ class UserResponse(BaseModel):
     department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
+    teacher_code: Optional[str] = None
+    campus_id: Optional[int] = None
+    campus_code: Optional[str] = None
     permissions: UserPermissions = UserPermissions()
     must_change_password: bool = False
     created_at: datetime

@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage';
 import TasksPage from './pages/TasksPage';
 import BghCalendarPage from './pages/BghCalendarPage';
 import FeedbackPage from './pages/FeedbackPage';
+import SubstitutesPage from './pages/SubstitutesPage';
 
 function App() {
   return (
@@ -50,6 +51,14 @@ function App() {
               element={
                 <BghRoute>
                   <BghCalendarPage />
+                </BghRoute>
+              }
+            />
+            <Route
+              path="/substitutes"
+              element={
+                <BghRoute>
+                  <SubstitutesPage />
                 </BghRoute>
               }
             />

@@ -10,6 +10,8 @@ FIELD_ALIASES: Dict[str, List[str]] = {
     "department": ["phong ban", "phongban", "department", "phòng ban"],
     "nickname": ["biet danh", "bietdanh", "nickname", "biệt danh"],
     "position": ["chuc vu", "chucvu", "position", "chức vụ"],
+    "teacher_code": ["ma gv", "magv", "ma giao vien", "teacher code", "teacher_code", "mã gv"],
+    "campus": ["co so", "coso", "campus", "cơ sở"],
 }
 
 DEFAULT_COLUMN_INDEX = {
@@ -20,6 +22,8 @@ DEFAULT_COLUMN_INDEX = {
     "department": 4,
     "nickname": 5,
     "position": 6,
+    "teacher_code": 7,
+    "campus": 8,
 }
 
 
@@ -92,6 +96,8 @@ def parse_user_row(row: Tuple[Any, ...], column_map: Dict[str, int]) -> Dict[str
         "department": _optional_str(get("department")),
         "nickname": _cell_to_str(get("nickname")),
         "position": _optional_str(get("position")),
+        "teacher_code": (_optional_str(get("teacher_code")) or "").upper() or None,
+        "campus": (_optional_str(get("campus")) or "").upper() or None,
     }
 
 

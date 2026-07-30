@@ -21,7 +21,11 @@ class UserRepository:
     def get_by_id(self, user_id: int) -> Optional[User]:
         return (
             self.db.query(User)
-            .options(joinedload(User.position_obj), joinedload(User.department_obj))
+            .options(
+                joinedload(User.position_obj),
+                joinedload(User.department_obj),
+                joinedload(User.campus),
+            )
             .filter(User.id == user_id)
             .first()
         )
@@ -56,7 +60,11 @@ class UserRepository:
     def get_all(self) -> List[User]:
         return (
             self.db.query(User)
-            .options(joinedload(User.position_obj), joinedload(User.department_obj))
+            .options(
+                joinedload(User.position_obj),
+                joinedload(User.department_obj),
+                joinedload(User.campus),
+            )
             .order_by(User.created_at.desc())
             .all()
         )
@@ -99,6 +107,8 @@ class UserRepository:
             department_id=department.id if department else None,
             position=position.name if position else user_data.position,
             position_id=position.id if position else None,
+            teacher_code=(user_data.teacher_code or "").strip().upper() or None,
+            campus_id=user_data.campus_id,
             must_change_password=True,
         )
         self.db.add(user)

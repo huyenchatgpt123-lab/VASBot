@@ -22,6 +22,9 @@ export interface User {
   department_id?: number;
   position?: string;
   position_id?: number;
+  teacher_code?: string;
+  campus_id?: number;
+  campus_code?: string;
   permissions?: UserPermissions;
   must_change_password?: boolean;
   created_at: string;

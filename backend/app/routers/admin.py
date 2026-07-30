@@ -16,6 +16,7 @@ from app.services.task_service import TaskService
 from app.repositories.user_repository import UserRepository
 from app.repositories.position_repository import PositionRepository
 from app.repositories.department_repository import DepartmentRepository
+from app.models.user import User
 from app.utils.auth import require_admin, hash_password
 from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
 from app.utils.user_serializer import serialize_user
@@ -387,6 +388,28 @@ async def import_users_excel(
             continue
 
         try:
+            campus_id = None
+            campus_code = parsed.get("campus")
+            if campus_code:
+                from app.repositories.campus_repository import CampusRepository
+                campus = next(
+                    (c for c in CampusRepository(db).get_all() if c.code.upper() == campus_code),
+                    None,
+                )
+                if not campus:
+                    errors.append(f"Dòng {i}: cơ sở '{campus_code}' không tồn tại")
+                    skipped += 1
+                    continue
+                campus_id = campus.id
+
+            teacher_code = parsed.get("teacher_code")
+            if teacher_code:
+                existing_code = db.query(User).filter(User.teacher_code == teacher_code).first()
+                if existing_code:
+                    errors.append(f"Dòng {i}: mã GV '{teacher_code}' đã tồn tại")
+                    skipped += 1
+                    continue
+
             user_data = UserCreate(
                 name=name,
                 nickname=nickname or None,
@@ -395,6 +418,8 @@ async def import_users_excel(
                 role=parsed["role"] or "user",
                 department=parsed["department"],
                 position=parsed["position"],
+                teacher_code=teacher_code,
+                campus_id=campus_id,
             )
             new_user = service.create_user(user_data, require_nickname=False)
             TaskService(db).rematch_assignees(user_id=new_user.id)

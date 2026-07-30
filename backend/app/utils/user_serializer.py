@@ -8,6 +8,7 @@ def serialize_user(user: User) -> UserResponse:
     position_name = pos.name if pos else user.position
     dept = getattr(user, "department_obj", None)
     department_name = dept.name if dept else user.department
+    campus = getattr(user, "campus", None)
     return UserResponse(
         id=user.id,
         name=user.name,
@@ -18,6 +19,9 @@ def serialize_user(user: User) -> UserResponse:
         department_id=user.department_id,
         position=position_name,
         position_id=user.position_id,
+        teacher_code=user.teacher_code,
+        campus_id=user.campus_id,
+        campus_code=campus.code if campus else None,
         permissions=UserPermissions(**get_permissions(user)),
         must_change_password=bool(user.must_change_password),
         created_at=user.created_at,

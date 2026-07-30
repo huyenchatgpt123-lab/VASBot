@@ -24,8 +24,11 @@ class User(Base):
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
     position = Column(String(255), nullable=True)
     position_id = Column(Integer, ForeignKey("positions.id"), nullable=True)
+    teacher_code = Column(String(50), unique=True, nullable=True, index=True)
+    campus_id = Column(Integer, ForeignKey("campuses.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     must_change_password = Column(Boolean, default=True, nullable=False, server_default="true")
 
     position_obj = relationship("Position", backref="users")
     department_obj = relationship("Department", foreign_keys=[department_id])
+    campus = relationship("Campus", foreign_keys=[campus_id])

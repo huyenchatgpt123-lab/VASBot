@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { tasksApi, TaskItem, TaskUser } from '../api/tasks';
 import { documentsApi } from '../api/documents';
+import { substitutesApi, SubstituteAssignment } from '../api/substitutes';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
@@ -304,10 +305,17 @@ export default function TasksPage() {
   const [titleSearch, setTitleSearch] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>('');
+  const [mySubs, setMySubs] = useState<SubstituteAssignment[]>([]);
 
   useEffect(() => {
     loadTasks();
   }, [page, statusFilter, assigneeFilter]);
+
+  useEffect(() => {
+    substitutesApi.mySubstitutes()
+      .then((res) => setMySubs(res.items || []))
+      .catch(() => setMySubs([]));
+  }, []);
 
   useEffect(() => {
     if (canManageTasks) {
@@ -1056,6 +1064,38 @@ export default function TasksPage() {
           <button onClick={() => openCreateModal(null)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium w-full sm:w-auto" title="Việc phát sinh — không gắn kế hoạch tài liệu">+ Thêm công việc</button>
         )}
       </div>
+
+      {mySubs.length > 0 && (
+        <div className="mb-4 border border-amber-200 bg-amber-50 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-amber-100 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-amber-900">
+              Lịch dạy thay của bạn ({mySubs.length})
+            </h2>
+            <span className="text-[11px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">Dạy thay</span>
+          </div>
+          <ul className="divide-y divide-amber-100">
+            {mySubs.map((item) => (
+              <li key={item.id} className="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm">
+                <span className="shrink-0 font-medium text-amber-950 tabular-nums">
+                  {new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN', {
+                    weekday: 'short',
+                    day: '2-digit',
+                    month: '2-digit',
+                  })}
+                </span>
+                <span className="shrink-0 text-amber-800 font-semibold">{item.period_label}</span>
+                <span className="min-w-0 break-words text-gray-900">
+                  Lớp {item.class_name || '—'}
+                  {item.campus_code ? ` · ${item.campus_code}` : ''}
+                </span>
+                <span className="text-xs text-gray-500 sm:ml-auto">
+                  Thay {item.absent_teacher_name || '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {newTaskCount > 0 && showNotif && (
         <div className="mb-4 flex items-start justify-between gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
