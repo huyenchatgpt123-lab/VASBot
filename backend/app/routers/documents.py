@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 from openai import AuthenticationError, APIConnectionError, RateLimitError
 
 from app.database import get_db
-from app.schemas.document import DocumentUploadResponse, DocumentListResponse, PlanReExtractResponse
+from app.schemas.document import (
+    DocumentUploadResponse,
+    DocumentListResponse,
+    PlanReExtractResponse,
+    PlanEventConfirmRequest,
+)
 from app.schemas.calendar import PlanEventUpdateRequest, PlanEventCreateRequest, PlanEventResponse
 from app.services.document_service import DocumentService
 from app.services.plan_event_service import PlanEventService
@@ -226,6 +231,40 @@ def re_extract_plan_metadata(
             detail=f"Lỗi trích xuất lại: {str(e)}",
         )
 
+    return PlanReExtractResponse(**result)
+
+
+@router.post("/{doc_id}/confirm-plan-event", response_model=PlanReExtractResponse)
+def confirm_plan_event(
+    doc_id: int,
+    data: PlanEventConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin confirms reviewed calendar package (date/time/location + timeline) and writes DB."""
+    repo = DocumentRepository(db)
+    doc = repo.get_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
+
+    service = DocumentService(db)
+    try:
+        result = service.confirm_plan_event(
+            doc_id,
+            title=data.title,
+            starts_at=data.starts_at,
+            ends_at=data.ends_at,
+            location=data.location,
+            timeline=data.timeline,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Lỗi confirm plan event {doc_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi lưu sự kiện: {str(e)}",
+        )
     return PlanReExtractResponse(**result)
 
 

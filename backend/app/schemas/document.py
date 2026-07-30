@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 
 
 class DocumentResponse(BaseModel):
@@ -47,6 +47,22 @@ class TaskPreviewPayload(BaseModel):
     duplicate_count: int = 0
 
 
+class TimelineSlotPreview(BaseModel):
+    start: str
+    end: Optional[str] = None
+    title: str
+
+
+class CalendarPreviewPayload(BaseModel):
+    document_id: int
+    plan_title: Optional[str] = None
+    plan_event_at: Optional[str] = None
+    plan_event_end_at: Optional[str] = None
+    location: Optional[str] = None
+    timeline: List[TimelineSlotPreview] = []
+    needs_review: bool = False
+
+
 class DocumentUploadResponse(BaseModel):
     id: int
     filename: str
@@ -60,6 +76,7 @@ class DocumentUploadResponse(BaseModel):
     include_in_calendar: bool = False
     extract_tasks: bool = False
     task_preview: Optional[TaskPreviewPayload] = None
+    calendar_preview: Optional[CalendarPreviewPayload] = None
     message: str
     campus_ids: Optional[List[int]] = None
     campuses: Optional[List[str]] = None
@@ -71,7 +88,16 @@ class PlanReExtractResponse(BaseModel):
     plan_event_at: Optional[str] = None
     plan_event_end_at: Optional[str] = None
     location: Optional[str] = None
+    timeline: List[TimelineSlotPreview] = []
     event_count: int = 0
     needs_review: bool = False
     message: str
     preview_only: bool = False
+
+
+class PlanEventConfirmRequest(BaseModel):
+    title: Optional[str] = Field(None, max_length=500)
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    location: Optional[str] = Field(None, max_length=300)
+    timeline: Optional[List[Any]] = None

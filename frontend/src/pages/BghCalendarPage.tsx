@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { calendarApi, BghCalendarPlan, Campus } from '../api/calendar';
-import { documentsApi } from '../api/documents';
+import { documentsApi, CalendarPreviewPayload } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
+import CalendarPlanPreviewModal from '../components/CalendarPlanPreviewModal';
+import OperationProgressBar from '../components/OperationProgressBar';
+import { useOperationProgress } from '../hooks/useOperationProgress';
 
 type DatePreset = 'today' | 'tomorrow' | 'week' | 'custom';
 
@@ -159,10 +162,17 @@ export default function BghCalendarPage() {
   const [editingPlan, setEditingPlan] = useState<BghCalendarPlan | null>(null);
   const [editFormKey, setEditFormKey] = useState(0);
   const [timelinePlan, setTimelinePlan] = useState<BghCalendarPlan | null>(null);
+  const [calendarPreview, setCalendarPreview] = useState<CalendarPreviewPayload | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
   const [reExtracting, setReExtracting] = useState(false);
   const listPanelRef = useRef<HTMLDivElement>(null);
   const daySectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const {
+    progress: opProgress,
+    start: startProgress,
+    finish: finishProgress,
+    fail: failProgress,
+  } = useOperationProgress();
 
   const range = useMemo(() => {
     const monthStart = formatDateKey(startOfMonth(viewMonth));
@@ -203,46 +213,23 @@ export default function BghCalendarPage() {
   const handleReExtractFromEdit = async () => {
     if (!editingPlan || savingEvent || reExtracting) return;
     setReExtracting(true);
+    startProgress('Đang trích xuất lịch trình...');
     try {
       const result = await documentsApi.reExtractPlan(editingPlan.document_id, {
         preview_only: true,
       });
-
-      let dateKey: string | null = null;
-      let endTime: string | null = null;
-      let eventEndDate: string | null = null;
-
-      if (result.plan_event_at) {
-        const startDt = new Date(result.plan_event_at);
-        if (!Number.isNaN(startDt.getTime())) {
-          dateKey = formatDateKey(startDt);
-        }
-      }
-      if (result.plan_event_at && result.plan_event_end_at) {
-        const startDt = new Date(result.plan_event_at);
-        const endDt = new Date(result.plan_event_end_at);
-        if (!Number.isNaN(startDt.getTime()) && !Number.isNaN(endDt.getTime())) {
-          if (formatDateKey(startDt) === formatDateKey(endDt)) {
-            endTime = result.plan_event_end_at;
-          } else {
-            eventEndDate = formatDateKey(endDt);
-          }
-        }
-      }
-
-      // Preview only: fill form, keep same event_id, do not write DB / create event.
-      setEditingPlan({
-        ...editingPlan,
-        plan_name: result.plan_title || editingPlan.plan_name,
-        location: result.location ?? '',
-        date: dateKey,
-        start_time: result.plan_event_at,
-        end_time: endTime,
-        event_end_date: eventEndDate,
+      setCalendarPreview({
+        document_id: result.document_id || editingPlan.document_id,
+        plan_title: result.plan_title || editingPlan.plan_name,
+        plan_event_at: result.plan_event_at,
+        plan_event_end_at: result.plan_event_end_at,
+        location: result.location,
+        timeline: result.timeline || [],
         needs_review: Boolean(result.needs_review),
       });
-      setEditFormKey((k) => k + 1);
+      await finishProgress();
     } catch {
+      failProgress();
       alert('Trích lại lịch thất bại. Vui lòng thử lại.');
     } finally {
       setReExtracting(false);
@@ -727,6 +714,24 @@ export default function BghCalendarPage() {
           onClose={() => setTimelinePlan(null)}
         />
       )}
+
+      {calendarPreview && (
+        <CalendarPlanPreviewModal
+          preview={calendarPreview}
+          onClose={() => setCalendarPreview(null)}
+          onSaved={async () => {
+            setCalendarPreview(null);
+            setEditingPlan(null);
+            await loadCalendar();
+          }}
+        />
+      )}
+
+      <OperationProgressBar
+        visible={opProgress.visible}
+        percent={opProgress.percent}
+        label={opProgress.label}
+      />
     </div>
   );
 }

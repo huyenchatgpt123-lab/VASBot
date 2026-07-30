@@ -37,6 +37,22 @@ export interface TaskPreviewPayload {
   duplicate_count: number;
 }
 
+export interface TimelineSlotPreview {
+  start: string;
+  end?: string | null;
+  title: string;
+}
+
+export interface CalendarPreviewPayload {
+  document_id: number;
+  plan_title?: string | null;
+  plan_event_at?: string | null;
+  plan_event_end_at?: string | null;
+  location?: string | null;
+  timeline?: TimelineSlotPreview[];
+  needs_review?: boolean;
+}
+
 export interface DocumentUploadResponse {
   id: number;
   filename: string;
@@ -50,6 +66,7 @@ export interface DocumentUploadResponse {
   include_in_calendar: boolean;
   extract_tasks: boolean;
   task_preview?: TaskPreviewPayload | null;
+  calendar_preview?: CalendarPreviewPayload | null;
   message: string;
 }
 
@@ -66,6 +83,27 @@ export type DuplicateUploadDetail = {
   };
 };
 
+export type PlanReExtractResult = {
+  document_id: number;
+  plan_title: string | null;
+  plan_event_at: string | null;
+  plan_event_end_at: string | null;
+  location?: string | null;
+  timeline?: TimelineSlotPreview[];
+  message: string;
+  preview_only?: boolean;
+  needs_review?: boolean;
+  event_count?: number;
+};
+
+export type PlanEventConfirmPayload = {
+  title?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  location?: string | null;
+  timeline?: TimelineSlotPreview[] | null;
+};
+
 export const documentsApi = {
   getAll: async (params?: {
     search?: string;
@@ -80,7 +118,11 @@ export const documentsApi = {
     const res = await api.get('/documents', { params });
     return res.data;
   },
-  upload: async (file: File, metadata: UploadMetadata): Promise<DocumentUploadResponse> => {
+  upload: async (
+    file: File,
+    metadata: UploadMetadata,
+    options?: { onUploadProgress?: (loaded: number, total: number) => void },
+  ): Promise<DocumentUploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('department', metadata.department);
@@ -92,6 +134,11 @@ export const documentsApi = {
     formData.append('force', metadata.force ? 'true' : 'false');
     const res = await api.post('/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (evt) => {
+        if (options?.onUploadProgress && evt.total) {
+          options.onUploadProgress(evt.loaded, evt.total);
+        }
+      },
     });
     return res.data;
   },
@@ -120,22 +167,20 @@ export const documentsApi = {
   reExtractPlan: async (
     id: number,
     options?: { put_on_calendar?: boolean; preview_only?: boolean },
-  ): Promise<{
-    document_id: number;
-    plan_title: string | null;
-    plan_event_at: string | null;
-    plan_event_end_at: string | null;
-    location?: string | null;
-    message: string;
-    preview_only?: boolean;
-    needs_review?: boolean;
-  }> => {
+  ): Promise<PlanReExtractResult> => {
     const res = await api.post(`/documents/${id}/re-extract-plan`, null, {
       params: {
         put_on_calendar: options?.preview_only ? false : options?.put_on_calendar !== false,
         preview_only: Boolean(options?.preview_only),
       },
     });
+    return res.data;
+  },
+  confirmPlanEvent: async (
+    id: number,
+    payload: PlanEventConfirmPayload,
+  ): Promise<PlanReExtractResult> => {
+    const res = await api.post(`/documents/${id}/confirm-plan-event`, payload);
     return res.data;
   },
 };

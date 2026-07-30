@@ -1,9 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { documentsApi, UploadMetadata, DuplicateUploadDetail, TaskPreviewPayload } from '../api/documents';
+import {
+  documentsApi,
+  UploadMetadata,
+  DuplicateUploadDetail,
+  TaskPreviewPayload,
+  CalendarPreviewPayload,
+} from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import { Document } from '../types';
 import axios from 'axios';
 import TaskExtractPreviewModal from '../components/TaskExtractPreviewModal';
+import CalendarPlanPreviewModal from '../components/CalendarPlanPreviewModal';
+import OperationProgressBar from '../components/OperationProgressBar';
+import { useOperationProgress } from '../hooks/useOperationProgress';
 import { TaskExtractResult, tasksApi } from '../api/tasks';
 
 type ReExtractChoice = 'tasks' | 'calendar' | null;
@@ -68,9 +77,37 @@ export default function DocumentsPage() {
   const [uploadIncludeCalendar, setUploadIncludeCalendar] = useState(false);
   const [uploadExtractTasks, setUploadExtractTasks] = useState(true);
   const [taskPreview, setTaskPreview] = useState<TaskExtractResult | null>(null);
+  const [calendarPreview, setCalendarPreview] = useState<CalendarPreviewPayload | null>(null);
+  const pendingCalendarPreviewRef = useRef<CalendarPreviewPayload | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<DuplicateUploadDetail | null>(null);
   const [departments, setDepartments] = useState<string[]>([]);
   const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
+  const {
+    progress: opProgress,
+    start: startProgress,
+    setUploadPercent,
+    finish: finishProgress,
+    fail: failProgress,
+  } = useOperationProgress();
+
+  const openCalendarPreview = (preview: CalendarPreviewPayload | null | undefined) => {
+    if (!preview) return;
+    setCalendarPreview({
+      document_id: preview.document_id,
+      plan_title: preview.plan_title,
+      plan_event_at: preview.plan_event_at,
+      plan_event_end_at: preview.plan_event_end_at,
+      location: preview.location,
+      timeline: preview.timeline || [],
+      needs_review: Boolean(preview.needs_review),
+    });
+  };
+
+  const revealPendingCalendarAfterTasks = () => {
+    const pending = pendingCalendarPreviewRef.current;
+    pendingCalendarPreviewRef.current = null;
+    if (pending) openCalendarPreview(pending);
+  };
 
   useEffect(() => {
     loadDocuments();
@@ -146,13 +183,20 @@ export default function DocumentsPage() {
     };
 
     setUploading(true);
+    startProgress('Đang upload tài liệu...', { hasUpload: true });
     try {
-      const result = await documentsApi.upload(uploadFile, metadata);
+      const result = await documentsApi.upload(uploadFile, metadata, {
+        onUploadProgress: setUploadPercent,
+      });
       setDuplicateWarning(null);
       setShowUploadModal(false);
 
+      const calPreview = result.calendar_preview || null;
       const preview = result.task_preview as TaskPreviewPayload | null | undefined;
-      if (canManageTasks && result.extract_tasks && preview) {
+      const showTasks = canManageTasks && result.extract_tasks && preview;
+
+      if (showTasks) {
+        pendingCalendarPreviewRef.current = calPreview;
         setTaskPreview({
           tasks: preview.tasks || [],
           document_id: preview.document_id || result.id,
@@ -160,10 +204,14 @@ export default function DocumentsPage() {
           has_duplicates: Boolean(preview.has_duplicates),
           duplicate_count: preview.duplicate_count || 0,
         });
+      } else if (calPreview) {
+        openCalendarPreview(calPreview);
       }
 
       await loadDocuments();
+      await finishProgress();
     } catch (err) {
+      failProgress();
       if (axios.isAxiosError(err) && err.response?.status === 409) {
         const detail = err.response.data?.detail;
         if (detail && typeof detail === 'object' && detail.code === 'duplicate_filename') {
@@ -204,6 +252,7 @@ export default function DocumentsPage() {
 
   const runReExtractTasks = async (id: number) => {
     setReExtractingId(id);
+    startProgress('Đang trích xuất công việc...');
     try {
       const preview = await tasksApi.extract(id);
       setReExtractDocId(null);
@@ -214,7 +263,9 @@ export default function DocumentsPage() {
         has_duplicates: Boolean(preview.has_duplicates),
         duplicate_count: preview.duplicate_count || 0,
       });
+      await finishProgress();
     } catch (err: unknown) {
+      failProgress();
       const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
       alert(typeof detail === 'string' ? detail : 'Trích xuất công việc thất bại.');
     } finally {
@@ -224,17 +275,22 @@ export default function DocumentsPage() {
 
   const runReExtractCalendar = async (id: number) => {
     setReExtractingId(id);
+    startProgress('Đang trích xuất lịch trình...');
     try {
-      const result = await documentsApi.reExtractPlan(id, { put_on_calendar: true });
+      const result = await documentsApi.reExtractPlan(id, { preview_only: true });
       setReExtractDocId(null);
-      await loadDocuments();
-      alert(
-        result.message +
-          (result.plan_event_at
-            ? `\nNgày: ${formatPlanEventAt(result.plan_event_at, result.plan_event_end_at)}`
-            : '\nKhông tìm thấy Thời gian:/Ngày: trong file — kiểm tra/sửa trên Thời gian biểu.'),
-      );
+      openCalendarPreview({
+        document_id: result.document_id || id,
+        plan_title: result.plan_title,
+        plan_event_at: result.plan_event_at,
+        plan_event_end_at: result.plan_event_end_at,
+        location: result.location,
+        timeline: result.timeline || [],
+        needs_review: Boolean(result.needs_review),
+      });
+      await finishProgress();
     } catch (err: unknown) {
+      failProgress();
       const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
       alert(typeof detail === 'string' ? detail : 'Trích lên Thời gian biểu thất bại.');
     } finally {
@@ -812,10 +868,33 @@ export default function DocumentsPage() {
       {taskPreview && (
         <TaskExtractPreviewModal
           preview={taskPreview}
-          onClose={() => setTaskPreview(null)}
-          onSaved={() => setTaskPreview(null)}
+          onClose={() => {
+            setTaskPreview(null);
+            revealPendingCalendarAfterTasks();
+          }}
+          onSaved={() => {
+            setTaskPreview(null);
+            revealPendingCalendarAfterTasks();
+          }}
         />
       )}
+
+      {calendarPreview && (
+        <CalendarPlanPreviewModal
+          preview={calendarPreview}
+          onClose={() => setCalendarPreview(null)}
+          onSaved={async () => {
+            setCalendarPreview(null);
+            await loadDocuments();
+          }}
+        />
+      )}
+
+      <OperationProgressBar
+        visible={opProgress.visible}
+        percent={opProgress.percent}
+        label={opProgress.label}
+      />
     </div>
   );
 }

@@ -63,22 +63,33 @@ class DocumentService:
                 doc.plan_title = plan_title
 
             plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
-            timeline = task_extractor.extract_plan_timeline_from_chunks(chunks) if include_in_calendar else []
+            timeline = (
+                task_extractor.extract_plan_timeline_from_chunks(chunks)
+                if include_in_calendar
+                else []
+            )
             starts_at = plan_event.start if plan_event else None
             ends_at = plan_event.end if plan_event else None
+            location = plan_event.location if plan_event else None
             if include_in_calendar and timeline:
                 starts_at, ends_at = apply_timeline_time_fallback(starts_at, ends_at, timeline)
+
+            calendar_preview = None
             if include_in_calendar:
-                # Spec: opted-in → create event; 0 date → needs_review placeholder (admin must edit)
-                PlanEventService(self.db).replace_ai_events_for_document(
-                    doc,
-                    title=plan_title or doc.plan_title,
-                    starts_at=starts_at,
-                    ends_at=ends_at,
-                    location=plan_event.location if plan_event else None,
-                    timeline=timeline or None,
-                    include_in_calendar=True,
-                )
+                # Do not write calendar until admin confirms preview (5B).
+                doc.include_in_calendar = False
+                if plan_event:
+                    doc.plan_event_at = starts_at
+                    doc.plan_event_end_at = ends_at
+                calendar_preview = {
+                    "document_id": doc.id,
+                    "plan_title": plan_title or doc.plan_title or filename,
+                    "plan_event_at": starts_at.isoformat() if starts_at else None,
+                    "plan_event_end_at": ends_at.isoformat() if ends_at else None,
+                    "location": location,
+                    "timeline": timeline or [],
+                    "needs_review": starts_at is None,
+                }
             elif plan_event:
                 # Keep denormalized plan fields for Documents page, but not on calendar
                 doc.plan_event_at = plan_event.start
@@ -126,6 +137,7 @@ class DocumentService:
                 "include_in_calendar": bool(doc.include_in_calendar),
                 "extract_tasks": bool(extract_tasks),
                 "task_preview": task_preview,
+                "calendar_preview": calendar_preview,
                 "page_count": page_count,
                 "department": doc.department,
                 "month": doc.month,
@@ -195,12 +207,13 @@ class DocumentService:
                     "plan_event_at": starts_at.isoformat() if starts_at else None,
                     "plan_event_end_at": ends_at.isoformat() if ends_at else None,
                     "location": location,
+                    "timeline": timeline or [],
                     "event_count": 0,
                     "needs_review": starts_at is None,
                     "preview_only": True,
                     "message": (
                         "Đã trích (xem trước) — bấm Lưu để cập nhật sự kiện"
-                        if (plan_event or plan_title)
+                        if (plan_event or plan_title or timeline)
                         else "Không tìm thấy tiêu đề/ngày/địa điểm trong file"
                     ),
                 }
@@ -248,6 +261,7 @@ class DocumentService:
                 "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
                 "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
                 "location": (primary.location if primary else location),
+                "timeline": timeline or [],
                 "event_count": len(events),
                 "needs_review": needs_review,
                 "preview_only": False,
@@ -256,6 +270,70 @@ class DocumentService:
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+    def confirm_plan_event(
+        self,
+        doc_id: int,
+        *,
+        title: Optional[str] = None,
+        starts_at=None,
+        ends_at=None,
+        location: Optional[str] = None,
+        timeline: Optional[list] = None,
+    ) -> dict:
+        """Persist reviewed calendar package (date/time/location + timeline) after admin confirm."""
+        from datetime import datetime as dt
+
+        doc = self.doc_repo.get_by_id(doc_id)
+        if not doc:
+            raise ValueError("Tài liệu không tồn tại")
+
+        display_title = (title or doc.plan_title or doc.filename or "Kế hoạch").strip()
+        slots = timeline if isinstance(timeline, list) else []
+        cleaned_slots = []
+        for item in slots:
+            if not isinstance(item, dict):
+                continue
+            start = item.get("start")
+            end = item.get("end")
+            slot_title = item.get("title")
+            if not start or not slot_title:
+                continue
+            cleaned_slots.append({
+                "start": str(start),
+                "end": str(end) if end not in (None, "", "null") else None,
+                "title": str(slot_title)[:60],
+            })
+
+        if starts_at is not None and not isinstance(starts_at, dt):
+            starts_at = None
+        if ends_at is not None and not isinstance(ends_at, dt):
+            ends_at = None
+
+        events = PlanEventService(self.db).replace_ai_events_for_document(
+            doc,
+            title=display_title,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            location=location,
+            timeline=cleaned_slots or None,
+            include_in_calendar=True,
+        )
+        self.db.commit()
+        self.db.refresh(doc)
+        primary = events[0] if events else None
+        return {
+            "document_id": doc.id,
+            "plan_title": doc.plan_title,
+            "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
+            "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
+            "location": primary.location if primary else location,
+            "timeline": cleaned_slots,
+            "event_count": len(events),
+            "needs_review": bool(primary.needs_review) if primary else starts_at is None,
+            "preview_only": False,
+            "message": "Đã lưu sự kiện lên Thời gian biểu",
+        }
 
     def get_all_documents(self):
         docs = self.doc_repo.get_all()
