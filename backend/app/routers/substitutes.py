@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -13,8 +14,15 @@ from app.schemas.timetable import (
     TimetableSlotResponse,
     TimetableImportResult,
     MySubstitutesResponse,
+    SubstituteAssignmentResponse,
+    AbsentPeriodsRequest,
+    AbsentPeriodItem,
+    SuggestTeacherItem,
+    AssignBatchRequest,
+    AssignBatchResponse,
 )
 from app.services.timetable_service import TimetableService
+from app.services.substitute_service import SubstituteService
 from app.utils.auth import get_current_user
 from app.utils.permissions import is_admin, has_scope_all_departments
 
@@ -29,8 +37,6 @@ def _require_bgh(user: User = Depends(get_current_user)) -> User:
         )
     return user
 
-
-# ---- teacher-facing: my substitute lessons ----
 
 @router.get("/mine", response_model=MySubstitutesResponse)
 def my_substitutes(
@@ -69,7 +75,84 @@ def list_teachers(
     ]
 
 
-# ---- classes ----
+@router.get("/assignments", response_model=List[SubstituteAssignmentResponse])
+def list_assignments(
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    campus_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_bgh),
+):
+    return SubstituteService(db).list_board(
+        from_date=from_date, to_date=to_date, campus_id=campus_id
+    )
+
+
+@router.post("/absent-periods", response_model=List[AbsentPeriodItem])
+def absent_periods(
+    body: AbsentPeriodsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_bgh),
+):
+    try:
+        return SubstituteService(db).absent_periods(
+            absent_teacher_id=body.absent_teacher_id,
+            dates=body.dates,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/suggestions", response_model=List[SuggestTeacherItem])
+def suggestions(
+    absent_teacher_id: int = Query(...),
+    on_date: date = Query(...),
+    period: int = Query(..., ge=1, le=8),
+    class_id: int = Query(...),
+    campus_id: int = Query(...),
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_bgh),
+):
+    try:
+        return SubstituteService(db).suggest(
+            absent_teacher_id=absent_teacher_id,
+            on_date=on_date,
+            period=period,
+            class_id=class_id,
+            campus_id=campus_id,
+            limit=limit,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/assign", response_model=AssignBatchResponse)
+def assign_batch(
+    body: AssignBatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_bgh),
+):
+    try:
+        return SubstituteService(db).assign_batch(
+            items=[i.model_dump() for i in body.items],
+            assigned_by_id=current_user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/assignments/{assignment_id}/cancel", response_model=SubstituteAssignmentResponse)
+def cancel_assignment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_bgh),
+):
+    try:
+        return SubstituteService(db).cancel(assignment_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 
 @router.get("/classes", response_model=List[ClassRoomResponse])
 def list_classes(
@@ -93,8 +176,6 @@ def create_class(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-
-# ---- timetable slots ----
 
 @router.get("/timetable", response_model=List[TimetableSlotResponse])
 def list_timetable(

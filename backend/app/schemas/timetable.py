@@ -84,3 +84,55 @@ class SubstituteAssignmentResponse(BaseModel):
 class MySubstitutesResponse(BaseModel):
     items: List[SubstituteAssignmentResponse]
     count: int
+
+
+class AbsentPeriodsRequest(BaseModel):
+    absent_teacher_id: int
+    dates: List[date] = Field(..., min_length=1)
+
+
+class AbsentPeriodItem(BaseModel):
+    date: str
+    day_of_week: int
+    period: int
+    session: str
+    period_label: str
+    class_id: int
+    class_name: Optional[str] = None
+    campus_id: int
+    campus_code: Optional[str] = None
+    already_assigned: bool = False
+    existing_assignment_id: Optional[int] = None
+    existing_substitute_name: Optional[str] = None
+
+
+class SuggestTeacherItem(BaseModel):
+    user_id: int
+    name: str
+    teacher_code: Optional[str] = None
+    department: Optional[str] = None
+    campus_id: Optional[int] = None
+    same_department: bool
+    tier_label: str
+    periods_that_day: int
+    substitutes_this_week: int
+
+
+class AssignItem(BaseModel):
+    absent_teacher_id: int
+    substitute_teacher_id: int
+    class_id: int
+    campus_id: int
+    date: date
+    period: int = Field(..., ge=1, le=8)
+
+
+class AssignBatchRequest(BaseModel):
+    items: List[AssignItem] = Field(..., min_length=1)
+
+
+class AssignBatchResponse(BaseModel):
+    created: int
+    items: List[SubstituteAssignmentResponse]
+    errors: List[str] = []
+    message: str

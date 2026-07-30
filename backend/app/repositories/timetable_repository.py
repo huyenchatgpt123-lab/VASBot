@@ -1,6 +1,7 @@
 from datetime import date
 from typing import List, Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.timetable import ClassRoom, TimetableSlot, SubstituteAssignment
@@ -157,11 +158,151 @@ class TimetableRepository:
             q = q.filter(SubstituteAssignment.date >= from_date)
         return q.order_by(SubstituteAssignment.date, SubstituteAssignment.period).all()
 
-    def count_mine(self, teacher_id: int, from_date: Optional[date] = None) -> int:
-        q = self.db.query(SubstituteAssignment).filter(
-            SubstituteAssignment.substitute_teacher_id == teacher_id,
-            SubstituteAssignment.status == "assigned",
+    def list_assignments(
+        self,
+        *,
+        from_date: date,
+        to_date: date,
+        campus_id: Optional[int] = None,
+    ) -> List[SubstituteAssignment]:
+        q = (
+            self.db.query(SubstituteAssignment)
+            .options(
+                joinedload(SubstituteAssignment.class_room),
+                joinedload(SubstituteAssignment.campus),
+                joinedload(SubstituteAssignment.absent_teacher),
+                joinedload(SubstituteAssignment.substitute_teacher),
+            )
+            .filter(
+                SubstituteAssignment.status == "assigned",
+                SubstituteAssignment.date >= from_date,
+                SubstituteAssignment.date <= to_date,
+            )
         )
-        if from_date:
-            q = q.filter(SubstituteAssignment.date >= from_date)
-        return q.count()
+        if campus_id:
+            q = q.filter(SubstituteAssignment.campus_id == campus_id)
+        return q.order_by(
+            SubstituteAssignment.date,
+            SubstituteAssignment.period,
+            SubstituteAssignment.id,
+        ).all()
+
+    def get_assignment(self, assignment_id: int) -> Optional[SubstituteAssignment]:
+        return (
+            self.db.query(SubstituteAssignment)
+            .options(
+                joinedload(SubstituteAssignment.class_room),
+                joinedload(SubstituteAssignment.campus),
+                joinedload(SubstituteAssignment.absent_teacher),
+                joinedload(SubstituteAssignment.substitute_teacher),
+            )
+            .filter(SubstituteAssignment.id == assignment_id)
+            .first()
+        )
+
+    def create_assignment(self, **kwargs) -> SubstituteAssignment:
+        item = SubstituteAssignment(**kwargs)
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def list_slots_for_teacher_days(
+        self, teacher_id: int, day_of_weeks: List[int]
+    ) -> List[TimetableSlot]:
+        if not day_of_weeks:
+            return []
+        return (
+            self.db.query(TimetableSlot)
+            .options(
+                joinedload(TimetableSlot.class_room),
+                joinedload(TimetableSlot.campus),
+                joinedload(TimetableSlot.teacher),
+            )
+            .filter(
+                TimetableSlot.teacher_id == teacher_id,
+                TimetableSlot.day_of_week.in_(day_of_weeks),
+            )
+            .order_by(TimetableSlot.day_of_week, TimetableSlot.period)
+            .all()
+        )
+
+    def teacher_busy_periods_on_dow(self, day_of_week: int) -> dict:
+        """teacher_id -> set of periods from weekly timetable."""
+        rows = (
+            self.db.query(TimetableSlot.teacher_id, TimetableSlot.period)
+            .filter(TimetableSlot.day_of_week == day_of_week)
+            .all()
+        )
+        result: dict = {}
+        for tid, period in rows:
+            result.setdefault(tid, set()).add(period)
+        return result
+
+    def teacher_sub_busy_on_date(self, on_date: date) -> dict:
+        """teacher_id -> set of periods already assigned as substitute that date."""
+        rows = (
+            self.db.query(
+                SubstituteAssignment.substitute_teacher_id,
+                SubstituteAssignment.period,
+            )
+            .filter(
+                SubstituteAssignment.date == on_date,
+                SubstituteAssignment.status == "assigned",
+                SubstituteAssignment.substitute_teacher_id.isnot(None),
+            )
+            .all()
+        )
+        result: dict = {}
+        for tid, period in rows:
+            if tid is None:
+                continue
+            result.setdefault(tid, set()).add(period)
+        return result
+
+    def count_subs_in_range(
+        self, from_date: date, to_date: date
+    ) -> dict:
+        """teacher_id -> count of assigned substitute lessons in [from, to]."""
+        rows = (
+            self.db.query(
+                SubstituteAssignment.substitute_teacher_id,
+                func.count(SubstituteAssignment.id),
+            )
+            .filter(
+                SubstituteAssignment.status == "assigned",
+                SubstituteAssignment.substitute_teacher_id.isnot(None),
+                SubstituteAssignment.date >= from_date,
+                SubstituteAssignment.date <= to_date,
+            )
+            .group_by(SubstituteAssignment.substitute_teacher_id)
+            .all()
+        )
+        return {tid: cnt for tid, cnt in rows if tid is not None}
+
+    def find_sub_teacher_conflict(
+        self, teacher_id: int, on_date: date, period: int
+    ) -> Optional[SubstituteAssignment]:
+        return (
+            self.db.query(SubstituteAssignment)
+            .filter(
+                SubstituteAssignment.substitute_teacher_id == teacher_id,
+                SubstituteAssignment.date == on_date,
+                SubstituteAssignment.period == period,
+                SubstituteAssignment.status == "assigned",
+            )
+            .first()
+        )
+
+    def find_class_sub_conflict(
+        self, class_id: int, on_date: date, period: int
+    ) -> Optional[SubstituteAssignment]:
+        return (
+            self.db.query(SubstituteAssignment)
+            .filter(
+                SubstituteAssignment.class_id == class_id,
+                SubstituteAssignment.date == on_date,
+                SubstituteAssignment.period == period,
+                SubstituteAssignment.status == "assigned",
+            )
+            .first()
+        )
