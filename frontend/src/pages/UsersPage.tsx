@@ -509,13 +509,13 @@ export default function UsersPage() {
         </div>
       )}
 
-      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 break-words">
         File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Chức vụ phải khớp tên trong danh sách bên dưới.
       </div>
 
       {/* Quản lý phòng ban */}
       <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
           <h2 className="text-lg font-semibold text-gray-900">Tổ / Phòng ban</h2>
           <button
             onClick={() => {
@@ -523,7 +523,7 @@ export default function UsersPage() {
               setDeptForm({ name: '', sort_order: departmentList.length + 1 });
               setShowDeptForm(true);
             }}
-            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            className="w-full sm:w-auto px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             + Thêm phòng ban
           </button>
@@ -570,7 +570,7 @@ export default function UsersPage() {
             <tbody>
               {departmentList.map((d) => (
                 <tr key={d.id} className="border-b border-gray-100">
-                  <td className="py-2 pr-3 font-medium">{d.name}</td>
+                  <td className="py-2 pr-3 font-medium break-words">{d.name}</td>
                   <td className="py-2 pr-3">{d.user_count}</td>
                   <td className="py-2 text-right space-x-2">
                     <button onClick={() => handleEditDept(d)} className="text-primary-600 hover:underline">Sửa</button>
@@ -585,7 +585,7 @@ export default function UsersPage() {
 
       {/* Quản lý chức vụ */}
       <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
           <h2 className="text-lg font-semibold text-gray-900">Chức vụ & Phân quyền</h2>
           <button
             onClick={() => {
@@ -600,7 +600,7 @@ export default function UsersPage() {
               });
               setShowPositionForm(true);
             }}
-            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            className="w-full sm:w-auto px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             + Thêm chức vụ
           </button>
@@ -649,7 +649,7 @@ export default function UsersPage() {
           </form>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-gray-500 uppercase border-b">
@@ -665,7 +665,7 @@ export default function UsersPage() {
             <tbody>
               {positions.map((p) => (
                 <tr key={p.id} className="border-b border-gray-100">
-                  <td className="py-2 pr-3 font-medium">{p.name}</td>
+                  <td className="py-2 pr-3 font-medium break-words">{p.name}</td>
                   <td className="py-2 pr-3">{p.can_upload ? '✓' : '—'}</td>
                   <td className="py-2 pr-3">{p.can_manage_tasks ? '✓' : '—'}</td>
                   <td className="py-2 pr-3">{p.can_delete_documents ? '✓' : '—'}</td>
@@ -679,6 +679,43 @@ export default function UsersPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="md:hidden divide-y divide-gray-100">
+          {positions.map((p) => {
+            const rights = [
+              p.can_upload && 'Upload tài liệu',
+              p.can_manage_tasks && 'Quản lý công việc',
+              p.can_delete_documents && 'Xóa tài liệu',
+              p.scope_all_departments && 'Toàn trường',
+            ].filter(Boolean) as string[];
+            return (
+              <div key={p.id} className="py-3 first:pt-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-900 break-words min-w-0">{p.name}</p>
+                  <span className="shrink-0 text-xs text-gray-500">{p.user_count} users</span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {rights.length === 0 ? (
+                    <span className="text-xs text-gray-400">Không có quyền đặc biệt</span>
+                  ) : (
+                    rights.map((r) => (
+                      <span
+                        key={r}
+                        className="px-1.5 py-0.5 rounded border border-primary-200 bg-primary-50 text-primary-700 text-[11px]"
+                      >
+                        {r}
+                      </span>
+                    ))
+                  )}
+                </div>
+                <div className="mt-2 flex gap-3 text-sm">
+                  <button onClick={() => handleEditPosition(p)} className="text-primary-600 hover:underline">Sửa</button>
+                  <button onClick={() => handleDeletePosition(p)} className="text-red-600 hover:underline">Xóa</button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -747,7 +784,7 @@ export default function UsersPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-gray-500">Đang tải...</div>
         ) : filteredUsers.length === 0 ? (
@@ -755,6 +792,93 @@ export default function UsersPage() {
             {hasActiveFilters ? 'Không tìm thấy người dùng phù hợp.' : 'Chưa có người dùng.'}
           </div>
         ) : (
+          <>
+          <div className="md:hidden divide-y divide-gray-100">
+            {selectableUsers.length > 0 && (
+              <label className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 text-xs font-medium text-gray-500 uppercase">
+                <input
+                  type="checkbox"
+                  checked={allSelectableSelected}
+                  onChange={toggleSelectAll}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                Chọn tất cả
+              </label>
+            )}
+            {filteredUsers.map((user) => {
+              const isSelf = user.id === currentUser?.id;
+              return (
+                <div
+                  key={user.id}
+                  className={`p-4 ${selectedIds.has(user.id) ? 'bg-primary-50/40' : ''}`}
+                >
+                  <div className="flex items-start gap-3">
+                    {isSelf ? (
+                      <span className="mt-1 text-xs text-gray-400 shrink-0 w-4 text-center">—</span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(user.id)}
+                        onChange={() => toggleSelect(user.id)}
+                        className="mt-1 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-gray-900 break-words min-w-0">
+                          {user.name}
+                          {isSelf && <span className="ml-1.5 text-xs text-primary-600">(Bạn)</span>}
+                        </p>
+                        <span
+                          className={`shrink-0 inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                            user.role === 'admin'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {user.role}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 break-all mt-0.5">{user.email}</p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                        {user.nickname ? (
+                          <span className="px-1.5 py-0.5 rounded bg-gray-100">{user.nickname}</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">
+                            Chưa có biệt danh
+                          </span>
+                        )}
+                        <span className="break-words">{user.department || '—'}</span>
+                        <span className="text-gray-300">·</span>
+                        <span className="break-words">{user.position || '—'}</span>
+                      </div>
+                      <div className="mt-2 flex items-center gap-3 text-sm">
+                        <button
+                          onClick={() => handleEdit(user)}
+                          className="text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                          Sửa
+                        </button>
+                        {!isSelf && (
+                          <button
+                            onClick={() => handleDelete(user.id)}
+                            className="text-red-600 hover:text-red-700 font-medium"
+                          >
+                            Xóa
+                          </button>
+                        )}
+                        <span className="ml-auto text-xs text-gray-400">
+                          {new Date(user.created_at).toLocaleDateString('vi-VN')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -849,6 +973,8 @@ export default function UsersPage() {
               })}
             </tbody>
           </table>
+          </div>
+          </>
         )}
       </div>
     </div>

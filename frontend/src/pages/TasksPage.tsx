@@ -714,10 +714,12 @@ export default function TasksPage() {
             const isChecked = selectedIds.includes(u.id) || isDisabled;
             return (
               <label key={u.id} className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 ${isDisabled ? 'opacity-60' : ''}`}>
-                <input type="checkbox" checked={isChecked} disabled={isDisabled} onChange={() => !isDisabled && onToggle(u.id)} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                <span className="font-medium text-gray-800">{u.name}</span>
-                {u.nickname && <span className="text-gray-500">· {u.nickname}</span>}
-                {u.department && <span className="text-xs text-gray-400 ml-auto">{u.department}</span>}
+                <input type="checkbox" checked={isChecked} disabled={isDisabled} onChange={() => !isDisabled && onToggle(u.id)} className="shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium text-gray-800">{u.name}</span>
+                  {u.nickname && <span className="text-gray-500"> · {u.nickname}</span>}
+                </span>
+                {u.department && <span className="shrink-0 text-xs text-gray-400 max-w-[35%] truncate">{u.department}</span>}
               </label>
             );
           })}
@@ -770,32 +772,47 @@ export default function TasksPage() {
     </span>
   );
 
+  const renderDocProgress = (docGroup: DocumentGroup) => (
+    <>
+      <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden shrink-0">
+        <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${docGroup.totalCount > 0 ? (docGroup.completedCount / docGroup.totalCount) * 100 : 0}%` }} />
+      </div>
+      <span className="text-xs text-gray-500 shrink-0">{docGroup.completedCount}/{docGroup.totalCount}</span>
+      {docGroup.overdueCount > 0 && <span className="text-xs text-red-600 shrink-0">🔴{docGroup.overdueCount}</span>}
+    </>
+  );
+
   const renderDocumentGroup = (docGroup: DocumentGroup) => (
     <div key={docGroup.document_name} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors">
-        <button onClick={() => toggleDoc(docGroup.document_name)} className="flex-1 flex items-center justify-between min-w-0">
-          <div className="flex items-center gap-3 min-w-0">
+      <div className="w-full px-4 sm:px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+        <div className="flex items-center gap-2">
+          <button onClick={() => toggleDoc(docGroup.document_name)} className="flex-1 flex items-center gap-3 min-w-0 text-left">
             <span className="text-gray-400 text-xs shrink-0">{expandedDocs.has(docGroup.document_name) ? '▼' : '▶'}</span>
-            <span className="font-semibold text-gray-800 text-sm truncate">
-              {docGroup.isManual ? '📝' : '📁'} {docGroup.document_name}
-              {docGroup.isManual && <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Phát sinh</span>}
-              {docGroup.document_department && !docGroup.isManual && (
-                <span className="ml-2 text-xs font-normal text-gray-500">· Nguồn: {docGroup.document_department}</span>
+            <span className="min-w-0">
+              <span className="block font-semibold text-gray-800 text-sm truncate">
+                {docGroup.isManual ? '📝' : '📁'} {docGroup.document_name}
+              </span>
+              {(docGroup.isManual || (docGroup.document_department && !docGroup.isManual)) && (
+                <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                  {docGroup.isManual && <span className="text-xs font-normal text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Phát sinh</span>}
+                  {docGroup.document_department && !docGroup.isManual && (
+                    <span className="text-xs font-normal text-gray-500 truncate">· Nguồn: {docGroup.document_department}</span>
+                  )}
+                </span>
               )}
             </span>
+          </button>
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            {renderDocProgress(docGroup)}
           </div>
-          <div className="flex items-center gap-2 shrink-0 ml-3">
-            <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${docGroup.totalCount > 0 ? (docGroup.completedCount / docGroup.totalCount) * 100 : 0}%` }} />
-            </div>
-            <span className="text-xs text-gray-500">{docGroup.completedCount}/{docGroup.totalCount}</span>
-            {docGroup.overdueCount > 0 && <span className="text-xs text-red-600">🔴{docGroup.overdueCount}</span>}
-          </div>
-        </button>
-        <button onClick={() => handlePreviewPlan(docGroup.document_id)} disabled={!docGroup.document_id} title="Xem kế hoạch" className="ml-3 p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg shrink-0 disabled:opacity-40">👁</button>
-        {canManageTasks && (
-          <button onClick={() => handleDeleteDocument(docGroup)} className="ml-2 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0" title="Xóa toàn bộ">🗑</button>
-        )}
+          <button onClick={() => handlePreviewPlan(docGroup.document_id)} disabled={!docGroup.document_id} title="Xem kế hoạch" className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg shrink-0 disabled:opacity-40">👁</button>
+          {canManageTasks && (
+            <button onClick={() => handleDeleteDocument(docGroup)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0" title="Xóa toàn bộ">🗑</button>
+          )}
+        </div>
+        <div className="sm:hidden mt-2 flex items-center gap-2">
+          {renderDocProgress(docGroup)}
+        </div>
       </div>
       {expandedDocs.has(docGroup.document_name) && (
         <div className="divide-y divide-gray-100">
@@ -807,11 +824,11 @@ export default function TasksPage() {
               ? getTaskDepartment(taskGroup.items.find((t) => isDelegatedByMe(t, user?.id, user?.department))!)
               : null;
             return (
-            <div key={`${taskGroup.title}-${idx}`} className="px-5 py-3">
-              <div className="flex items-center justify-between mb-1">
+            <div key={`${taskGroup.title}-${idx}`} className="px-4 sm:px-5 py-3">
+              <div className="flex items-start justify-between gap-2 mb-1">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                  <span className="text-gray-400 text-sm">📋</span>
-                  <span className={`text-sm font-medium truncate ${taskGroup.overdueCount > 0 ? 'text-red-700' : 'text-gray-900'}`}>{taskGroup.title}</span>
+                  <span className="text-gray-400 text-sm shrink-0">📋</span>
+                  <span className={`text-sm font-medium min-w-0 break-words ${taskGroup.overdueCount > 0 ? 'text-red-700' : 'text-gray-900'}`}>{taskGroup.title}</span>
                   {showDelegatedBadge && delegatedDept && (
                     <span className="text-xs font-normal text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded shrink-0">
                       Đã giao · {delegatedDept}
@@ -822,13 +839,13 @@ export default function TasksPage() {
                   )}
                 </div>
                 {taskGroup.deadline && (
-                  <span className={`text-xs shrink-0 ml-2 ${new Date(taskGroup.deadline) < new Date() ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                  <span className={`text-xs shrink-0 ${new Date(taskGroup.deadline) < new Date() ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                     {formatDate(taskGroup.deadline)}
                   </span>
                 )}
               </div>
-              <div className="ml-6 mb-2">{renderGroupProgress(taskGroup.completedCount, taskGroup.items.length, taskGroup.overdueCount)}</div>
-              <div className="flex flex-wrap gap-2 ml-6">
+              <div className="ml-4 sm:ml-6 mb-2">{renderGroupProgress(taskGroup.completedCount, taskGroup.items.length, taskGroup.overdueCount)}</div>
+              <div className="flex flex-wrap gap-2 ml-4 sm:ml-6">
                 {taskGroup.items.map(renderTaskTag)}
                 {canManageTasks && !docGroup.isManual && (
                   <button onClick={() => openAddPersonModal(taskGroup, docGroup.document_id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-xs text-gray-400 hover:text-primary-600 hover:border-primary-400" title="Thêm người vào kế hoạch">+ Vào kế hoạch</button>
@@ -848,14 +865,14 @@ export default function TasksPage() {
         <div className="space-y-4">
           {departmentGroups.map((deptGroup) => (
             <div key={deptGroup.department} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <button onClick={() => toggleDept(deptGroup.department)} className="w-full flex items-center justify-between px-5 py-3 bg-indigo-50 hover:bg-indigo-100 transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="text-gray-400 text-xs">{expandedDepts.has(deptGroup.department) ? '▼' : '▶'}</span>
-                  <span className="font-semibold text-indigo-900 text-sm">
+              <button onClick={() => toggleDept(deptGroup.department)} className="w-full flex items-center justify-between gap-2 px-4 sm:px-5 py-3 bg-indigo-50 hover:bg-indigo-100 transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-gray-400 text-xs shrink-0">{expandedDepts.has(deptGroup.department) ? '▼' : '▶'}</span>
+                  <span className="font-semibold text-indigo-900 text-sm truncate">
                     {deptGroup.department === 'Chưa gán' ? '⚠️' : '🏫'} {deptGroup.department}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-indigo-700">
+                <div className="flex items-center gap-2 sm:gap-3 text-xs text-indigo-700 shrink-0">
                   <span>{deptGroup.completedCount}/{deptGroup.totalCount}</span>
                   {deptGroup.overdueCount > 0 && <span className="text-red-600 font-medium">🔴 {deptGroup.overdueCount} quá hạn</span>}
                 </div>
@@ -875,27 +892,29 @@ export default function TasksPage() {
     <div className="space-y-3">
       {sortedPersonGroups.map((pg) => (
         <div key={`${pg.assignee_id}-${pg.assignee_name}`} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-gray-50 flex items-center justify-between">
-            <div>
-              <span className="font-semibold text-gray-900 text-sm">{pg.assignee_id === null ? '⚠️ ' : '👤 '}{pg.assignee_name}</span>
+          <div className="px-4 sm:px-5 py-3 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3">
+            <div className="min-w-0">
+              <span className="font-semibold text-gray-900 text-sm break-words">{pg.assignee_id === null ? '⚠️ ' : '👤 '}{pg.assignee_name}</span>
               {pg.department && <span className="ml-2 text-xs text-gray-400">{pg.department}</span>}
             </div>
-            {renderGroupProgress(pg.completedCount, pg.tasks.length, pg.overdueCount)}
+            <span className="shrink-0">{renderGroupProgress(pg.completedCount, pg.tasks.length, pg.overdueCount)}</span>
           </div>
           <div className="divide-y divide-gray-100">
             {pg.tasks.map((task) => {
               const st = getEffectiveStatus(task);
               return (
-                <div key={task.id} className="px-5 py-2.5 flex items-center justify-between gap-3 hover:bg-gray-50">
-                  <div className="min-w-0">
+                <div key={task.id} className="px-4 sm:px-5 py-2.5 flex items-center justify-between gap-2 sm:gap-3 hover:bg-gray-50">
+                  <div className="min-w-0 flex-1">
                     <p className={`text-sm truncate ${st === 'overdue' ? 'text-red-700 font-medium' : 'text-gray-800'}`}>{task.title}</p>
                     <p className="text-xs text-gray-400 truncate">{task.document_name || MANUAL_GROUP_NAME}{task.deadline ? ` · ${formatDate(task.deadline)}` : ''}</p>
                   </div>
                   <button
                     onClick={() => handleStatusChange(task.id, nextStatus(task.status))}
+                    title={STATUS_OPTIONS.find((s) => s.value === st)?.label || st}
                     className={`shrink-0 px-2.5 py-1 rounded-full border text-xs font-medium ${STATUS_TAG_COLORS[st]}`}
                   >
-                    {STATUS_ICONS[st]} {STATUS_OPTIONS.find((s) => s.value === st)?.label || st}
+                    {STATUS_ICONS[st]}
+                    <span className="hidden sm:inline"> {STATUS_OPTIONS.find((s) => s.value === st)?.label || st}</span>
                   </button>
                 </div>
               );
@@ -909,14 +928,14 @@ export default function TasksPage() {
   const renderTeacherCard = (task: TaskItem) => {
     const st = getEffectiveStatus(task);
     return (
-      <div key={task.id} className={`bg-white rounded-lg border p-4 flex items-center justify-between gap-3 ${st === 'overdue' ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
+      <div key={task.id} className={`bg-white rounded-lg border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 ${st === 'overdue' ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-gray-900 truncate">{task.title}</p>
+          <p className="font-medium text-gray-900 break-words">{task.title}</p>
           {task.document_name && <p className="text-xs text-gray-400 truncate mt-0.5">{task.document_name}</p>}
           {task.deadline && <p className={`text-xs mt-1 ${st === 'overdue' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>📅 {formatDate(task.deadline)}</p>}
           {task.note && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.note}</p>}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center justify-end gap-1 shrink-0">
           {task.document_id && (
             <button
               type="button"
@@ -1039,9 +1058,9 @@ export default function TasksPage() {
       </div>
 
       {newTaskCount > 0 && showNotif && (
-        <div className="mb-4 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <span className="text-sm text-blue-700">🔔 Bạn có <strong>{newTaskCount}</strong> công việc mới trong 24h qua</span>
-          <button onClick={() => setShowNotif(false)} className="text-blue-400 hover:text-blue-600 text-lg font-bold">×</button>
+        <div className="mb-4 flex items-start justify-between gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+          <span className="text-sm text-blue-700 min-w-0 break-words">🔔 Bạn có <strong>{newTaskCount}</strong> công việc mới trong 24h qua</span>
+          <button onClick={() => setShowNotif(false)} className="shrink-0 text-blue-400 hover:text-blue-600 text-lg font-bold leading-none">×</button>
         </div>
       )}
 
@@ -1213,7 +1232,7 @@ export default function TasksPage() {
                 { disabledIds: isAddingPerson ? existingAssigneeIds : [] }
               )}
               {!isAddingPerson && createDeptPreview && (
-                <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 break-words">
                   Sẽ xếp vào: {createDeptPreview}
                 </p>
               )}

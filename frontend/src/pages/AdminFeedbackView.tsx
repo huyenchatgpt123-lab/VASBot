@@ -57,17 +57,17 @@ export default function AdminFeedbackView() {
         ) : (
           <div className="divide-y divide-gray-100">
             {feedbacks.map((fb) => (
-              <div key={fb.id} className={`px-5 py-4 ${fb.status === 'new' ? 'bg-blue-50/50' : ''}`}>
-                <div className="flex items-start justify-between gap-4">
+              <div key={fb.id} className={`px-4 sm:px-5 py-4 ${fb.status === 'new' ? 'bg-blue-50/50' : ''}`}>
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-gray-900">{fb.user_name}</span>
-                      <span className="text-xs text-gray-400">{fb.user_email}</span>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                      <span className="text-sm font-medium text-gray-900 break-words">{fb.user_name}</span>
+                      <span className="text-xs text-gray-400 break-all">{fb.user_email}</span>
                       {fb.status === 'new' && (
                         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Mới</span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{fb.content}</p>
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{fb.content}</p>
                     <p className="text-xs text-gray-400 mt-2">
                       {new Date(fb.created_at).toLocaleString('vi-VN')}
                     </p>
@@ -75,7 +75,7 @@ export default function AdminFeedbackView() {
                   {fb.status === 'new' && (
                     <button
                       onClick={() => handleMarkRead(fb.id)}
-                      className="shrink-0 px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-white"
+                      className="shrink-0 self-start px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-white"
                     >
                       Đánh dấu đã đọc
                     </button>

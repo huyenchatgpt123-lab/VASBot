@@ -77,8 +77,8 @@ export default function UserFeedbackView() {
         ) : (
           <div className="divide-y divide-gray-100">
             {feedbacks.map((fb) => (
-              <div key={fb.id} className="px-5 py-4">
-                <p className="text-sm text-gray-800 whitespace-pre-wrap">{fb.content}</p>
+              <div key={fb.id} className="px-4 sm:px-5 py-4">
+                <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{fb.content}</p>
                 <p className="text-xs text-gray-400 mt-2">
                   {new Date(fb.created_at).toLocaleString('vi-VN')}
                   {fb.status === 'read' && <span className="ml-2 text-green-600">· Admin đã xem</span>}

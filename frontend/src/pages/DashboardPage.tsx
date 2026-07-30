@@ -261,7 +261,7 @@ export default function DashboardPage() {
       </div>
 
       {/* OpenAI cost section — separated for readability */}
-      <div className="mb-8 bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="mb-8 bg-white rounded-xl border border-gray-200 p-4 sm:p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Chi phí OpenAI</h2>
@@ -398,7 +398,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Tài liệu tải lên theo ngày</h2>
         {activity.length > 0 ? (
           <ResponsiveContainer width="100%" height={350}>

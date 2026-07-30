@@ -501,13 +501,13 @@ export default function BghCalendarPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5 mb-1.5">
               {WEEKDAYS.map((d) => (
                 <div key={d} className="text-center text-xs font-semibold text-gray-400 py-1">{d}</div>
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
               {weeks.flat().map((dateKey, idx) => {
                 if (!dateKey) {
                   return <div key={`empty-${idx}`} className="aspect-square min-h-[40px]" />;
@@ -525,7 +525,7 @@ export default function BghCalendarPage() {
                     onClick={(e) => selectCalendarDay(dateKey, e.shiftKey)}
                     className={`aspect-square min-h-[40px] sm:min-h-[44px] rounded-lg flex flex-col items-center justify-center transition-all relative ${
                       isFocused
-                        ? 'bg-primary-600 text-white shadow-md ring-2 ring-primary-300 ring-offset-1 z-10'
+                        ? 'bg-primary-600 text-white shadow-md ring-2 ring-inset ring-primary-300 z-10'
                         : inRange
                           ? 'bg-primary-50 text-primary-900 hover:bg-primary-100'
                           : hasPlans
@@ -565,10 +565,10 @@ export default function BghCalendarPage() {
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
             {/* List header */}
             <div className="px-5 py-4 border-b border-gray-100 shrink-0 bg-gray-50/80">
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
+                <div className="min-w-0">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Danh sách hoạt động</p>
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 break-words">
                     {isSingleDayRange
                       ? formatDisplayDate(filterRange.start)
                       : `${formatShortDate(filterRange.start)} – ${formatShortDate(filterRange.end)}`}
@@ -585,7 +585,7 @@ export default function BghCalendarPage() {
                   <button
                     type="button"
                     onClick={() => setShowUnscheduled((v) => !v)}
-                    className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
+                    className="shrink-0 self-start text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
                   >
                     Cần cập nhật ngày/giờ ({adminNeedsAttentionCount})
                   </button>
@@ -660,10 +660,10 @@ export default function BghCalendarPage() {
                         key={plan.event_id ?? `doc-${plan.document_id}`}
                         className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-100"
                       >
-                        <span className="text-sm text-gray-900 flex-1 min-w-0">
+                        <span className="text-sm text-gray-900 flex-1 min-w-0 break-words">
                           {displayPlanName(plan.plan_name)}
                           {plan.location ? (
-                            <span className="block text-xs text-gray-500 font-normal mt-0.5">
+                            <span className="block text-xs text-gray-500 font-normal mt-0.5 break-words">
                               Địa điểm: {plan.location}
                             </span>
                           ) : null}
@@ -744,47 +744,8 @@ function PlanRow({
   const hasTimeline = Array.isArray(plan.timeline) && plan.timeline.length > 0;
   const timeLabel = formatPlanTimeLabel(plan);
 
-  return (
-    <li className={`group flex items-start gap-3 px-4 py-3 rounded-xl bg-white border hover:shadow-sm transition-all ${
-      isAdmin && plan.needs_review ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100 hover:border-primary-200'
-    }`}>
-      <div className={`shrink-0 min-w-[3.5rem] pt-0.5 text-right tabular-nums font-bold ${
-        plan.is_continuation ? 'text-xs text-gray-400' : 'text-sm text-primary-700'
-      }`}>
-        {timeLabel}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 leading-snug group-hover:text-primary-900 transition-colors">
-          {displayPlanName(plan.plan_name)}
-        </p>
-        {plan.location ? (
-          <p className="text-xs text-gray-600 mt-0.5">
-            <span className="text-gray-400">Địa điểm:</span> {plan.location}
-          </p>
-        ) : (
-          <p className="text-xs text-gray-400 mt-0.5">Địa điểm: —</p>
-        )}
-        {isAdmin && plan.needs_review && (
-          <p className="text-xs text-amber-700 mt-0.5">Cần cập nhật ngày/giờ</p>
-        )}
-        {plan.event_end_date && !plan.is_continuation && (
-          <p className="text-xs text-gray-400 mt-0.5">
-            Đến {formatShortDate(plan.event_end_date)}
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-1 mt-2">
-          <span className="text-[10px] text-gray-400 mr-0.5">Trường:</span>
-          {plan.campuses.map((code) => (
-            <span
-              key={code}
-              className="text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100 font-medium"
-              title="Kế hoạch thuộc trường"
-            >
-              {code}
-            </span>
-          ))}
-        </div>
-      </div>
+  const actionButtons = (
+    <>
       <button
         type="button"
         onClick={hasTimeline ? onViewTimeline : undefined}
@@ -816,6 +777,56 @@ function PlanRow({
       >
         👁
       </button>
+    </>
+  );
+
+  return (
+    <li className={`group px-4 py-3 rounded-xl bg-white border hover:shadow-sm transition-all ${
+      isAdmin && plan.needs_review ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100 hover:border-primary-200'
+    }`}>
+      <div className="flex items-start gap-3">
+      <div className={`shrink-0 min-w-[3.5rem] pt-0.5 text-right tabular-nums font-bold ${
+        plan.is_continuation ? 'text-xs text-gray-400' : 'text-sm text-primary-700'
+      }`}>
+        {timeLabel}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 leading-snug break-words group-hover:text-primary-900 transition-colors">
+          {displayPlanName(plan.plan_name)}
+        </p>
+        {plan.location ? (
+          <p className="text-xs text-gray-600 mt-0.5 break-words">
+            <span className="text-gray-400">Địa điểm:</span> {plan.location}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 mt-0.5">Địa điểm: —</p>
+        )}
+        {isAdmin && plan.needs_review && (
+          <p className="text-xs text-amber-700 mt-0.5">Cần cập nhật ngày/giờ</p>
+        )}
+        {plan.event_end_date && !plan.is_continuation && (
+          <p className="text-xs text-gray-400 mt-0.5">
+            Đến {formatShortDate(plan.event_end_date)}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-1 mt-2">
+          <span className="text-[10px] text-gray-400 mr-0.5">Trường:</span>
+          {plan.campuses.map((code) => (
+            <span
+              key={code}
+              className="text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100 font-medium"
+              title="Kế hoạch thuộc trường"
+            >
+              {code}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="hidden sm:flex items-start gap-1 shrink-0">{actionButtons}</div>
+      </div>
+      <div className="flex sm:hidden items-center justify-end gap-1 mt-2 pt-2 border-t border-gray-100">
+        {actionButtons}
+      </div>
     </li>
   );
 }
@@ -881,7 +892,7 @@ function TimelineModal({
                 )}
               </div>
               {plan.location && (
-                <p className="mt-1.5 text-sm text-gray-600">
+                <p className="mt-1.5 text-sm text-gray-600 break-words">
                   <span className="text-gray-400">Địa điểm:</span> {plan.location}
                 </p>
               )}
@@ -1012,12 +1023,15 @@ function EditPlanEventModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 sm:p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Cập nhật sự kiện</h2>
-        <p className="text-xs text-gray-500 mb-4">
-          Địa điểm lấy từ file (Địa điểm:). Trường VA1/VA3/EMC chỉ để phân loại kế hoạch.
-        </p>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="shrink-0 px-5 sm:px-6 pt-5 sm:pt-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Cập nhật sự kiện</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Địa điểm lấy từ file (Địa điểm:). Trường VA1/VA3/EMC chỉ để phân loại kế hoạch.
+          </p>
+        </div>
 
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 pb-4">
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề *</label>
@@ -1053,7 +1067,7 @@ function EditPlanEventModal({
               ))}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Ngày bắt đầu *</label>
               <input
@@ -1075,7 +1089,7 @@ function EditPlanEventModal({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Ngày kết thúc</label>
               <input
@@ -1098,15 +1112,17 @@ function EditPlanEventModal({
             </div>
           </div>
         </div>
+        </div>
 
+        <div className="shrink-0 px-5 sm:px-6 pb-5 sm:pb-6 pt-3 border-t border-gray-100">
         <OperationProgressBar
           visible={progress.visible}
           percent={progress.percent}
           label={progress.label}
-          className="mt-4"
+          className="mb-3"
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={onReExtract}
@@ -1134,6 +1150,7 @@ function EditPlanEventModal({
               {saving ? 'Đang lưu...' : 'Lưu'}
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>
