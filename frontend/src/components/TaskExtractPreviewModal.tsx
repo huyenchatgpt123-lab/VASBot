@@ -6,6 +6,8 @@ export type PreviewTaskRow = {
   title: string;
   assignee_name: string;
   assignee_id: number | null;
+  match_confidence?: string | null;
+  match_candidate_count?: number;
   deadline: string | null;
   has_scheduled_time?: boolean;
   note?: string | null;
@@ -16,6 +18,62 @@ type Props = {
   onClose: () => void;
   onSaved: () => void;
 };
+
+type MatchBadge = { label: string; className: string; hint: string; needsReview: boolean };
+
+const MATCH_BADGES: Record<string, MatchBadge> = {
+  manual: {
+    label: '✓ bạn đã chọn',
+    className: 'text-green-700 bg-green-50 border-green-200',
+    hint: 'Bạn tự chọn tài khoản này',
+    needsReview: false,
+  },
+  exact: {
+    label: '✓ khớp họ tên',
+    className: 'text-green-700 bg-green-50 border-green-200',
+    hint: 'Trùng đầy đủ họ tên trong tài khoản',
+    needsReview: false,
+  },
+  nickname: {
+    label: '✓ khớp biệt danh',
+    className: 'text-green-700 bg-green-50 border-green-200',
+    hint: 'Trùng biệt danh đã đặt cho tài khoản',
+    needsReview: false,
+  },
+  last_name: {
+    label: '~ khớp theo tên gọi',
+    className: 'text-blue-700 bg-blue-50 border-blue-200',
+    hint: 'Kế hoạch chỉ ghi tên gọi và chỉ có một người trùng — nên xác nhận lại',
+    needsReview: true,
+  },
+  department: {
+    label: '~ khớp theo tổ',
+    className: 'text-amber-700 bg-amber-50 border-amber-200',
+    hint: 'Nhiều người trùng tên, hệ thống chọn người thuộc tổ của kế hoạch',
+    needsReview: true,
+  },
+  ambiguous: {
+    label: '⚠ trùng tên',
+    className: 'text-red-700 bg-red-50 border-red-200',
+    hint: 'Có nhiều người cùng tên, cần bạn chọn đúng người',
+    needsReview: true,
+  },
+};
+
+const NO_MATCH_BADGE: MatchBadge = {
+  label: '? chưa khớp',
+  className: 'text-amber-700 bg-amber-50 border-amber-200',
+  hint: 'Không tìm thấy tài khoản tương ứng',
+  needsReview: true,
+};
+
+function matchBadge(row: PreviewTaskRow): MatchBadge {
+  if (!row.assignee_id) {
+    const ambiguous = row.match_confidence === 'ambiguous' ? MATCH_BADGES.ambiguous : null;
+    return ambiguous || NO_MATCH_BADGE;
+  }
+  return MATCH_BADGES[row.match_confidence || ''] || MATCH_BADGES.exact;
+}
 
 function toDateInputValue(deadline: string | null | undefined): string {
   if (!deadline) return '';
@@ -45,6 +103,8 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
       title: t.title || '',
       assignee_name: t.assignee_name || '',
       assignee_id: t.assignee_id ?? null,
+      match_confidence: t.match_confidence ?? null,
+      match_candidate_count: t.match_candidate_count ?? 0,
       deadline: t.deadline ?? null,
       has_scheduled_time: Boolean(t.has_scheduled_time),
       note: t.note ?? null,
@@ -91,6 +151,7 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
   }, [users, userSearch, leadDept]);
 
   const unmatchedCount = rows.filter((r) => !r.assignee_id).length;
+  const reviewCount = rows.filter((r) => r.assignee_id && matchBadge(r).needsReview).length;
 
   const updateRow = (index: number, patch: Partial<PreviewTaskRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -103,7 +164,7 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
   const assignUser = (index: number, userId: number) => {
     const u = users.find((x) => x.id === userId);
     if (!u) return;
-    updateRow(index, { assignee_id: u.id, assignee_name: u.name });
+    updateRow(index, { assignee_id: u.id, assignee_name: u.name, match_confidence: 'manual' });
   };
 
   /** Giữ option cho người đã chọn nếu đang thu gọn và họ thuộc tổ khác */
@@ -131,6 +192,17 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
     if (cleaned.some((r) => !r.assignee_name)) {
       alert('Mỗi công việc cần có tên người được giao.');
       return;
+    }
+
+    const risky = cleaned.filter((r) => !r.assignee_id || matchBadge(r).needsReview);
+    if (risky.length > 0) {
+      const names = risky.slice(0, 5).map((r) => `• ${r.assignee_name}`).join('\n');
+      const more = risky.length > 5 ? `\n… và ${risky.length - 5} dòng khác` : '';
+      const ok = confirm(
+        `${risky.length} công việc chưa chắc gán đúng người:\n${names}${more}\n\n` +
+          'OK = vẫn lưu\nCancel = quay lại chọn tài khoản',
+      );
+      if (!ok) return;
     }
 
     if (preview.has_duplicates && !replaceMode) {
@@ -181,8 +253,16 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
             {' · '}
             {rows.length} dòng
             {unmatchedCount > 0 ? ` · ${unmatchedCount} chưa khớp tài khoản` : ''}
+            {reviewCount > 0 ? ` · ${reviewCount} nên xác nhận lại` : ''}
           </p>
         </div>
+
+        {(unmatchedCount > 0 || reviewCount > 0) && (
+          <div className="mx-5 mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 shrink-0">
+            Dòng có nền vàng là chỗ hệ thống không chắc chắn: kế hoạch chỉ ghi tên gọi, có nhiều
+            người cùng tên, hoặc không tìm ra tài khoản. Hãy chọn đúng người trước khi lưu.
+          </div>
+        )}
 
         <div className="px-5 py-3 border-b border-gray-50 flex flex-wrap items-center gap-3 shrink-0">
           <label className="text-xs text-gray-500 flex items-center gap-1.5">
@@ -230,10 +310,13 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
             <div className="space-y-2">
               {rows.map((row, index) => {
                 const outside = selectedOutsidePool(row.assignee_id);
+                const badge = matchBadge(row);
                 return (
                   <div
                     key={index}
-                    className="grid grid-cols-1 md:grid-cols-[1fr_1fr_140px_auto] gap-2 items-start border border-gray-100 rounded-lg p-3"
+                    className={`grid grid-cols-1 md:grid-cols-[1fr_1fr_140px_auto] gap-2 items-start border rounded-lg p-3 ${
+                      badge.needsReview ? 'border-amber-200 bg-amber-50/30' : 'border-gray-100'
+                    }`}
                   >
                     <div>
                       <label className="text-[11px] text-gray-400">Công việc</label>
@@ -244,18 +327,27 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-gray-400 flex items-center gap-1">
+                      <label className="text-[11px] text-gray-400 flex items-center gap-1 flex-wrap">
                         Người nhận
-                        {row.assignee_id ? (
-                          <span className="text-green-600">✓ khớp</span>
-                        ) : (
-                          <span className="text-amber-600">? chưa khớp</span>
-                        )}
+                        <span
+                          className={`px-1.5 py-0.5 rounded border text-[10px] font-medium ${badge.className}`}
+                          title={badge.hint}
+                        >
+                          {badge.label}
+                          {badge.needsReview && (row.match_candidate_count || 0) > 1
+                            ? ` (${row.match_candidate_count} người)`
+                            : ''}
+                        </span>
                       </label>
                       <input
                         value={row.assignee_name}
                         onChange={(e) =>
-                          updateRow(index, { assignee_name: e.target.value, assignee_id: null })
+                          updateRow(index, {
+                            assignee_name: e.target.value,
+                            assignee_id: null,
+                            match_confidence: null,
+                            match_candidate_count: 0,
+                          })
                         }
                         className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm mb-1"
                       />

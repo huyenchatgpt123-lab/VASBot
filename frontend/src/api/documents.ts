@@ -22,6 +22,8 @@ export interface TaskPreviewItem {
   title: string;
   assignee_name: string;
   assignee_id?: number | null;
+  match_confidence?: string | null;
+  match_candidate_count?: number;
   deadline?: string | null;
   has_scheduled_time?: boolean;
   status?: string;

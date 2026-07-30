@@ -1,52 +1,209 @@
 import re
-from typing import Optional, List
+import unicodedata
+from typing import TYPE_CHECKING, Any, List, NamedTuple, Optional, Sequence, Tuple
 
-from sqlalchemy.orm import Session
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
-from app.models.user import User
+    from app.models.user import User
 
-_PREFIX_PATTERN = re.compile(
-    r"^(thầy|cô|thay|co|mr|mrs|ms|dr)\s+",
-    re.IGNORECASE,
+# Honorifics / titles that may prefix a name in a plan document.
+# Over-stripping is safe because the same normalization runs on stored user
+# names, and no Vietnamese family name collides with these words.
+_HONORIFIC_SRC = (
+    r"^(?:"
+    r"thầy\s+giáo|cô\s+giáo"
+    r"|thầy|cô|ông|bà|chị|anh"
+    r"|pgs|gs|ths|th\.s|ts|bs|cn"
+    r"|mr|mrs|ms|miss|dr|prof"
+    r")\.?\s+"
 )
+
+# Role/title text trailing a name: "Nguyễn Văn Hải - Tổ trưởng"
+_ROLE_SUFFIX_SRC = (
+    r"\s*[-–—,;]\s*(?:"
+    r"tổ\s*trưởng|tổ\s*phó|nhóm\s*trưởng|trưởng\s*(?:ban|đoàn|bộ\s*môn|phòng)"
+    r"|phó\s*(?:ban|đoàn|hiệu\s*trưởng)|hiệu\s*trưởng|hiệu\s*phó|ht|pht|bgh"
+    r"|giáo\s*viên|gv|gvcn|chủ\s*nhiệm|thư\s*ký|phụ\s*trách|hỗ\s*trợ|điều\s*hành"
+    r")\b.*$"
+)
+
+_BRACKET_PATTERN = re.compile(r"[（(\[{][^）)\]}]*[）)\]}]")
+_EDGE_PUNCT = " \t.,;:!?\"'`*•-–—_|"
+
+
+def _strip_diacritics(text: str) -> str:
+    text = text.replace("đ", "d").replace("Đ", "D")
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+# Folded twins so names typed without diacritics ("Thay Hai - To truong") are
+# cleaned the same way; the sources hold only ASCII metachars plus Vietnamese letters.
+_HONORIFIC_PATTERN = re.compile(_HONORIFIC_SRC, re.IGNORECASE)
+_HONORIFIC_FOLDED = re.compile(_strip_diacritics(_HONORIFIC_SRC), re.IGNORECASE)
+_ROLE_SUFFIX_PATTERN = re.compile(_ROLE_SUFFIX_SRC, re.IGNORECASE)
+_ROLE_SUFFIX_FOLDED = re.compile(_strip_diacritics(_ROLE_SUFFIX_SRC), re.IGNORECASE)
+
+# Confidence levels, most to least trustworthy.
+CONFIDENCE_EXACT = "exact"
+CONFIDENCE_NICKNAME = "nickname"
+CONFIDENCE_LAST_NAME = "last_name"
+CONFIDENCE_DEPARTMENT = "department"
+CONFIDENCE_AMBIGUOUS = "ambiguous"
+CONFIDENCE_NONE = "none"
+
+
+class AssigneeMatch(NamedTuple):
+    user_id: Optional[int]
+    confidence: str
+    candidate_ids: Tuple[int, ...] = ()
+
+
+def _clean(text: str, honorific: re.Pattern, role_suffix: re.Pattern) -> str:
+    previous = None
+    while previous != text:
+        previous = text
+        text = honorific.sub("", text).strip()
+    text = role_suffix.sub("", text)
+    return re.sub(r"\s+", " ", text).strip(_EDGE_PUNCT)
 
 
 def normalize_assignee_name(name: str) -> str:
-    """Normalize name for comparison: strip honorifics, whitespace, lowercase."""
+    """Strip honorifics, role suffixes, brackets and punctuation; lowercase. Keeps diacritics."""
     if not name:
         return ""
-    text = name.strip()
-    text = _PREFIX_PATTERN.sub("", text).strip()
-    text = re.sub(r"\s+", " ", text)
-    return text.lower()
+    text = _BRACKET_PATTERN.sub(" ", str(name))
+    text = re.sub(r"\s+", " ", text).strip()
+    return _clean(text, _HONORIFIC_PATTERN, _ROLE_SUFFIX_PATTERN).lower()
 
 
-def match_user_by_name(db: Session, raw_name: str) -> Optional[int]:
+def fold_name(name: str) -> str:
+    """Normalized name with Vietnamese diacritics removed, for tolerant comparison."""
+    text = normalize_assignee_name(name)
+    if not text:
+        return ""
+    return _clean(_strip_diacritics(text), _HONORIFIC_FOLDED, _ROLE_SUFFIX_FOLDED)
+
+
+def _last_token(folded: str) -> str:
+    parts = folded.split(" ")
+    return parts[-1] if parts else ""
+
+
+def _dedupe(users: Sequence[Any]) -> List[Any]:
+    seen = set()
+    result: List[Any] = []
+    for user in users:
+        if user.id in seen:
+            continue
+        seen.add(user.id)
+        result.append(user)
+    return result
+
+
+def _pick(
+    pool: Sequence[Any],
+    confidence: str,
+    department: Optional[str],
+) -> Optional[AssigneeMatch]:
+    """None → empty pool, keep trying the next tier. Otherwise a decision (possibly ambiguous)."""
+    if not pool:
+        return None
+
+    candidate_ids = tuple(u.id for u in pool)
+    if len(pool) == 1:
+        return AssigneeMatch(pool[0].id, confidence, candidate_ids)
+
+    if department:
+        scoped = [u for u in pool if u.department and u.department == department]
+        if len(scoped) == 1:
+            return AssigneeMatch(scoped[0].id, CONFIDENCE_DEPARTMENT, candidate_ids)
+
+    return AssigneeMatch(None, CONFIDENCE_AMBIGUOUS, candidate_ids)
+
+
+def resolve_assignee_among(
+    users: Sequence[Any],
+    raw_name: str,
+    *,
+    department: Optional[str] = None,
+) -> AssigneeMatch:
     """
-    Match assignee from document to user:
-    1. Exact full name match (normalized, case-insensitive)
-    2. If 0 or 2+ name matches → try unique nickname match
+    Resolve a name written in a plan document against a list of user accounts.
+
+    Tiers, stopping at the first one that finds any candidate:
+      1. Full name, diacritics included
+      2. Full name, diacritics folded ("Nguyen Van Hai")
+      3. Single word → nickname and last-name candidates pooled together.
+         Pooling is what keeps two people called "Hải" ambiguous instead of
+         silently picking whoever happens to own the nickname.
+      4. Multi-word nickname
+
+    Several candidates get narrowed by `department` when it is supplied; still
+    undecided means no assignment rather than a guess.
     """
     normalized = normalize_assignee_name(raw_name)
     if not normalized:
-        return None
+        return AssigneeMatch(None, CONFIDENCE_NONE)
 
-    all_users: List[User] = db.query(User).all()
+    folded = fold_name(raw_name)
 
-    name_matches = [
-        u for u in all_users
-        if u.name and normalize_assignee_name(u.name) == normalized
+    decided = _pick(
+        [u for u in users if u.name and normalize_assignee_name(u.name) == normalized],
+        CONFIDENCE_EXACT,
+        department,
+    )
+    if decided:
+        return decided
+
+    decided = _pick(
+        [u for u in users if u.name and fold_name(u.name) == folded],
+        CONFIDENCE_EXACT,
+        department,
+    )
+    if decided:
+        return decided
+
+    if " " in folded:
+        decided = _pick(
+            [u for u in users if u.nickname and fold_name(u.nickname) == folded],
+            CONFIDENCE_NICKNAME,
+            department,
+        )
+        return decided or AssigneeMatch(None, CONFIDENCE_NONE)
+
+    short_pool = [
+        u
+        for u in users
+        if (u.nickname and fold_name(u.nickname) == folded)
+        or (u.name and _last_token(fold_name(u.name)) == folded)
     ]
+    decided = _pick(_dedupe(short_pool), CONFIDENCE_LAST_NAME, department)
+    if not decided:
+        return AssigneeMatch(None, CONFIDENCE_NONE)
+    if decided.confidence == CONFIDENCE_LAST_NAME:
+        winner = next(u for u in short_pool if u.id == decided.user_id)
+        if winner.nickname and fold_name(winner.nickname) == folded:
+            return decided._replace(confidence=CONFIDENCE_NICKNAME)
+    return decided
 
-    if len(name_matches) == 1:
-        return name_matches[0].id
 
-    nick_matches = [
-        u for u in all_users
-        if u.nickname and normalize_assignee_name(u.nickname) == normalized
-    ]
+def resolve_assignee(
+    db: "Session",
+    raw_name: str,
+    *,
+    department: Optional[str] = None,
+) -> AssigneeMatch:
+    from app.models.user import User
 
-    if len(nick_matches) == 1:
-        return nick_matches[0].id
+    return resolve_assignee_among(db.query(User).all(), raw_name, department=department)
 
-    return None
+
+def match_user_by_name(
+    db: "Session",
+    raw_name: str,
+    *,
+    department: Optional[str] = None,
+) -> Optional[int]:
+    return resolve_assignee(db, raw_name, department=department).user_id

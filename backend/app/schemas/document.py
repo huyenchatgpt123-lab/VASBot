@@ -32,6 +32,8 @@ class TaskPreviewItem(BaseModel):
     title: str
     assignee_name: str
     assignee_id: Optional[int] = None
+    match_confidence: Optional[str] = None
+    match_candidate_count: int = 0
     deadline: Optional[str] = None
     has_scheduled_time: bool = False
     status: str = "pending"

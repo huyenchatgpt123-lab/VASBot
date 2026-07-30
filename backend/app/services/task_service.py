@@ -91,9 +91,18 @@ class TaskService:
         self.db = db
         self.repo = TaskRepository(db)
 
-    def _match_user(self, name: str) -> Optional[int]:
-        from app.utils.name_matcher import match_user_by_name
-        return match_user_by_name(self.db, name)
+    def _resolve_assignee(self, name: str, department: Optional[str] = None):
+        from app.utils.name_matcher import resolve_assignee
+        return resolve_assignee(self.db, name, department=department)
+
+    def _match_user(self, name: str, department: Optional[str] = None) -> Optional[int]:
+        return self._resolve_assignee(name, department).user_id
+
+    def _document_department(self, document_id: Optional[int]) -> Optional[str]:
+        if not document_id:
+            return None
+        doc = self.db.query(Document).filter(Document.id == document_id).first()
+        return doc.department if doc else None
 
     @staticmethod
     def _plan_display_name(doc: Optional[Document]) -> Optional[str]:
@@ -138,13 +147,15 @@ class TaskService:
 
         tasks_preview = []
         for t in raw_tasks:
-            assignee_id = self._match_user(t["assignee_name"])
+            match = self._resolve_assignee(t["assignee_name"], doc.department)
             deadline, has_scheduled_time = _parse_deadline(t.get("deadline"))
 
             tasks_preview.append({
                 "title": t["title"],
                 "assignee_name": t["assignee_name"],
-                "assignee_id": assignee_id,
+                "assignee_id": match.user_id,
+                "match_confidence": match.confidence,
+                "match_candidate_count": len(match.candidate_ids),
                 "deadline": deadline.isoformat() if deadline else None,
                 "has_scheduled_time": has_scheduled_time,
                 "status": "pending",
@@ -197,7 +208,7 @@ class TaskService:
             assignee_id = t.get("assignee_id")
             assignee_name = (t.get("assignee_name") or "").strip()
             if not assignee_id and assignee_name:
-                assignee_id = self._match_user(assignee_name)
+                assignee_id = self._match_user(assignee_name, doc.department)
             if assignee_id and not assignee_name:
                 assignee = self.db.query(User).filter(User.id == assignee_id).first()
                 if assignee:
@@ -293,7 +304,10 @@ class TaskService:
         if "assignee_id" in kwargs and kwargs["assignee_id"]:
             pass
         elif "assignee_name" in kwargs and kwargs["assignee_name"]:
-            kwargs["assignee_id"] = self._match_user(kwargs["assignee_name"])
+            kwargs["assignee_id"] = self._match_user(
+                kwargs["assignee_name"],
+                self._document_department(kwargs.get("document_id", task.document_id)),
+            )
         if "assignee_id" in kwargs:
             kwargs["department"] = self._resolve_task_department(kwargs.get("assignee_id"))
         return self.repo.update(task_id, **kwargs)
@@ -417,7 +431,10 @@ class TaskService:
             raise PermissionError("Bạn không có quyền tạo công việc")
         assignee_id = task_data.get("assignee_id")
         if not assignee_id:
-            assignee_id = self._match_user(task_data["assignee_name"])
+            assignee_id = self._match_user(
+                task_data["assignee_name"],
+                self._document_department(task_data.get("document_id")),
+            )
             task_data["assignee_id"] = assignee_id
         task_data["department"] = self._resolve_task_department(assignee_id)
         task_data["created_by_id"] = user.id
@@ -436,7 +453,9 @@ class TaskService:
         tasks = self.repo.get_unassigned()
         matched = 0
         for task in tasks:
-            uid = self._match_user(task.assignee_name)
+            uid = self._match_user(
+                task.assignee_name, self._document_department(task.document_id)
+            )
             if uid and (user_id is None or uid == user_id):
                 self.repo.update(
                     task.id,

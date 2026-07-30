@@ -31,8 +31,21 @@ export interface TaskListResponse {
   page_size: number;
 }
 
+export interface ExtractedTaskPreview {
+  title: string;
+  assignee_name: string;
+  assignee_id?: number | null;
+  match_confidence?: string | null;
+  match_candidate_count?: number;
+  deadline?: string | null;
+  has_scheduled_time?: boolean;
+  status?: string;
+  document_id?: number;
+  note?: string | null;
+}
+
 export interface TaskExtractResult {
-  tasks: any[];
+  tasks: ExtractedTaskPreview[];
   document_id: number;
   document_name: string;
   has_duplicates: boolean;
