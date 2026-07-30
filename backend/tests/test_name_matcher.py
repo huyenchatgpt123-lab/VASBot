@@ -15,6 +15,7 @@ from app.utils.name_matcher import (  # noqa: E402
     CONFIDENCE_AMBIGUOUS,
     CONFIDENCE_DEPARTMENT,
     CONFIDENCE_EXACT,
+    CONFIDENCE_GIVEN_NAME,
     CONFIDENCE_LAST_NAME,
     CONFIDENCE_NICKNAME,
     CONFIDENCE_NONE,
@@ -36,9 +37,12 @@ HAI = FakeUser(1, "Nguyễn Văn Hải", nickname="Hải VP", department="Văn p
 HAI_TOAN = FakeUser(2, "Trần Thanh Hải", nickname="Hải Toán", department="Toán")
 HUONG = FakeUser(3, "Lê Thị Hương", nickname="Hương", department="Văn")
 DUC = FakeUser(4, "Phạm Minh Đức", department="Tin")
+DOAN = FakeUser(5, "Nguyễn Thị Thế Đoan", department="Xã hội 1")
+DOAN_2 = FakeUser(6, "Trần Thế Đoan", department="Toán")
 
-ONE_HAI: List[FakeUser] = [HAI, HUONG, DUC]
+ONE_HAI: List[FakeUser] = [HAI, HUONG, DUC, DOAN]
 TWO_HAI: List[FakeUser] = [HAI, HAI_TOAN, HUONG, DUC]
+TWO_DOAN: List[FakeUser] = [HAI, DOAN, DOAN_2]
 
 
 def test_normalize_strips_honorifics_and_roles():
@@ -96,6 +100,33 @@ def test_nickname_matches():
 def test_single_word_nickname_is_reported_as_nickname():
     match = resolve_assignee(ONE_HAI, "cô Hương")
     assert (match.user_id, match.confidence) == (HUONG.id, CONFIDENCE_NICKNAME)
+
+
+def test_two_syllable_given_name_matches():
+    match = resolve_assignee(ONE_HAI, "Cô Thế Đoan")
+    assert (match.user_id, match.confidence) == (DOAN.id, CONFIDENCE_GIVEN_NAME)
+
+
+def test_two_syllable_given_name_without_diacritics_matches():
+    match = resolve_assignee(ONE_HAI, "co The Doan")
+    assert (match.user_id, match.confidence) == (DOAN.id, CONFIDENCE_GIVEN_NAME)
+
+
+def test_two_syllable_given_name_shared_is_ambiguous():
+    match = resolve_assignee(TWO_DOAN, "Cô Thế Đoan")
+    assert match.user_id is None
+    assert match.confidence == CONFIDENCE_AMBIGUOUS
+    assert set(match.candidate_ids) == {DOAN.id, DOAN_2.id}
+
+
+def test_shared_given_name_resolved_by_department():
+    match = resolve_assignee(TWO_DOAN, "Cô Thế Đoan", department="Xã hội 1")
+    assert (match.user_id, match.confidence) == (DOAN.id, CONFIDENCE_DEPARTMENT)
+
+
+def test_partial_name_with_family_name_missing_middle_stays_unassigned():
+    match = resolve_assignee(ONE_HAI, "Nguyễn Thế Đoan")
+    assert (match.user_id, match.confidence) == (None, CONFIDENCE_NONE)
 
 
 def test_unknown_name_stays_unassigned():

@@ -48,6 +48,7 @@ _ROLE_SUFFIX_FOLDED = re.compile(_strip_diacritics(_ROLE_SUFFIX_SRC), re.IGNOREC
 # Confidence levels, most to least trustworthy.
 CONFIDENCE_EXACT = "exact"
 CONFIDENCE_NICKNAME = "nickname"
+CONFIDENCE_GIVEN_NAME = "given_name"
 CONFIDENCE_LAST_NAME = "last_name"
 CONFIDENCE_DEPARTMENT = "department"
 CONFIDENCE_AMBIGUOUS = "ambiguous"
@@ -86,9 +87,14 @@ def fold_name(name: str) -> str:
     return _clean(_strip_diacritics(text), _HONORIFIC_FOLDED, _ROLE_SUFFIX_FOLDED)
 
 
-def _last_token(folded: str) -> str:
-    parts = folded.split(" ")
-    return parts[-1] if parts else ""
+def _is_token_suffix(full: str, part: str) -> bool:
+    """True when `part` is the tail of `full` on word boundaries ("thế đoan" of "nguyễn thị thế đoan")."""
+    full_tokens = full.split(" ")
+    part_tokens = part.split(" ")
+    return (
+        len(part_tokens) < len(full_tokens)
+        and full_tokens[-len(part_tokens):] == part_tokens
+    )
 
 
 def _dedupe(users: Sequence[Any]) -> List[Any]:
@@ -135,10 +141,11 @@ def resolve_assignee_among(
     Tiers, stopping at the first one that finds any candidate:
       1. Full name, diacritics included
       2. Full name, diacritics folded ("Nguyen Van Hai")
-      3. Single word → nickname and last-name candidates pooled together.
-         Pooling is what keeps two people called "Hải" ambiguous instead of
-         silently picking whoever happens to own the nickname.
-      4. Multi-word nickname
+      3. Partial name: nickname plus anyone whose full name ends with what the
+         document wrote — one syllable ("Hải") or several ("Thế Đoan").
+         Pooling nickname and name tails together is what keeps two people
+         called "Hải" ambiguous instead of silently picking whoever happens to
+         own the nickname.
 
     Several candidates get narrowed by `department` when it is supplied; still
     undecided means no assignment rather than a guess.
@@ -165,25 +172,20 @@ def resolve_assignee_among(
     if decided:
         return decided
 
-    if " " in folded:
-        decided = _pick(
-            [u for u in users if u.nickname and fold_name(u.nickname) == folded],
-            CONFIDENCE_NICKNAME,
-            department,
-        )
-        return decided or AssigneeMatch(None, CONFIDENCE_NONE)
-
-    short_pool = [
+    partial_pool = _dedupe([
         u
         for u in users
         if (u.nickname and fold_name(u.nickname) == folded)
-        or (u.name and _last_token(fold_name(u.name)) == folded)
-    ]
-    decided = _pick(_dedupe(short_pool), CONFIDENCE_LAST_NAME, department)
+        or (u.name and _is_token_suffix(fold_name(u.name), folded))
+    ])
+    tail_confidence = (
+        CONFIDENCE_GIVEN_NAME if " " in folded else CONFIDENCE_LAST_NAME
+    )
+    decided = _pick(partial_pool, tail_confidence, department)
     if not decided:
         return AssigneeMatch(None, CONFIDENCE_NONE)
-    if decided.confidence == CONFIDENCE_LAST_NAME:
-        winner = next(u for u in short_pool if u.id == decided.user_id)
+    if decided.confidence == tail_confidence:
+        winner = next(u for u in partial_pool if u.id == decided.user_id)
         if winner.nickname and fold_name(winner.nickname) == folded:
             return decided._replace(confidence=CONFIDENCE_NICKNAME)
     return decided

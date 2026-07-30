@@ -40,10 +40,16 @@ const MATCH_BADGES: Record<string, MatchBadge> = {
     hint: 'Trùng biệt danh đã đặt cho tài khoản',
     needsReview: false,
   },
-  last_name: {
-    label: '~ khớp theo tên gọi',
+  given_name: {
+    label: '✓ khớp tên gọi',
     className: 'text-blue-700 bg-blue-50 border-blue-200',
-    hint: 'Kế hoạch chỉ ghi tên gọi và chỉ có một người trùng — nên xác nhận lại',
+    hint: 'Kế hoạch ghi tên gọi (không có họ) và chỉ một người trùng',
+    needsReview: false,
+  },
+  last_name: {
+    label: '~ khớp tên gọi 1 chữ',
+    className: 'text-blue-700 bg-blue-50 border-blue-200',
+    hint: 'Kế hoạch chỉ ghi một chữ tên và chỉ có một người trùng — nên xác nhận lại',
     needsReview: true,
   },
   department: {
