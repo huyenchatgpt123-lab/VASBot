@@ -271,6 +271,35 @@ class DocumentService:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def _remove_document_from_calendar(self, doc) -> dict:
+        """Admin reviewed the extraction and decided this plan does not belong on the calendar."""
+        from app.models.plan_event import PlanEvent
+
+        self.db.query(PlanEvent).filter(
+            PlanEvent.document_id == doc.id,
+            PlanEvent.source == "ai",
+        ).delete(synchronize_session=False)
+        self.db.flush()
+
+        plan_events = PlanEventService(self.db)
+        plan_events.sync_document_summary(doc)
+        doc.include_in_calendar = False
+        self.db.commit()
+        self.db.refresh(doc)
+
+        return {
+            "document_id": doc.id,
+            "plan_title": doc.plan_title,
+            "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
+            "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
+            "location": None,
+            "timeline": [],
+            "event_count": 0,
+            "needs_review": False,
+            "preview_only": False,
+            "message": "Đã bỏ kế hoạch này khỏi Thời gian biểu",
+        }
+
     def confirm_plan_event(
         self,
         doc_id: int,
@@ -280,13 +309,28 @@ class DocumentService:
         ends_at=None,
         location: Optional[str] = None,
         timeline: Optional[list] = None,
+        include_in_calendar: bool = True,
     ) -> dict:
         """Persist reviewed calendar package (date/time/location + timeline) after admin confirm."""
+        import re
         from datetime import datetime as dt
 
         doc = self.doc_repo.get_by_id(doc_id)
         if not doc:
             raise ValueError("Tài liệu không tồn tại")
+
+        if starts_at is not None and not isinstance(starts_at, dt):
+            starts_at = None
+        if ends_at is not None and not isinstance(ends_at, dt):
+            ends_at = None
+        if starts_at and ends_at and ends_at < starts_at:
+            starts_at, ends_at = ends_at, starts_at
+
+        if not include_in_calendar:
+            return self._remove_document_from_calendar(doc)
+
+        if starts_at is None:
+            raise ValueError("Cần chọn ngày bắt đầu để đưa kế hoạch lên Thời gian biểu")
 
         display_title = (title or doc.plan_title or doc.filename or "Kế hoạch").strip()
         slots = timeline if isinstance(timeline, list) else []
@@ -294,21 +338,19 @@ class DocumentService:
         for item in slots:
             if not isinstance(item, dict):
                 continue
-            start = item.get("start")
-            end = item.get("end")
-            slot_title = item.get("title")
-            if not start or not slot_title:
+            start = str(item.get("start") or "").strip()
+            end = str(item.get("end") or "").strip()
+            slot_title = str(item.get("title") or "").strip()
+            if not re.fullmatch(r"\d{2}:\d{2}", start) or not slot_title:
                 continue
+            if not re.fullmatch(r"\d{2}:\d{2}", end):
+                end = ""
             cleaned_slots.append({
-                "start": str(start),
-                "end": str(end) if end not in (None, "", "null") else None,
-                "title": str(slot_title)[:60],
+                "start": start,
+                "end": end or None,
+                "title": slot_title[:60],
             })
-
-        if starts_at is not None and not isinstance(starts_at, dt):
-            starts_at = None
-        if ends_at is not None and not isinstance(ends_at, dt):
-            ends_at = None
+        cleaned_slots.sort(key=lambda s: (s["start"], s["end"] or ""))
 
         events = PlanEventService(self.db).replace_ai_events_for_document(
             doc,

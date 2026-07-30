@@ -270,9 +270,10 @@ def confirm_plan_event(
             ends_at=data.ends_at,
             location=data.location,
             timeline=data.timeline,
+            include_in_calendar=data.include_in_calendar,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Lỗi confirm plan event {doc_id}: {e}")
         raise HTTPException(

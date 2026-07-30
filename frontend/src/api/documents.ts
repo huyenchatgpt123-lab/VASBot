@@ -104,6 +104,7 @@ export type PlanEventConfirmPayload = {
   ends_at?: string | null;
   location?: string | null;
   timeline?: TimelineSlotPreview[] | null;
+  include_in_calendar?: boolean;
 };
 
 export const documentsApi = {

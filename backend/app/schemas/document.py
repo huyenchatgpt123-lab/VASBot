@@ -103,3 +103,4 @@ class PlanEventConfirmRequest(BaseModel):
     ends_at: Optional[datetime] = None
     location: Optional[str] = Field(None, max_length=300)
     timeline: Optional[List[Any]] = None
+    include_in_calendar: bool = True
