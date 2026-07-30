@@ -25,8 +25,15 @@ from app.services.storage_service import (
     get_download_url,
 )
 from app.utils.auth import get_current_user, require_admin
-from app.utils.permissions import can_upload, can_upload_to_department, can_delete_document, has_scope_all_departments, is_admin
-from app.models.user import User, UserRole
+from app.utils.permissions import (
+    can_upload,
+    can_upload_to_department,
+    can_delete_document,
+    can_re_extract_document,
+    has_scope_all_departments,
+    is_admin,
+)
+from app.models.user import User
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.campus_repository import CampusRepository
 
@@ -205,13 +212,15 @@ def re_extract_plan_metadata(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role != UserRole.admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chỉ Admin mới có quyền trích xuất lại lịch")
-
     repo = DocumentRepository(db)
     doc = repo.get_by_id(doc_id)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
+    if not can_re_extract_document(current_user, doc):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền trích lại tài liệu này",
+        )
     if not file_exists(doc.filepath):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File không tồn tại trên server")
 
@@ -239,13 +248,18 @@ def confirm_plan_event(
     doc_id: int,
     data: PlanEventConfirmRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Admin confirms reviewed calendar package (date/time/location + timeline) and writes DB."""
+    """Persist the reviewed calendar package (date/time/location + timeline)."""
     repo = DocumentRepository(db)
     doc = repo.get_by_id(doc_id)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
+    if not can_re_extract_document(current_user, doc):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền lưu lịch cho tài liệu này",
+        )
 
     service = DocumentService(db)
     try:

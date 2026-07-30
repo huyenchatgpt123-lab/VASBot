@@ -290,7 +290,6 @@ export default function DocumentsPage() {
         timeline: result.timeline || [],
         needs_review: Boolean(result.needs_review),
       });
-      await finishProgress();
     } catch (err: unknown) {
       failProgress();
       const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
@@ -298,6 +297,15 @@ export default function DocumentsPage() {
     } finally {
       setReExtractingId(null);
     }
+  };
+
+  // Admin/BGH: mọi tài liệu. Tổ trưởng (quyền upload hoặc quản lý công việc): tài liệu của tổ mình.
+  const hasReExtractRight = isAdmin || canUpload || canManageTasks;
+
+  const canReExtractDoc = (doc: Document) => {
+    if (!hasReExtractRight) return false;
+    if (scopeAllDepartments) return true;
+    return doc.department === user?.department;
   };
 
   const handleReExtractChoice = async (choice: ReExtractChoice) => {
@@ -310,14 +318,12 @@ export default function DocumentsPage() {
       await runReExtractTasks(reExtractDocId);
       return;
     }
-    if (!isAdmin) {
-      alert('Chỉ Admin mới trích lên Thời gian biểu.');
+    if (!hasReExtractRight) {
+      alert('Bạn không có quyền trích lên Thời gian biểu.');
       return;
     }
     await runReExtractCalendar(reExtractDocId);
   };
-
-  const canReExtract = isAdmin || canManageTasks;
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -431,7 +437,12 @@ export default function DocumentsPage() {
           <div className="md:hidden divide-y divide-gray-200">
             {documents.map((doc) => (
               <div key={doc.id} className="p-4">
-                <p className="text-sm font-medium text-gray-900 break-words mb-2">{doc.filename}</p>
+                <p
+                  className="text-sm font-medium text-gray-900 break-words mb-2"
+                  title={doc.plan_title || doc.filename}
+                >
+                  {doc.filename}
+                </p>
                 <div className="grid grid-cols-2 gap-1 text-xs text-gray-500 mb-3">
                   <span>Tổ: {doc.department || '—'}</span>
                   <span>Tháng: {doc.month || '—'}</span>
@@ -458,7 +469,7 @@ export default function DocumentsPage() {
                       Xóa
                     </button>
                   )}
-                  {canReExtract && (
+                  {canReExtractDoc(doc) && (
                     <button
                       onClick={() => openReExtractChooser(doc.id)}
                       disabled={reExtractingId === doc.id}
@@ -506,7 +517,12 @@ export default function DocumentsPage() {
               <tbody className="divide-y divide-gray-200">
                 {documents.map((doc) => (
                   <tr key={doc.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate">{doc.filename}</td>
+                    <td
+                      className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate"
+                      title={doc.plan_title || doc.filename}
+                    >
+                      {doc.filename}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.department || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.month || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{doc.school_year || '—'}</td>
@@ -535,7 +551,7 @@ export default function DocumentsPage() {
                           Xóa
                         </button>
                       )}
-                      {canReExtract && (
+                      {canReExtractDoc(doc) && (
                         <button
                           onClick={() => openReExtractChooser(doc.id)}
                           disabled={reExtractingId === doc.id}
@@ -845,7 +861,7 @@ export default function DocumentsPage() {
                   </p>
                 </button>
               )}
-              {isAdmin && (
+              {hasReExtractRight && (
                 <button
                   type="button"
                   disabled={reExtractingId !== null}

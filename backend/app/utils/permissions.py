@@ -91,6 +91,20 @@ def can_delete_document(user: User, doc: Document) -> bool:
     return doc.department == user.department
 
 
+def can_re_extract_document(user: User, doc: Document) -> bool:
+    """Admin/BGH: any document. Tổ trưởng (upload or task rights): own department only."""
+    if is_admin(user):
+        return True
+    perms = get_permissions(user)
+    if not (perms["can_upload"] or perms["can_manage_tasks"]):
+        return False
+    if perms["scope_all_departments"]:
+        return True
+    if not user.department:
+        return False
+    return doc.department == user.department
+
+
 def can_upload_to_department(user: User, department: str) -> bool:
     if not can_upload(user):
         return False
