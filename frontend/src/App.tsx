@@ -46,14 +46,7 @@ function App() {
                 </TasksRoute>
               }
             />
-            <Route
-              path="/bgh-calendar"
-              element={
-                <BghRoute>
-                  <BghCalendarPage />
-                </BghRoute>
-              }
-            />
+            <Route path="/bgh-calendar" element={<BghCalendarPage />} />
             <Route
               path="/substitutes"
               element={

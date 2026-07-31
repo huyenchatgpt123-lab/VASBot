@@ -11,7 +11,6 @@ from app.schemas.calendar import BghCalendarResponse
 from app.utils.permissions import (
     is_admin,
     can_manage_tasks,
-    has_scope_all_departments,
 )
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskStatusUpdate,
@@ -60,26 +59,17 @@ def get_tasks(
     }
 
 
-def _require_bgh_calendar(current_user: User = Depends(get_current_user)) -> User:
-    if is_admin(current_user) or has_scope_all_departments(current_user):
-        return current_user
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Chỉ Ban giám hiệu mới xem được lịch công việc",
-    )
-
-
 @router.get("/bgh-calendar", response_model=BghCalendarResponse)
 def get_bgh_calendar(
     start_date: str = Query(..., description="YYYY-MM-DD"),
     end_date: str = Query(..., description="YYYY-MM-DD"),
     campus_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh_calendar),
+    current_user: User = Depends(get_current_user),
 ):
     service = TaskService(db)
     data = service.get_bgh_calendar(start_date, end_date, campus_id=campus_id)
-    # BGH xem lịch đã xếp; cảnh báo thiếu giờ / cần sửa chỉ dành cho Admin
+    # Cảnh báo thiếu giờ / cần sửa chỉ dành cho Admin; User & BGH chỉ xem lịch đã xếp
     if not is_admin(current_user):
         data["unscheduled_plans"] = []
         for plan in data.get("scheduled_plans", []):

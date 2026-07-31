@@ -407,7 +407,11 @@ export default function BghCalendarPage() {
       {/* Header */}
       <div className="mb-5 shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">Thời gian biểu</h1>
-        <p className="text-gray-500 mt-1">Lịch hoạt động và kế hoạch diễn ra tại trường</p>
+        <p className="text-gray-500 mt-1">
+          {isAdmin
+            ? 'Lịch hoạt động và kế hoạch diễn ra tại trường'
+            : 'Lịch hoạt động tại trường — chỉ xem'}
+        </p>
       </div>
 
       {/* Toolbar */}
