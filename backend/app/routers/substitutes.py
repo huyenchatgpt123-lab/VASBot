@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.timetable import (
     ClassRoomCreate,
     ClassRoomResponse,
@@ -60,7 +60,7 @@ def list_teachers(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_bgh),
 ):
-    q = db.query(User).order_by(User.name)
+    q = db.query(User).filter(User.role != UserRole.admin).order_by(User.name)
     if campus_id:
         q = q.filter((User.campus_id == campus_id) | (User.campus_id.is_(None)))
     return [

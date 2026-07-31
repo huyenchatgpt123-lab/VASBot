@@ -13,7 +13,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.timetable import period_label, session_for_period
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.repositories.timetable_repository import TimetableRepository
 from app.services.timetable_service import TimetableService
 
@@ -138,7 +138,11 @@ class SubstituteService:
         def periods_that_day(uid: int) -> int:
             return len(busy_tt.get(uid, set()) | busy_sub.get(uid, set()))
 
-        candidates = self.db.query(User).filter(User.id != absent_teacher_id).all()
+        candidates = (
+            self.db.query(User)
+            .filter(User.id != absent_teacher_id, User.role != UserRole.admin)
+            .all()
+        )
         scored: List[dict] = []
 
         for u in candidates:
@@ -146,9 +150,11 @@ class SubstituteService:
             # campus_id NULL (unknown) but prefer matching campus.
             if u.campus_id is not None and u.campus_id != campus_id:
                 continue
-            if period in busy_tt.get(u.id, set()):
-                continue
-            if period in busy_sub.get(u.id, set()):
+
+            busy_main = period in busy_tt.get(u.id, set())
+            busy_as_sub = period in busy_sub.get(u.id, set())
+            # Đã nhận dạy thay tiết này → không cho chọn lại
+            if busy_as_sub:
                 continue
 
             same_dept = bool(
@@ -169,13 +175,17 @@ class SubstituteService:
                 "tier_label": "Cùng tổ" if same_dept else "Tổ khác",
                 "periods_that_day": day_load,
                 "substitutes_this_week": week_subs,
-                "_sort": (tier, day_load, week_subs, u.name or ""),
+                "is_busy": busy_main,
+                "busy_reason": "Có tiết dạy" if busy_main else None,
+                # Free first, then tier / load
+                "_sort": (1 if busy_main else 0, tier, day_load, week_subs, u.name or ""),
             })
 
         scored.sort(key=lambda x: x["_sort"])
         for item in scored:
             item.pop("_sort", None)
-        return scored[:limit]
+        # Include busy teachers for manual search; keep a generous cap
+        return scored[: max(limit, 100)]
 
     def assign_batch(
         self,
@@ -230,10 +240,7 @@ class SubstituteService:
                 errors.append(f"Dòng {idx + 1}: lớp bị trùng tiết trong batch")
                 continue
 
-            dow = date_to_day_of_week(on_date)
-            if self.repo.find_teacher_conflict(sub_id, dow, period):
-                errors.append(f"Dòng {idx + 1}: giáo viên đã có tiết chính lúc đó")
-                continue
+            # Cho phép xếp khi GV đang có tiết chính (cảnh báo ở UI); vẫn chặn nếu đã nhận dạy thay.
             if self.repo.find_sub_teacher_conflict(sub_id, on_date, period):
                 errors.append(f"Dòng {idx + 1}: giáo viên đã nhận dạy thay tiết này")
                 continue

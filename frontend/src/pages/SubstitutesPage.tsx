@@ -94,6 +94,7 @@ export default function SubstitutesPage() {
   const [createDeptFilter, setCreateDeptFilter] = useState('');
   const [createNameSearch, setCreateNameSearch] = useState('');
   const [showSelectedSummary, setShowSelectedSummary] = useState(false);
+  const [pickSearch, setPickSearch] = useState('');
 
   const weekDates = useMemo(() => {
     return DAYS.map((d, i) => {
@@ -258,6 +259,7 @@ export default function SubstitutesPage() {
     setCreateDeptFilter('');
     setCreateNameSearch('');
     setShowSelectedSummary(false);
+    setPickSearch('');
     setCreateWeekStart(weekStart);
     setShowCreate(true);
   };
@@ -297,6 +299,7 @@ export default function SubstitutesPage() {
   const openPickForRow = async (row: RowPick) => {
     if (!absentId || row.already_assigned) return;
     setPickRow(row);
+    setPickSearch('');
     setLoadingSuggest(true);
     setSuggestions([]);
     try {
@@ -306,6 +309,7 @@ export default function SubstitutesPage() {
         period: row.period,
         class_id: row.class_id,
         campus_id: row.campus_id,
+        limit: 100,
       });
       setSuggestions(list);
     } catch (err: unknown) {
@@ -355,7 +359,7 @@ export default function SubstitutesPage() {
     openPickForRow(row);
   };
 
-  const pickSubstitute = (s: SuggestTeacherItem) => {
+  const applyPick = (s: SuggestTeacherItem) => {
     if (!pickRow) return;
     const key = pickRow.key;
     setRows((prev) =>
@@ -371,7 +375,19 @@ export default function SubstitutesPage() {
       ),
     );
     setPickRow(null);
+    setPickSearch('');
     setSuggestions([]);
+  };
+
+  const pickSubstitute = (s: SuggestTeacherItem) => {
+    if (!pickRow) return;
+    if (s.is_busy) {
+      const reason = s.busy_reason || 'Có tiết dạy';
+      if (!confirm(`${s.name} đang ${reason.toLowerCase()} vào khung giờ này. Vẫn chọn?`)) {
+        return;
+      }
+    }
+    applyPick(s);
   };
 
   const handleSave = async () => {
@@ -433,6 +449,19 @@ export default function SubstitutesPage() {
 
   const selectedCount = rows.filter((r) => r.selected && !r.already_assigned).length;
   const assignedPickCount = rows.filter((r) => r.substitute_teacher_id).length;
+
+  const filteredSuggestions = useMemo(() => {
+    const q = pickSearch.trim().toLowerCase();
+    // Không tìm → chỉ hiện GV trống (gợi ý). Có tìm → gồm cả GV đang có tiết.
+    const base = q
+      ? suggestions
+      : suggestions.filter((s) => !s.is_busy);
+    if (!q) return base;
+    return base.filter((s) => {
+      const hay = `${s.name} ${s.department || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [suggestions, pickSearch]);
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
@@ -683,16 +712,6 @@ export default function SubstitutesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tìm tên / mã GV</label>
-                  <input
-                    type="search"
-                    value={createNameSearch}
-                    onChange={(e) => setCreateNameSearch(e.target.value)}
-                    placeholder="VD: Hải, GV001..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Giáo viên nghỉ</label>
                   <select
                     value={absentId}
@@ -707,11 +726,20 @@ export default function SubstitutesPage() {
                     <option value="">Chọn giáo viên ({filteredTeachers.length})</option>
                     {filteredTeachers.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.teacher_code ? `${t.teacher_code} — ` : ''}{t.name}
-                        {t.department ? ` (${t.department})` : ''}
+                        {t.name}{t.department ? ` (${t.department})` : ''}
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tìm tên</label>
+                  <input
+                    type="search"
+                    value={createNameSearch}
+                    onChange={(e) => setCreateNameSearch(e.target.value)}
+                    placeholder="VD: Hải, An..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
                 </div>
               </div>
 
@@ -876,38 +904,64 @@ export default function SubstitutesPage() {
       {pickRow && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-              <h3 className="text-base font-semibold text-gray-900">Chọn giáo viên dạy thay</h3>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {pickRow.date} · {pickRow.period_label} · {pickRow.class_name}
-                {pickRow.campus_code ? ` · ${pickRow.campus_code}` : ''}
-              </p>
+            <div className="px-5 py-4 border-b border-gray-100 shrink-0 space-y-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Chọn giáo viên dạy thay</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {pickRow.date} · {pickRow.period_label} · {pickRow.class_name}
+                  {pickRow.campus_code ? ` · ${pickRow.campus_code}` : ''}
+                </p>
+              </div>
+              <input
+                type="search"
+                value={pickSearch}
+                onChange={(e) => setPickSearch(e.target.value)}
+                placeholder="Tìm tên GV (kể cả đang có tiết)..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                autoFocus
+              />
             </div>
             <div className="px-3 py-3 overflow-y-auto flex-1">
               {loadingSuggest ? (
                 <p className="text-sm text-gray-400 px-2 py-6 text-center">Đang gợi ý...</p>
-              ) : suggestions.length === 0 ? (
-                <p className="text-sm text-gray-500 italic px-2 py-6 text-center">Không còn giáo viên trống tiết này</p>
+              ) : filteredSuggestions.length === 0 ? (
+                <p className="text-sm text-gray-500 italic px-2 py-6 text-center">
+                  {pickSearch.trim()
+                    ? 'Không tìm thấy giáo viên phù hợp'
+                    : 'Không còn giáo viên trống tiết này — thử tìm tên để chỉ định'}
+                </p>
               ) : (
                 <ul className="space-y-1">
-                  {suggestions.map((s) => (
+                  {filteredSuggestions.map((s) => (
                     <li key={s.user_id}>
                       <button
                         type="button"
                         onClick={() => pickSubstitute(s)}
-                        className="w-full flex items-center gap-2 text-left px-3 py-2.5 rounded-lg hover:bg-primary-50 border border-transparent hover:border-primary-100"
+                        className={`w-full flex items-center gap-2 text-left px-3 py-2.5 rounded-lg border border-transparent ${
+                          s.is_busy
+                            ? 'hover:bg-amber-50 hover:border-amber-100'
+                            : 'hover:bg-primary-50 hover:border-primary-100'
+                        }`}
                       >
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm font-medium text-gray-900">
                             {s.name}{s.department ? ` · ${s.department}` : ''}
                           </span>
                           <span className="block text-[11px] text-gray-500">
-                            {s.tier_label} · {s.periods_that_day} tiết hôm đó · {s.substitutes_this_week} lần dạy thay tuần này
+                            {s.is_busy
+                              ? (s.busy_reason || 'Có tiết dạy')
+                              : `${s.tier_label} · ${s.periods_that_day} tiết hôm đó · ${s.substitutes_this_week} lần dạy thay tuần này`}
                           </span>
                         </span>
-                        <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${s.same_department ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
-                          {s.tier_label}
-                        </span>
+                        {s.is_busy ? (
+                          <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                            Có tiết dạy
+                          </span>
+                        ) : (
+                          <span className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${s.same_department ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
+                            {s.tier_label}
+                          </span>
+                        )}
                         <span className="shrink-0 text-xs font-medium text-primary-700">Chọn</span>
                       </button>
                     </li>
@@ -921,6 +975,7 @@ export default function SubstitutesPage() {
                 onClick={() => {
                   removeRow(pickRow.key);
                   setPickRow(null);
+                  setPickSearch('');
                   setSuggestions([]);
                 }}
                 className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
@@ -931,6 +986,7 @@ export default function SubstitutesPage() {
                 type="button"
                 onClick={() => {
                   setPickRow(null);
+                  setPickSearch('');
                   setSuggestions([]);
                 }}
                 className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"

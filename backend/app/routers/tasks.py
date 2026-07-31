@@ -107,6 +107,7 @@ def get_task_users(
     return [
         {"id": u.id, "name": u.name, "nickname": u.nickname, "department": u.department}
         for u in users
+        if u.role != UserRole.admin
     ]
 
 

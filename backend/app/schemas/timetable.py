@@ -116,6 +116,8 @@ class SuggestTeacherItem(BaseModel):
     tier_label: str
     periods_that_day: int
     substitutes_this_week: int
+    is_busy: bool = False
+    busy_reason: Optional[str] = None
 
 
 class AssignItem(BaseModel):

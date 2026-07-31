@@ -51,6 +51,8 @@ export type SuggestTeacherItem = {
   tier_label: string;
   periods_that_day: number;
   substitutes_this_week: number;
+  is_busy?: boolean;
+  busy_reason?: string | null;
 };
 
 export type AssignItem = {
