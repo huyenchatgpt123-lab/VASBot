@@ -62,6 +62,31 @@ export type AssignItem = {
   period: number;
 };
 
+export type TimetableSlot = {
+  id: number;
+  teacher_id: number;
+  teacher_name?: string | null;
+  class_id: number;
+  class_name?: string | null;
+  campus_id: number;
+  campus_code?: string | null;
+  day_of_week: number;
+  period: number;
+  session: string;
+  period_label: string;
+};
+
+export type TimetableImportResult = {
+  campus_id: number;
+  campus_code: string;
+  slots_created: number;
+  classes_created: number;
+  teachers_matched: number;
+  teachers_unmatched: string[];
+  errors: string[];
+  message: string;
+};
+
 export const substitutesApi = {
   listTeachers: async (campusId?: number): Promise<TeacherOption[]> => {
     const res = await api.get('/substitutes/teachers', {
@@ -124,8 +149,16 @@ export const substitutesApi = {
     return res.data.count ?? 0;
   },
 
-  /** Kept for future TKB management — not used on main UI now */
-  importTimetable: async (file: File, campusId: number) => {
+  listTimetable: async (params?: {
+    campus_id?: number;
+    teacher_id?: number;
+    class_id?: number;
+  }): Promise<TimetableSlot[]> => {
+    const res = await api.get('/substitutes/timetable', { params });
+    return res.data;
+  },
+
+  importTimetable: async (file: File, campusId: number): Promise<TimetableImportResult> => {
     const form = new FormData();
     form.append('file', file);
     form.append('campus_id', String(campusId));
