@@ -110,7 +110,8 @@ def suggestions(
     period: int = Query(..., ge=1, le=8),
     class_id: int = Query(...),
     campus_id: int = Query(...),
-    limit: int = Query(20, ge=1, le=50),
+    limit: int = Query(20, ge=1, le=200),
+    q: Optional[str] = Query(None, description="Tìm theo tên / tổ / mã GV"),
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_bgh),
 ):
@@ -122,6 +123,7 @@ def suggestions(
             class_id=class_id,
             campus_id=campus_id,
             limit=limit,
+            q=q,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

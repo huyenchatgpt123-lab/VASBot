@@ -26,6 +26,31 @@ function periodHeader(p: number): string {
   return p <= 5 ? `S${p}` : `C${p - 5}`;
 }
 
+function apiErrorMessage(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && 'msg' in item) {
+          return String((item as { msg: unknown }).msg);
+        }
+        return '';
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join('; ');
+  }
+  if (detail && typeof detail === 'object') {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      /* ignore */
+    }
+  }
+  return fallback;
+}
+
 function toISODate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -155,8 +180,7 @@ export default function SubstitutesPage() {
       setAssignments(list);
       setTeachers(t);
     } catch (err: unknown) {
-      const detailMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(detailMsg || 'Không tải được lịch dạy thay');
+      setError(apiErrorMessage(err, 'Không tải được lịch dạy thay'));
     } finally {
       setLoading(false);
     }
@@ -291,35 +315,50 @@ export default function SubstitutesPage() {
       await loadBoard();
     } catch (err: unknown) {
       fail();
-      const detailMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      alert(detailMsg || 'Import thất bại');
+      alert(apiErrorMessage(err, 'Import thất bại'));
     }
   };
 
-  const openPickForRow = async (row: RowPick) => {
+  const openPickForRow = (row: RowPick) => {
     if (!absentId || row.already_assigned) return;
     setPickRow(row);
     setPickSearch('');
-    setLoadingSuggest(true);
     setSuggestions([]);
-    try {
-      const list = await substitutesApi.suggestions({
-        absent_teacher_id: Number(absentId),
-        on_date: row.date,
-        period: row.period,
-        class_id: row.class_id,
-        campus_id: row.campus_id,
-        limit: 100,
-      });
-      setSuggestions(list);
-    } catch (err: unknown) {
-      const detailMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      alert(detailMsg || 'Không lấy được gợi ý');
-      setPickRow(null);
-    } finally {
-      setLoadingSuggest(false);
-    }
   };
+
+  // Gợi ý / tìm tên trên server trong popup chọn GV
+  useEffect(() => {
+    if (!pickRow || !absentId) return;
+    const row = pickRow;
+    const q = pickSearch.trim();
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setLoadingSuggest(true);
+      try {
+        const list = await substitutesApi.suggestions({
+          absent_teacher_id: Number(absentId),
+          on_date: row.date,
+          period: row.period,
+          class_id: row.class_id,
+          campus_id: row.campus_id,
+          limit: q ? 100 : 30,
+          q: q || undefined,
+        });
+        if (!cancelled) setSuggestions(list);
+      } catch (err: unknown) {
+        if (!cancelled) {
+          alert(apiErrorMessage(err, 'Không lấy được gợi ý'));
+          if (!q) setPickRow(null);
+        }
+      } finally {
+        if (!cancelled) setLoadingSuggest(false);
+      }
+    }, q ? 300 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [pickRow, pickSearch, absentId]);
 
   const toggleSlotCell = (dayValue: number, period: number, date: string) => {
     const slot = teacherSlotMap.get(`${dayValue}-${period}`);
@@ -420,8 +459,7 @@ export default function SubstitutesPage() {
       setShowCreate(false);
       await loadBoard();
     } catch (err: unknown) {
-      const detailMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      alert(detailMsg || 'Không lưu được');
+      alert(apiErrorMessage(err, 'Không lưu được'));
     } finally {
       setSaving(false);
     }
@@ -434,8 +472,7 @@ export default function SubstitutesPage() {
       setDetail(null);
       await loadBoard();
     } catch (err: unknown) {
-      const detailMsg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      alert(detailMsg || 'Không hủy được');
+      alert(apiErrorMessage(err, 'Không hủy được'));
     }
   };
 
@@ -449,19 +486,6 @@ export default function SubstitutesPage() {
 
   const selectedCount = rows.filter((r) => r.selected && !r.already_assigned).length;
   const assignedPickCount = rows.filter((r) => r.substitute_teacher_id).length;
-
-  const filteredSuggestions = useMemo(() => {
-    const q = pickSearch.trim().toLowerCase();
-    // Không tìm → chỉ hiện GV trống (gợi ý). Có tìm → gồm cả GV đang có tiết.
-    const base = q
-      ? suggestions
-      : suggestions.filter((s) => !s.is_busy);
-    if (!q) return base;
-    return base.filter((s) => {
-      const hay = `${s.name} ${s.department || ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [suggestions, pickSearch]);
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
@@ -924,7 +948,7 @@ export default function SubstitutesPage() {
             <div className="px-3 py-3 overflow-y-auto flex-1">
               {loadingSuggest ? (
                 <p className="text-sm text-gray-400 px-2 py-6 text-center">Đang gợi ý...</p>
-              ) : filteredSuggestions.length === 0 ? (
+              ) : suggestions.length === 0 ? (
                 <p className="text-sm text-gray-500 italic px-2 py-6 text-center">
                   {pickSearch.trim()
                     ? 'Không tìm thấy giáo viên phù hợp'
@@ -932,7 +956,7 @@ export default function SubstitutesPage() {
                 </p>
               ) : (
                 <ul className="space-y-1">
-                  {filteredSuggestions.map((s) => (
+                  {suggestions.map((s) => (
                     <li key={s.user_id}>
                       <button
                         type="button"

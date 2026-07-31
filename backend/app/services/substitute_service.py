@@ -112,6 +112,7 @@ class SubstituteService:
         class_id: int,
         campus_id: int,
         limit: int = 20,
+        q: Optional[str] = None,
     ) -> List[dict]:
         if period < 1 or period > 8:
             raise ValueError("Tiết phải từ 1 đến 8")
@@ -133,6 +134,7 @@ class SubstituteService:
         busy_sub = self.repo.teacher_sub_busy_on_date(on_date)
         week_from, week_to = week_bounds(on_date)
         week_counts = self.repo.count_subs_in_range(week_from, week_to)
+        query = (q or "").strip().lower()
 
         # Periods count that day = weekly TKB that DOW + subs already that date
         def periods_that_day(uid: int) -> int:
@@ -156,6 +158,15 @@ class SubstituteService:
             # Đã nhận dạy thay tiết này → không cho chọn lại
             if busy_as_sub:
                 continue
+
+            # Không tìm: chỉ gợi ý GV trống. Có tìm: gồm cả đang có tiết.
+            if not query and busy_main:
+                continue
+
+            if query:
+                hay = f"{u.name or ''} {u.department or ''} {u.teacher_code or ''}".lower()
+                if query not in hay:
+                    continue
 
             same_dept = bool(
                 absent.department
@@ -184,8 +195,7 @@ class SubstituteService:
         scored.sort(key=lambda x: x["_sort"])
         for item in scored:
             item.pop("_sort", None)
-        # Include busy teachers for manual search; keep a generous cap
-        return scored[: max(limit, 100)]
+        return scored[:limit]
 
     def assign_batch(
         self,

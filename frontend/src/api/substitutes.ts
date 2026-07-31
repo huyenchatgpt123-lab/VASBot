@@ -121,6 +121,7 @@ export const substitutesApi = {
     class_id: number;
     campus_id: number;
     limit?: number;
+    q?: string;
   }): Promise<SuggestTeacherItem[]> => {
     const res = await api.get('/substitutes/suggestions', { params });
     return res.data;
