@@ -87,6 +87,12 @@ class MySubstitutesResponse(BaseModel):
     count: int
 
 
+class MyTimetableSummary(BaseModel):
+    has_timetable: bool
+    slot_count: int = 0
+    substitute_count: int = 0
+
+
 class AbsentPeriodsRequest(BaseModel):
     absent_teacher_id: int
     dates: List[date] = Field(..., min_length=1)

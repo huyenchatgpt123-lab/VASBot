@@ -330,13 +330,34 @@ class TimetableService:
             ),
         }
 
-    # ---- my substitutes ----
+    # ---- my substitutes / my timetable ----
 
-    def list_my_substitutes(self, user_id: int, from_today: bool = True) -> dict:
-        from_date = date.today() if from_today else None
-        items = self.repo.list_mine(user_id, from_date=from_date)
+    def list_my_substitutes(
+        self,
+        user_id: int,
+        *,
+        from_today: bool = True,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+    ) -> dict:
+        start = from_date
+        if start is None and from_today:
+            start = date.today()
+        items = self.repo.list_mine(user_id, from_date=start, to_date=to_date)
         formatted = [self._format_assignment(i) for i in items]
         return {"items": formatted, "count": len(formatted)}
 
     def count_my_substitutes(self, user_id: int) -> int:
         return self.repo.count_mine(user_id, from_date=date.today())
+
+    def my_timetable_summary(self, user_id: int) -> dict:
+        slot_count = self.repo.count_slots_for_teacher(user_id)
+        sub_count = self.repo.count_mine(user_id, from_date=date.today())
+        return {
+            "has_timetable": slot_count > 0,
+            "slot_count": slot_count,
+            "substitute_count": sub_count,
+        }
+
+    def list_my_timetable(self, user_id: int) -> List[dict]:
+        return self.list_slots(teacher_id=user_id)

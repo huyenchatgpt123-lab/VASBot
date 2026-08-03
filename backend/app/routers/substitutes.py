@@ -14,6 +14,7 @@ from app.schemas.timetable import (
     TimetableSlotResponse,
     TimetableImportResult,
     MySubstitutesResponse,
+    MyTimetableSummary,
     SubstituteAssignmentResponse,
     AbsentPeriodsRequest,
     AbsentPeriodItem,
@@ -40,10 +41,26 @@ def _require_bgh(user: User = Depends(get_current_user)) -> User:
 
 @router.get("/mine", response_model=MySubstitutesResponse)
 def my_substitutes(
+    teacher_id: Optional[int] = Query(None),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return TimetableService(db).list_my_substitutes(current_user.id)
+    target_id = current_user.id
+    if teacher_id is not None and teacher_id != current_user.id:
+        if not is_admin(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Chỉ Admin mới xem lịch dạy thay của giáo viên khác",
+            )
+        target_id = teacher_id
+    return TimetableService(db).list_my_substitutes(
+        target_id,
+        from_today=from_date is None and to_date is None,
+        from_date=from_date,
+        to_date=to_date,
+    )
 
 
 @router.get("/mine/count")
@@ -52,6 +69,31 @@ def my_substitutes_count(
     current_user: User = Depends(get_current_user),
 ):
     return {"count": TimetableService(db).count_my_substitutes(current_user.id)}
+
+
+@router.get("/mine/summary", response_model=MyTimetableSummary)
+def my_timetable_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return TimetableService(db).my_timetable_summary(current_user.id)
+
+
+@router.get("/mine/timetable", response_model=List[TimetableSlotResponse])
+def my_timetable(
+    teacher_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    target_id = current_user.id
+    if teacher_id is not None and teacher_id != current_user.id:
+        if not is_admin(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Chỉ Admin mới xem thời khóa biểu của giáo viên khác",
+            )
+        target_id = teacher_id
+    return TimetableService(db).list_my_timetable(target_id)
 
 
 @router.get("/teachers")

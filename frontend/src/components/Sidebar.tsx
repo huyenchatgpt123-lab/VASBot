@@ -5,12 +5,27 @@ import { tasksApi } from '../api/tasks';
 import { feedbackApi } from '../api/feedback';
 import { substitutesApi } from '../api/substitutes';
 
-const navItems = [
+type NavItem = {
+  path: string;
+  label: string;
+  icon: string;
+  adminOnly?: boolean;
+  bghOnly?: boolean;
+  hideForBgh?: boolean;
+  showBadge?: boolean;
+  showSubBadge?: boolean;
+  showFeedbackBadge?: boolean;
+  /** Chỉ hiện khi có TKB hoặc dạy thay (user thường). Admin luôn thấy. */
+  requiresTimetableAccess?: boolean;
+};
+
+const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
   { path: '/bgh-calendar', label: 'Thời gian biểu', icon: '🗓️' },
+  { path: '/timetable', label: 'Thời khóa biểu', icon: '📋', hideForBgh: true, requiresTimetableAccess: true, showSubBadge: true },
   { path: '/substitutes', label: 'Dạy thay', icon: '🔄', bghOnly: true },
   { path: '/documents', label: 'Tài liệu', icon: '📄' },
-  { path: '/tasks', label: 'Công việc', icon: '✅', showBadge: true, showSubBadge: true },
+  { path: '/tasks', label: 'Công việc', icon: '✅', showBadge: true },
   { path: '/feedback', label: 'Feedback', icon: '💡', showFeedbackBadge: true },
   { path: '/users', label: 'Người dùng', icon: '👥', adminOnly: true },
   { path: '/settings', label: 'Cài đặt', icon: '⚙️' },
@@ -25,22 +40,24 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const { isAdmin, scopeAllDepartments, isBghOnly } = useAuth();
   const [taskCount, setTaskCount] = useState(0);
   const [subCount, setSubCount] = useState(0);
+  const [hasTimetableAccess, setHasTimetableAccess] = useState(false);
   const [feedbackCount, setFeedbackCount] = useState(0);
 
   useEffect(() => {
     if (isBghOnly) {
       setTaskCount(0);
       setSubCount(0);
+      setHasTimetableAccess(false);
       return;
     }
     loadTaskCount();
-    loadSubCount();
+    loadTimetableNav();
     const interval = setInterval(() => {
       loadTaskCount();
-      loadSubCount();
+      loadTimetableNav();
     }, 30000);
     return () => clearInterval(interval);
-  }, [isBghOnly]);
+  }, [isBghOnly, isAdmin]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -60,12 +77,24 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     }
   };
 
-  const loadSubCount = async () => {
+  const loadTimetableNav = async () => {
+    if (isAdmin) {
+      setHasTimetableAccess(true);
+      try {
+        const count = await substitutesApi.mySubstitutesCount();
+        setSubCount(count);
+      } catch {
+        setSubCount(0);
+      }
+      return;
+    }
     try {
-      const count = await substitutesApi.mySubstitutesCount();
-      setSubCount(count);
+      const summary = await substitutesApi.myTimetableSummary();
+      setSubCount(summary.substitute_count);
+      setHasTimetableAccess(summary.has_timetable || summary.substitute_count > 0);
     } catch {
       setSubCount(0);
+      setHasTimetableAccess(false);
     }
   };
 
@@ -105,8 +134,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         {navItems
           .filter((item) => {
             if (item.adminOnly && !isAdmin) return false;
-            if ('bghOnly' in item && item.bghOnly && !scopeAllDepartments) return false;
+            if (item.bghOnly && !scopeAllDepartments) return false;
+            if (item.hideForBgh && isBghOnly) return false;
             if (item.path === '/tasks' && isBghOnly) return false;
+            if (item.requiresTimetableAccess && !isAdmin && !hasTimetableAccess) return false;
             return true;
           })
           .map((item) => (
@@ -124,18 +155,17 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             >
               <span className="text-lg">{item.icon}</span>
               <span className="flex-1">{item.label}</span>
-              {item.showBadge && (taskCount > 0 || (('showSubBadge' in item && item.showSubBadge) && subCount > 0)) && (
-                <span className="flex items-center gap-1">
-                  {'showSubBadge' in item && item.showSubBadge && subCount > 0 && (
-                    <span className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center" title="Tiết dạy thay">
-                      {subCount > 99 ? '99+' : subCount}
-                    </span>
-                  )}
-                  {taskCount > 0 && (
-                    <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                      {taskCount > 99 ? '99+' : taskCount}
-                    </span>
-                  )}
+              {item.showSubBadge && subCount > 0 && (
+                <span
+                  className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center"
+                  title="Tiết dạy thay"
+                >
+                  {subCount > 99 ? '99+' : subCount}
+                </span>
+              )}
+              {item.showBadge && taskCount > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                  {taskCount > 99 ? '99+' : taskCount}
                 </span>
               )}
               {item.showFeedbackBadge && isAdmin && feedbackCount > 0 && (

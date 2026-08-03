@@ -181,7 +181,12 @@ class TimetableRepository:
 
     # ---- substitute assignments ----
 
-    def list_mine(self, teacher_id: int, from_date: Optional[date] = None) -> List[SubstituteAssignment]:
+    def list_mine(
+        self,
+        teacher_id: int,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+    ) -> List[SubstituteAssignment]:
         q = (
             self.db.query(SubstituteAssignment)
             .options(
@@ -197,7 +202,33 @@ class TimetableRepository:
         )
         if from_date:
             q = q.filter(SubstituteAssignment.date >= from_date)
+        if to_date:
+            q = q.filter(SubstituteAssignment.date <= to_date)
         return q.order_by(SubstituteAssignment.date, SubstituteAssignment.period).all()
+
+    def count_mine(
+        self,
+        teacher_id: int,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+    ) -> int:
+        q = self.db.query(func.count(SubstituteAssignment.id)).filter(
+            SubstituteAssignment.substitute_teacher_id == teacher_id,
+            SubstituteAssignment.status == "assigned",
+        )
+        if from_date:
+            q = q.filter(SubstituteAssignment.date >= from_date)
+        if to_date:
+            q = q.filter(SubstituteAssignment.date <= to_date)
+        return int(q.scalar() or 0)
+
+    def count_slots_for_teacher(self, teacher_id: int) -> int:
+        return (
+            self.db.query(func.count(TimetableSlot.id))
+            .filter(TimetableSlot.teacher_id == teacher_id)
+            .scalar()
+            or 0
+        )
 
     def list_assignments(
         self,

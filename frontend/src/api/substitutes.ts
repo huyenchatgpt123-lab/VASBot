@@ -143,14 +143,34 @@ export const substitutesApi = {
     return res.data;
   },
 
-  mySubstitutes: async (): Promise<{ items: SubstituteAssignment[]; count: number }> => {
-    const res = await api.get('/substitutes/mine');
+  mySubstitutes: async (params?: {
+    teacher_id?: number;
+    from_date?: string;
+    to_date?: string;
+  }): Promise<{ items: SubstituteAssignment[]; count: number }> => {
+    const res = await api.get('/substitutes/mine', { params });
     return res.data;
   },
 
   mySubstitutesCount: async (): Promise<number> => {
     const res = await api.get('/substitutes/mine/count');
     return res.data.count ?? 0;
+  },
+
+  myTimetableSummary: async (): Promise<{
+    has_timetable: boolean;
+    slot_count: number;
+    substitute_count: number;
+  }> => {
+    const res = await api.get('/substitutes/mine/summary');
+    return res.data;
+  },
+
+  myTimetable: async (teacherId?: number): Promise<TimetableSlot[]> => {
+    const res = await api.get('/substitutes/mine/timetable', {
+      params: teacherId ? { teacher_id: teacherId } : undefined,
+    });
+    return res.data;
   },
 
   listTimetable: async (params?: {
