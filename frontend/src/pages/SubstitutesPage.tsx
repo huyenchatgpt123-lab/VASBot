@@ -487,7 +487,21 @@ export default function SubstitutesPage() {
             Lịch dạy thay đã xếp — chỉ xem. Import TKB hoặc tạo lịch bằng nút bên phải.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full sm:w-auto">
+          <a
+            href="/mau_thoi_khoa_bieu_luoi.xlsx"
+            download
+            className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium text-center"
+          >
+            Mẫu lưới
+          </a>
+          <a
+            href="/mau_thoi_khoa_bieu.xlsx"
+            download
+            className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium text-center"
+          >
+            Mẫu phẳng
+          </a>
           <button
             type="button"
             onClick={openImport}

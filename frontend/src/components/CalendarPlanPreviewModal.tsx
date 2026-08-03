@@ -122,11 +122,22 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
   return (
     <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900">Duyệt và chỉnh lịch trình trước khi lưu</h2>
-          <p className="text-sm text-gray-500 mt-0.5 truncate" title={preview.plan_title || undefined}>
-            {preview.plan_title || `Tài liệu #${preview.document_id}`}
-          </p>
+        <div className="px-5 py-4 border-b border-gray-100 shrink-0 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold text-gray-900">Duyệt và chỉnh lịch trình trước khi lưu</h2>
+            <p className="text-sm text-gray-500 mt-0.5 truncate" title={preview.plan_title || undefined}>
+              {preview.plan_title || `Tài liệu #${preview.document_id}`}
+            </p>
+          </div>
+          {preview.document_id ? (
+            <button
+              type="button"
+              onClick={() => window.open(documentsApi.getPreviewUrl(preview.document_id), '_blank')}
+              className="shrink-0 px-3 py-1.5 text-sm font-medium text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50"
+            >
+              Xem tài liệu
+            </button>
+          ) : null}
         </div>
 
         <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">

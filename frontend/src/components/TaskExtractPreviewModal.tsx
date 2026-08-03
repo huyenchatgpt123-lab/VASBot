@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tasksApi, TaskExtractResult, TaskUser } from '../api/tasks';
+import { documentsApi } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 
 export type PreviewTaskRow = {
@@ -252,15 +253,26 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900">Duyệt công việc trước khi lưu</h2>
-          <p className="text-sm text-gray-500 mt-0.5 truncate" title={preview.document_name}>
-            {preview.document_name || `Tài liệu #${preview.document_id}`}
-            {' · '}
-            {rows.length} dòng
-            {unmatchedCount > 0 ? ` · ${unmatchedCount} chưa khớp tài khoản` : ''}
-            {reviewCount > 0 ? ` · ${reviewCount} nên xác nhận lại` : ''}
-          </p>
+        <div className="px-5 py-4 border-b border-gray-100 shrink-0 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold text-gray-900">Duyệt công việc trước khi lưu</h2>
+            <p className="text-sm text-gray-500 mt-0.5 truncate" title={preview.document_name}>
+              {preview.document_name || `Tài liệu #${preview.document_id}`}
+              {' · '}
+              {rows.length} dòng
+              {unmatchedCount > 0 ? ` · ${unmatchedCount} chưa khớp tài khoản` : ''}
+              {reviewCount > 0 ? ` · ${reviewCount} nên xác nhận lại` : ''}
+            </p>
+          </div>
+          {preview.document_id ? (
+            <button
+              type="button"
+              onClick={() => window.open(documentsApi.getPreviewUrl(preview.document_id), '_blank')}
+              className="shrink-0 px-3 py-1.5 text-sm font-medium text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50"
+            >
+              Xem tài liệu
+            </button>
+          ) : null}
         </div>
 
         {(unmatchedCount > 0 || reviewCount > 0) && (

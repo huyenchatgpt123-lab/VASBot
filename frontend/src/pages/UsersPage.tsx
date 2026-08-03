@@ -411,6 +411,13 @@ export default function UsersPage() {
             onChange={handleImportExcel}
             className="hidden"
           />
+          <a
+            href="/mau_danh_sach_giao_vien.xlsx"
+            download
+            className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors text-center"
+          >
+            Tải file mẫu
+          </a>
           <button
             onClick={() => excelInputRef.current?.click()}
             className="px-5 py-2.5 border border-primary-600 text-primary-600 rounded-lg font-medium hover:bg-primary-50 transition-colors"
