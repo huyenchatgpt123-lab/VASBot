@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { adminApi } from '../api/admin';
+import { documentsApi } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
 import { User, Position, Department } from '../types';
 
@@ -15,9 +16,13 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [form, setForm] = useState({ name: '', nickname: '', email: '', password: '', role: 'user', department_id: '', position_id: '' });
+  const [form, setForm] = useState({
+    name: '', nickname: '', email: '', password: '', role: 'user',
+    department_id: '', position_id: '', teacher_code: '', campus_id: '',
+  });
   const [positions, setPositions] = useState<Position[]>([]);
   const [departmentList, setDepartmentList] = useState<Department[]>([]);
+  const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
   const [showDeptForm, setShowDeptForm] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [deptForm, setDeptForm] = useState({ name: '', sort_order: 0 });
@@ -37,6 +42,8 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [campusFilter, setCampusFilter] = useState('');
+  const [missingCodeFilter, setMissingCodeFilter] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -44,6 +51,7 @@ export default function UsersPage() {
     loadUsers();
     loadPositions();
     loadDepartments();
+    documentsApi.getCampuses().then((res) => setCampuses(res.campuses)).catch(() => {});
   }, []);
 
   const loadDepartments = async () => {
@@ -66,20 +74,26 @@ export default function UsersPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [search, roleFilter, deptFilter]);
+  }, [search, roleFilter, deptFilter, campusFilter, missingCodeFilter]);
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
     return users.filter((u) => {
       const matchSearch =
         !q ||
-        [u.name, u.email, u.nickname, u.position].some((v) => v?.toLowerCase().includes(q));
+        [u.name, u.email, u.nickname, u.position, u.teacher_code, u.campus_code].some(
+          (v) => v?.toLowerCase().includes(q),
+        );
       const matchRole = !roleFilter || u.role === roleFilter;
       const userDeptId = resolveDepartmentId(u, departmentList);
       const matchDept = !deptFilter || String(userDeptId) === deptFilter;
-      return matchSearch && matchRole && matchDept;
+      const matchCampus =
+        !campusFilter ||
+        (campusFilter === 'none' ? !u.campus_id : String(u.campus_id) === campusFilter);
+      const matchCode = !missingCodeFilter || !u.teacher_code;
+      return matchSearch && matchRole && matchDept && matchCampus && matchCode;
     });
-  }, [users, search, roleFilter, deptFilter, departmentList]);
+  }, [users, search, roleFilter, deptFilter, campusFilter, missingCodeFilter, departmentList]);
 
   const selectableUsers = useMemo(
     () => filteredUsers.filter((u) => u.id !== currentUser?.id),
@@ -105,6 +119,7 @@ export default function UsersPage() {
     setForm({
       name: '', nickname: '', email: '', password: '', role: 'user', department_id: '',
       position_id: defaultPosition ? String(defaultPosition.id) : '',
+      teacher_code: '', campus_id: '',
     });
     setEditingUser(null);
     setShowForm(false);
@@ -114,6 +129,8 @@ export default function UsersPage() {
     setSearch('');
     setRoleFilter('');
     setDeptFilter('');
+    setCampusFilter('');
+    setMissingCodeFilter(false);
   };
 
   const toggleSelect = (id: number) => {
@@ -148,6 +165,8 @@ export default function UsersPage() {
         role: form.role,
         department_id: parseInt(form.department_id),
         position_id: form.position_id ? parseInt(form.position_id) : undefined,
+        teacher_code: form.teacher_code.trim().toUpperCase() || undefined,
+        campus_id: form.campus_id ? parseInt(form.campus_id) : undefined,
       });
       resetForm();
       loadUsers();
@@ -167,6 +186,8 @@ export default function UsersPage() {
       role: user.role,
       department_id: deptId ? String(deptId) : '',
       position_id: user.position_id ? String(user.position_id) : '',
+      teacher_code: user.teacher_code || '',
+      campus_id: user.campus_id ? String(user.campus_id) : '',
     });
     setShowForm(true);
   };
@@ -196,6 +217,16 @@ export default function UsersPage() {
 
     const newPositionId = form.position_id ? parseInt(form.position_id) : undefined;
     if (newPositionId !== editingUser.position_id) data.position_id = newPositionId;
+
+    const newTeacherCode = form.teacher_code.trim().toUpperCase();
+    if (newTeacherCode !== (editingUser.teacher_code || '')) {
+      data.teacher_code = newTeacherCode || null;
+    }
+
+    const newCampusId = form.campus_id ? parseInt(form.campus_id) : null;
+    if (newCampusId !== (editingUser.campus_id ?? null)) {
+      data.campus_id = newCampusId;
+    }
 
     try {
       await adminApi.updateUser(editingUser.id, data);
@@ -363,7 +394,7 @@ export default function UsersPage() {
     }
   };
 
-  const hasActiveFilters = search || roleFilter || deptFilter;
+  const hasActiveFilters = search || roleFilter || deptFilter || campusFilter || missingCodeFilter;
 
   return (
     <div className="p-4 sm:p-6">
@@ -492,6 +523,22 @@ export default function UsersPage() {
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
+            <input
+              placeholder="Mã GV (cho TKB / dạy thay)"
+              value={form.teacher_code}
+              onChange={(e) => setForm({ ...form, teacher_code: e.target.value.toUpperCase() })}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none uppercase"
+            />
+            <select
+              value={form.campus_id}
+              onChange={(e) => setForm({ ...form, campus_id: e.target.value })}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+            >
+              <option value="">-- Chọn cơ sở --</option>
+              {campuses.map((c) => (
+                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+              ))}
+            </select>
             <div className="md:col-span-2 flex gap-3">
               <button type="submit" className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700">
                 {editingUser ? 'Cập nhật' : 'Tạo'}
@@ -510,7 +557,18 @@ export default function UsersPage() {
       )}
 
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 break-words">
-        File Excel cần có các cột: <strong>Họ tên, Email, Mật khẩu, Vai trò (admin/user), Phòng ban, Biệt danh, Chức vụ</strong>. Chức vụ phải khớp tên trong danh sách bên dưới.
+        File Excel cần các cột:{' '}
+        <strong>Họ tên, Email, Mật khẩu, Vai trò, Phòng ban, Biệt danh, Chức vụ, Mã GV, Cơ sở</strong>.
+        {' '}Cột <strong>Mã GV</strong> và <strong>Cơ sở</strong> (mã cơ sở, VD: CS1) cần khớp TKB import.
+        Email đã tồn tại sẽ được <strong>cập nhật</strong> mã GV, cơ sở, tổ, chức vụ.
+        {' '}
+        <a
+          href="/mau_danh_sach_giao_vien.xlsx"
+          download
+          className="text-primary-700 font-medium hover:underline"
+        >
+          Tải file mẫu
+        </a>
       </div>
 
       {/* Quản lý phòng ban */}
@@ -723,7 +781,7 @@ export default function UsersPage() {
       <div className="mb-4 flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center">
         <input
           type="text"
-          placeholder="Tìm theo tên, email, biệt danh..."
+          placeholder="Tìm theo tên, email, mã GV..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full sm:w-64 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
@@ -747,6 +805,26 @@ export default function UsersPage() {
             <option key={dept.id} value={String(dept.id)}>{dept.name}</option>
           ))}
         </select>
+        <select
+          value={campusFilter}
+          onChange={(e) => setCampusFilter(e.target.value)}
+          className="w-full sm:w-auto px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+        >
+          <option value="">Tất cả cơ sở</option>
+          <option value="none">Chưa có cơ sở</option>
+          {campuses.map((c) => (
+            <option key={c.id} value={String(c.id)}>{c.code} — {c.name}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap">
+          <input
+            type="checkbox"
+            checked={missingCodeFilter}
+            onChange={(e) => setMissingCodeFilter(e.target.checked)}
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+          Thiếu mã GV
+        </label>
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
@@ -848,6 +926,15 @@ export default function UsersPage() {
                             Chưa có biệt danh
                           </span>
                         )}
+                        {user.teacher_code ? (
+                          <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-mono">{user.teacher_code}</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-800 font-medium">
+                            Thiếu mã GV
+                          </span>
+                        )}
+                        <span className="break-words">{user.campus_code || '—'}</span>
+                        <span className="text-gray-300">·</span>
                         <span className="break-words">{user.department || '—'}</span>
                         <span className="text-gray-300">·</span>
                         <span className="break-words">{user.position || '—'}</span>
@@ -879,7 +966,7 @@ export default function UsersPage() {
           </div>
 
           <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[800px]">
+          <table className="w-full min-w-[960px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="w-10 px-4 py-3">
@@ -894,6 +981,8 @@ export default function UsersPage() {
                   )}
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Họ tên</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Mã GV</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Cơ sở</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Biệt danh</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Vai trò</th>
@@ -926,6 +1015,16 @@ export default function UsersPage() {
                         <span className="ml-2 text-xs text-primary-600">(Bạn)</span>
                       )}
                     </td>
+                    <td className="px-4 py-4 text-sm text-gray-500 font-mono">
+                      {user.teacher_code ? (
+                        user.teacher_code
+                      ) : (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                          Thiếu
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-500">{user.campus_code || '—'}</td>
                     <td className="px-4 py-4 text-sm text-gray-500">
                       {user.nickname ? (
                         user.nickname

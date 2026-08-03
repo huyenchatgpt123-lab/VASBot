@@ -31,6 +31,8 @@ export const adminApi = {
     role: string;
     department_id?: number;
     position_id?: number;
+    teacher_code?: string;
+    campus_id?: number;
   }) => {
     const res = await api.post('/admin/users', data);
     return res.data;
@@ -43,6 +45,8 @@ export const adminApi = {
     role?: string;
     department_id?: number;
     position_id?: number;
+    teacher_code?: string | null;
+    campus_id?: number | null;
   }) => {
     const res = await api.put(`/admin/users/${id}`, data);
     return res.data;
@@ -57,7 +61,7 @@ export const adminApi = {
     const res = await api.post('/admin/users/import-excel', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return res.data as { message: string; created: number; skipped: number; errors: string[] };
+    return res.data as { message: string; created: number; updated: number; skipped: number; errors: string[] };
   },
   getPositions: async (): Promise<Position[]> => {
     const res = await api.get('/admin/positions');

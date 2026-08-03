@@ -57,6 +57,15 @@ class UserRepository:
             query = query.filter(User.id != exclude_id)
         return query.first() is not None
 
+    def get_by_teacher_code(self, code: str, exclude_id: Optional[int] = None) -> Optional[User]:
+        if not code or not code.strip():
+            return None
+        normalized = code.strip().upper()
+        query = self.db.query(User).filter(User.teacher_code == normalized)
+        if exclude_id is not None:
+            query = query.filter(User.id != exclude_id)
+        return query.first()
+
     def get_all(self) -> List[User]:
         return (
             self.db.query(User)
@@ -119,12 +128,19 @@ class UserRepository:
         user = self.get_by_id(user_id)
         if not user:
             return None
+        nullable_fields = frozenset({
+            "nickname", "teacher_code", "campus_id",
+            "department", "department_id", "position", "position_id",
+        })
         for key, value in kwargs.items():
-            if value is not None and hasattr(user, key):
-                if key == "role":
-                    setattr(user, key, UserRole(value))
-                else:
-                    setattr(user, key, value)
+            if not hasattr(user, key):
+                continue
+            if value is None and key not in nullable_fields:
+                continue
+            if key == "role":
+                setattr(user, key, UserRole(value))
+            else:
+                setattr(user, key, value)
         self.db.commit()
         return self.get_by_id(user_id)
 

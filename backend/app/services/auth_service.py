@@ -36,6 +36,17 @@ class AuthService:
         if not nickname:
             data = data.model_copy(update={"nickname": None})
 
+        if data.teacher_code:
+            code = data.teacher_code.strip().upper()
+            if self.user_repo.get_by_teacher_code(code):
+                raise ValueError(f"Mã GV '{code}' đã được sử dụng")
+            data = data.model_copy(update={"teacher_code": code})
+
+        if data.campus_id:
+            from app.repositories.campus_repository import CampusRepository
+            if not CampusRepository(self.db).get_by_id(data.campus_id):
+                raise ValueError("Cơ sở không tồn tại")
+
         user = self.user_repo.create(data, hash_password(data.password))
         return user
 

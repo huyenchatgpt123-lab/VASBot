@@ -17,6 +17,7 @@ from app.repositories.user_repository import UserRepository
 from app.repositories.position_repository import PositionRepository
 from app.repositories.department_repository import DepartmentRepository
 from app.models.user import User
+from app.repositories.campus_repository import CampusRepository
 from app.utils.auth import require_admin, hash_password
 from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
 from app.utils.user_serializer import serialize_user
@@ -137,6 +138,30 @@ def update_user(
                     detail=f"Biệt danh '{nickname}' đã được sử dụng",
                 )
             update_fields["nickname"] = nickname
+
+    unset_fields = data.model_dump(exclude_unset=True)
+    if "teacher_code" in unset_fields:
+        code = (data.teacher_code or "").strip().upper() or None
+        if code:
+            existing_code = db.query(User).filter(
+                User.teacher_code == code, User.id != user_id
+            ).first()
+            if existing_code:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Mã GV '{code}' đã được sử dụng",
+                )
+        update_fields["teacher_code"] = code
+    if "campus_id" in unset_fields:
+        campus_id = data.campus_id
+        if campus_id:
+            campus = CampusRepository(db).get_by_id(campus_id)
+            if not campus:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cơ sở không tồn tại",
+                )
+        update_fields["campus_id"] = campus_id
 
     updated = repo.update(user_id, **update_fields)
     if "nickname" in update_fields:
@@ -341,7 +366,12 @@ async def import_users_excel(
 
     service = AuthService(db)
     repo = UserRepository(db)
+    dept_repo = DepartmentRepository(db)
+    pos_repo = PositionRepository(db)
+    campus_repo = CampusRepository(db)
+    all_campuses = campus_repo.get_all()
     created = 0
+    updated = 0
     skipped = 0
     errors = []
 
@@ -383,17 +413,65 @@ async def import_users_excel(
 
         existing = repo.get_by_email(email)
         if existing:
-            errors.append(f"Dòng {i}: email {email} đã tồn tại")
-            skipped += 1
+            update_fields: dict = {}
+            if name and name != existing.name:
+                update_fields["name"] = name
+
+            if parsed.get("department"):
+                dept = dept_repo.resolve_by_name(parsed["department"])
+                if dept:
+                    update_fields["department_id"] = dept.id
+                    update_fields["department"] = dept.name
+
+            if parsed.get("position"):
+                pos = pos_repo.resolve_by_name(parsed["position"])
+                if pos:
+                    update_fields["position_id"] = pos.id
+                    update_fields["position"] = pos.name
+
+            teacher_code = parsed.get("teacher_code")
+            if teacher_code:
+                existing_code = db.query(User).filter(
+                    User.teacher_code == teacher_code, User.id != existing.id
+                ).first()
+                if existing_code:
+                    errors.append(f"Dòng {i}: mã GV '{teacher_code}' đã tồn tại")
+                    skipped += 1
+                    continue
+                update_fields["teacher_code"] = teacher_code
+
+            campus_code = parsed.get("campus")
+            if campus_code:
+                campus = next(
+                    (c for c in all_campuses if c.code.upper() == campus_code),
+                    None,
+                )
+                if not campus:
+                    errors.append(f"Dòng {i}: cơ sở '{campus_code}' không tồn tại")
+                    skipped += 1
+                    continue
+                update_fields["campus_id"] = campus.id
+
+            if nickname:
+                if repo.nickname_exists(nickname, exclude_id=existing.id):
+                    errors.append(f"Dòng {i}: biệt danh '{nickname}' đã tồn tại")
+                    skipped += 1
+                    continue
+                update_fields["nickname"] = nickname
+
+            if update_fields:
+                repo.update(existing.id, **update_fields)
+                updated += 1
+            else:
+                skipped += 1
             continue
 
         try:
             campus_id = None
             campus_code = parsed.get("campus")
             if campus_code:
-                from app.repositories.campus_repository import CampusRepository
                 campus = next(
-                    (c for c in CampusRepository(db).get_all() if c.code.upper() == campus_code),
+                    (c for c in all_campuses if c.code.upper() == campus_code),
                     None,
                 )
                 if not campus:
@@ -429,8 +507,9 @@ async def import_users_excel(
             skipped += 1
 
     return {
-        "message": f"Import hoàn tất: {created} người dùng được tạo, {skipped} bị bỏ qua",
+        "message": f"Import hoàn tất: {created} tạo mới, {updated} cập nhật, {skipped} bỏ qua",
         "created": created,
+        "updated": updated,
         "skipped": skipped,
         "errors": errors[:50],
     }
