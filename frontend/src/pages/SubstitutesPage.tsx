@@ -649,7 +649,7 @@ export default function SubstitutesPage() {
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900">Import thời khóa biểu</h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                File: Mã GV, Họ tên, Cơ sở, Thứ, Tiết (1–8), Lớp
+                Hỗ trợ file lưới (Mã GV, Cơ sở, Giáo viên, Buổi dạy, Thứ 2–6) hoặc bảng phẳng (Mã GV, Cơ sở, Thứ, Tiết, Lớp).
               </p>
             </div>
             <div className="px-5 py-4 space-y-3">
