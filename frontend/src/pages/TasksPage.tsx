@@ -32,6 +32,15 @@ const STATUS_TAG_COLORS: Record<string, string> = {
 type ViewMode = 'mine' | 'plan' | 'person' | 'manual';
 type SummaryFilter = '' | 'overdue' | 'pending' | 'in_progress' | 'completed';
 
+function formatAbsentForUser(
+  name: string | null | undefined,
+  department: string | null | undefined,
+): string {
+  if (!name) return '—';
+  const base = `GV ${name}`;
+  return department ? `${base} · ${department}` : base;
+}
+
 interface TaskGroup {
   title: string;
   deadline: string | null;
@@ -1089,7 +1098,7 @@ export default function TasksPage() {
                   {item.campus_code ? ` · ${item.campus_code}` : ''}
                 </span>
                 <span className="text-xs text-gray-500 sm:ml-auto">
-                  Thay {item.absent_teacher_name || '—'}
+                  Thay {formatAbsentForUser(item.absent_teacher_name, item.absent_teacher_department)}
                 </span>
               </li>
             ))}

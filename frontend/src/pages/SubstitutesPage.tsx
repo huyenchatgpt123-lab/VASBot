@@ -87,6 +87,11 @@ type RowPick = AbsentPeriodItem & {
   substitute_teacher_name: string | null;
 };
 
+function formatGvName(name: string | null | undefined): string {
+  if (!name) return '—';
+  return `GV ${name}`;
+}
+
 export default function SubstitutesPage() {
   const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
   const [campusId, setCampusId] = useState<number | ''>('');
@@ -599,8 +604,8 @@ export default function SubstitutesPage() {
                                   className="w-full text-left rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2 py-1.5"
                                 >
                                   <span className="block font-medium text-gray-900 break-words">{a.class_name}</span>
-                                  <span className="block text-[11px] text-amber-900 truncate">{a.substitute_teacher_name || '—'}</span>
-                                  <span className="block text-[10px] text-gray-500 truncate">thay {a.absent_teacher_name || '—'}</span>
+                                  <span className="block text-[11px] text-amber-900 truncate">{formatGvName(a.substitute_teacher_name)}</span>
+                                  <span className="block text-[10px] text-gray-500 truncate">thay {formatGvName(a.absent_teacher_name)}</span>
                                 </button>
                               ))}
                             </div>
@@ -632,7 +637,7 @@ export default function SubstitutesPage() {
                             <span className="text-primary-700 font-semibold mr-2">{a.period_label}</span>
                             <span className="text-gray-900">{a.class_name}</span>
                             <span className="block text-xs text-amber-800 mt-0.5">
-                              {a.substitute_teacher_name} thay {a.absent_teacher_name}
+                              {formatGvName(a.substitute_teacher_name)} thay {formatGvName(a.absent_teacher_name)}
                             </span>
                           </button>
                         </li>
@@ -1026,8 +1031,8 @@ export default function SubstitutesPage() {
               <p><span className="text-gray-500">Tiết:</span> {detail.period_label}</p>
               <p><span className="text-gray-500">Lớp:</span> {detail.class_name}</p>
               <p><span className="text-gray-500">Cơ sở:</span> {detail.campus_code || '—'}</p>
-              <p><span className="text-gray-500">GV nghỉ:</span> {detail.absent_teacher_name}</p>
-              <p><span className="text-gray-500">GV dạy thay:</span> {detail.substitute_teacher_name}</p>
+              <p><span className="text-gray-500">GV nghỉ:</span> {formatGvName(detail.absent_teacher_name)}</p>
+              <p><span className="text-gray-500">GV dạy thay:</span> {formatGvName(detail.substitute_teacher_name)}</p>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex justify-between gap-2">
               <button type="button" onClick={() => handleCancel(detail.id)} className="px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">

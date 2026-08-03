@@ -75,6 +75,7 @@ class SubstituteAssignmentResponse(BaseModel):
     campus_code: Optional[str] = None
     absent_teacher_id: int
     absent_teacher_name: Optional[str] = None
+    absent_teacher_department: Optional[str] = None
     substitute_teacher_id: Optional[int] = None
     substitute_teacher_name: Optional[str] = None
     status: str

@@ -12,6 +12,7 @@ export type SubstituteAssignment = {
   campus_code?: string | null;
   absent_teacher_id: number;
   absent_teacher_name?: string | null;
+  absent_teacher_department?: string | null;
   substitute_teacher_id?: number | null;
   substitute_teacher_name?: string | null;
   status: string;

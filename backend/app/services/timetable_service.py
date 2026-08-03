@@ -67,6 +67,9 @@ class TimetableService:
             "campus_code": item.campus.code if item.campus else None,
             "absent_teacher_id": item.absent_teacher_id,
             "absent_teacher_name": item.absent_teacher.name if item.absent_teacher else None,
+            "absent_teacher_department": (
+                item.absent_teacher.department if item.absent_teacher else None
+            ),
             "substitute_teacher_id": item.substitute_teacher_id,
             "substitute_teacher_name": (
                 item.substitute_teacher.name if item.substitute_teacher else None
