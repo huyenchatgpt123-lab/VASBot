@@ -524,7 +524,7 @@ export default function UsersPage() {
               ))}
             </select>
             <input
-              placeholder="Mã GV (cho TKB / dạy thay)"
+              placeholder="Mã GV (để trống = tự sinh GV001…)"
               value={form.teacher_code}
               onChange={(e) => setForm({ ...form, teacher_code: e.target.value.toUpperCase() })}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none uppercase"
@@ -536,7 +536,7 @@ export default function UsersPage() {
             >
               <option value="">-- Chọn cơ sở --</option>
               {campuses.map((c) => (
-                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+                <option key={c.id} value={c.id}>{c.code}</option>
               ))}
             </select>
             <div className="md:col-span-2 flex gap-3">
@@ -559,8 +559,8 @@ export default function UsersPage() {
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 break-words">
         File Excel cần các cột:{' '}
         <strong>Họ tên, Email, Mật khẩu, Vai trò, Phòng ban, Biệt danh, Chức vụ, Mã GV, Cơ sở</strong>.
-        {' '}Cột <strong>Mã GV</strong> và <strong>Cơ sở</strong> (mã cơ sở, VD: CS1) cần khớp TKB import.
-        Email đã tồn tại sẽ được <strong>cập nhật</strong> mã GV, cơ sở, tổ, chức vụ.
+        {' '}Cột <strong>Mã GV</strong> để trống sẽ tự sinh <strong>GV001, GV002…</strong>; có sẵn thì giữ nguyên.
+        Email đã tồn tại sẽ được <strong>cập nhật</strong> (không tự gán mã cho user cũ thiếu mã).
         {' '}
         <a
           href="/mau_danh_sach_giao_vien.xlsx"
@@ -813,7 +813,7 @@ export default function UsersPage() {
           <option value="">Tất cả cơ sở</option>
           <option value="none">Chưa có cơ sở</option>
           {campuses.map((c) => (
-            <option key={c.id} value={String(c.id)}>{c.code} — {c.name}</option>
+            <option key={c.id} value={String(c.id)}>{c.code}</option>
           ))}
         </select>
         <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap">

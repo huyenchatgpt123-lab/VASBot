@@ -200,15 +200,12 @@ class TimetableService:
 
     # ---- import ----
 
-    def import_excel(self, content: bytes, campus_id: int) -> dict:
-        campus = self.campus_repo.get_by_id(campus_id)
-        if not campus:
-            raise ValueError("Cơ sở không tồn tại")
-
+    def import_excel(self, content: bytes) -> dict:
         parsed, parse_errors = parse_timetable_excel(content)
         if not parsed and parse_errors:
             raise ValueError(parse_errors[0])
 
+        campus_by_code = {c.code.upper(): c for c in self.campus_repo.get_all()}
         users = self.repo.list_users_for_match()
         code_map = {
             (u.teacher_code or "").upper(): u
@@ -222,11 +219,14 @@ class TimetableService:
         matched_ids: set = set()
 
         for row in parsed:
-            # Campus in file is optional; if present must match selected campus
-            if row["campus"] and row["campus"] != campus.code.upper():
-                errors.append(
-                    f"Dòng {row['row']}: cơ sở '{row['campus']}' khác cơ sở đang import ({campus.code})"
-                )
+            campus_code = (row.get("campus") or "").strip().upper()
+            if not campus_code:
+                errors.append(f"Dòng {row['row']}: thiếu cơ sở")
+                continue
+
+            campus = campus_by_code.get(campus_code)
+            if not campus:
+                errors.append(f"Dòng {row['row']}: cơ sở '{campus_code}' không tồn tại")
                 continue
 
             teacher = None
@@ -245,32 +245,33 @@ class TimetableService:
                 continue
 
             matched_ids.add(teacher.id)
-            ready.append({**row, "teacher_id": teacher.id})
+            ready.append({**row, "teacher_id": teacher.id, "campus_id": campus.id, "campus_code": campus.code})
 
         if not ready:
             return {
-                "campus_id": campus.id,
-                "campus_code": campus.code,
+                "campuses": [],
                 "slots_created": 0,
+                "slots_updated": 0,
                 "classes_created": 0,
                 "teachers_matched": 0,
                 "teachers_unmatched": unmatched,
                 "errors": errors[:50],
-                "message": "Không import được tiết nào — kiểm tra mã GV / tên",
+                "message": "Không import được tiết nào — kiểm tra mã GV / tên / cơ sở",
             }
-
-        # Replace current timetable for this campus (option 3C)
-        self.repo.delete_slots_for_campus(campus_id)
 
         classes_created = 0
         class_cache: dict = {}
         created = 0
+        updated = 0
+        campuses_affected: set = set()
 
         for row in ready:
-            class_key = row["class_name"]
+            campus_id = row["campus_id"]
+            campuses_affected.add(row["campus_code"])
+            class_key = (campus_id, row["class_name"])
             if class_key not in class_cache:
                 room, is_new = self.repo.get_or_create_class(
-                    name=class_key,
+                    name=row["class_name"],
                     campus_id=campus_id,
                     grade=row.get("grade"),
                 )
@@ -279,43 +280,50 @@ class TimetableService:
                     classes_created += 1
             room = class_cache[class_key]
 
-            # Skip if class conflict within import batch (two teachers same class/slot)
-            if self.repo.find_class_conflict(room.id, row["day"], row["period"]):
-                errors.append(
-                    f"Dòng {row['row']}: lớp {class_key} đã có tiết Thứ {row['day']} tiết {row['period']}"
-                )
-                continue
-            if self.repo.find_teacher_conflict(row["teacher_id"], row["day"], row["period"]):
-                errors.append(
-                    f"Dòng {row['row']}: giáo viên trùng tiết Thứ {row['day']} tiết {row['period']}"
-                )
-                continue
-
-            self.repo.create_slot(
+            slot, is_new, is_updated = self.repo.upsert_slot(
                 teacher_id=row["teacher_id"],
                 class_id=room.id,
                 campus_id=campus_id,
                 day_of_week=row["day"],
                 period=row["period"],
             )
-            created += 1
+
+            if slot is None:
+                errors.append(
+                    f"Dòng {row['row']}: xung đột tiết Thứ {row['day']} tiết {row['period']} "
+                    f"(GV và lớp đã có tiết khác nhau)"
+                )
+                continue
+
+            if is_new:
+                created += 1
+            elif is_updated:
+                updated += 1
 
             teacher = next((u for u in users if u.id == row["teacher_id"]), None)
             if teacher and teacher.campus_id is None:
                 teacher.campus_id = campus_id
 
         self.db.commit()
+        campus_list = sorted(campuses_affected)
+        campus_label = ", ".join(campus_list) if campus_list else "—"
+        parts = []
+        if created:
+            parts.append(f"{created} tiết mới")
+        if updated:
+            parts.append(f"{updated} tiết cập nhật")
+        summary = " và ".join(parts) if parts else "0 tiết"
         return {
-            "campus_id": campus.id,
-            "campus_code": campus.code,
+            "campuses": campus_list,
             "slots_created": created,
+            "slots_updated": updated,
             "classes_created": classes_created,
             "teachers_matched": len(matched_ids),
             "teachers_unmatched": unmatched,
             "errors": errors[:50],
             "message": (
-                f"Đã import {created} tiết cho {campus.code}"
-                + (f" (tạo mới {classes_created} lớp)" if classes_created else "")
+                f"Đã import {summary} ({campus_label})"
+                + (f" — tạo mới {classes_created} lớp" if classes_created else "")
             ),
         }
 

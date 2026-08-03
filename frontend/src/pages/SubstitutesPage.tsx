@@ -98,7 +98,6 @@ export default function SubstitutesPage() {
 
   // Import TKB
   const [showImport, setShowImport] = useState(false);
-  const [importCampusId, setImportCampusId] = useState<number | ''>('');
   const [importResult, setImportResult] = useState<TimetableImportResult | null>(null);
   const { progress, start, finish, fail } = useOperationProgress();
 
@@ -141,8 +140,6 @@ export default function SubstitutesPage() {
   useEffect(() => {
     documentsApi.getCampuses().then((res) => {
       setCampuses(res.campuses);
-      // Màn chính mặc định "Tất cả cơ sở" — không tự chọn campus đầu.
-      if (res.campuses.length && importCampusId === '') setImportCampusId(res.campuses[0].id);
     }).catch(() => {});
   }, []);
 
@@ -290,26 +287,20 @@ export default function SubstitutesPage() {
 
   const openImport = () => {
     setImportResult(null);
-    if (campusId) setImportCampusId(campusId);
-    else if (campuses[0]) setImportCampusId(campuses[0].id);
     setShowImport(true);
   };
 
   const handleImport = async (file: File) => {
-    if (!importCampusId) {
-      alert('Chọn cơ sở trước khi import');
-      return;
-    }
-    const code = campuses.find((c) => c.id === importCampusId)?.code || String(importCampusId);
     if (!confirm(
-      `Import sẽ THAY TOÀN BỘ thời khóa biểu hiện tại của cơ sở ${code}. Tiếp tục với "${file.name}"?`,
+      `Import TKB từ "${file.name}"?\n\nMỗi dòng cần có cột Cơ sở (VA1, VA3, EMC…). `
+      + `Tiết trùng sẽ được cập nhật, không xóa TKB cũ.`,
     )) {
       return;
     }
     start('Đang import thời khóa biểu...');
     setImportResult(null);
     try {
-      const result = await substitutesApi.importTimetable(file, Number(importCampusId));
+      const result = await substitutesApi.importTimetable(file);
       setImportResult(result);
       await finish();
       await loadBoard();
@@ -653,26 +644,14 @@ export default function SubstitutesPage() {
               </p>
             </div>
             <div className="px-5 py-4 space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cơ sở</label>
-                <select
-                  value={importCampusId}
-                  onChange={(e) => setImportCampusId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  disabled={progress.visible}
-                >
-                  {campuses.map((c) => (
-                    <option key={c.id} value={c.id}>{c.code}</option>
-                  ))}
-                </select>
-              </div>
               <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                Import sẽ <strong>xóa và thay</strong> toàn bộ TKB của cơ sở đang chọn.
+                File có thể chứa <strong>nhiều cơ sở</strong> (VA1, VA3, EMC…) — mỗi dòng bắt buộc có cột Cơ sở.
+                Tiết đã có sẽ được <strong>cập nhật</strong>, không xóa toàn bộ TKB.
               </p>
               <input
                 type="file"
                 accept=".xlsx,.xls"
-                disabled={progress.visible || !importCampusId}
+                disabled={progress.visible}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) handleImport(f);

@@ -36,11 +36,14 @@ class AuthService:
         if not nickname:
             data = data.model_copy(update={"nickname": None})
 
-        if data.teacher_code:
-            code = data.teacher_code.strip().upper()
+        code = (data.teacher_code or "").strip().upper()
+        if code:
             if self.user_repo.get_by_teacher_code(code):
                 raise ValueError(f"Mã GV '{code}' đã được sử dụng")
             data = data.model_copy(update={"teacher_code": code})
+        else:
+            from app.utils.teacher_code import generate_next_teacher_code
+            data = data.model_copy(update={"teacher_code": generate_next_teacher_code(self.db)})
 
         if data.campus_id:
             from app.repositories.campus_repository import CampusRepository

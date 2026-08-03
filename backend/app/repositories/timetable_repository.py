@@ -130,6 +130,47 @@ class TimetableRepository:
             q = q.filter(TimetableSlot.id != exclude_id)
         return q.first()
 
+    def upsert_slot(
+        self,
+        *,
+        teacher_id: int,
+        class_id: int,
+        campus_id: int,
+        day_of_week: int,
+        period: int,
+    ) -> tuple[Optional[TimetableSlot], bool, bool]:
+        """Return (slot, created, updated). slot is None on unresolvable conflict."""
+        teacher_slot = self.find_teacher_conflict(teacher_id, day_of_week, period)
+        class_slot = self.find_class_conflict(class_id, day_of_week, period)
+
+        if teacher_slot and class_slot and teacher_slot.id != class_slot.id:
+            return None, False, False
+
+        target = teacher_slot or class_slot
+        if target:
+            changed = False
+            if target.teacher_id != teacher_id:
+                target.teacher_id = teacher_id
+                changed = True
+            if target.class_id != class_id:
+                target.class_id = class_id
+                changed = True
+            if target.campus_id != campus_id:
+                target.campus_id = campus_id
+                changed = True
+            if changed:
+                self.db.flush()
+            return target, False, changed
+
+        slot = self.create_slot(
+            teacher_id=teacher_id,
+            class_id=class_id,
+            campus_id=campus_id,
+            day_of_week=day_of_week,
+            period=period,
+        )
+        return slot, True, False
+
     # ---- users lookup for import ----
 
     def get_user_by_teacher_code(self, code: str) -> Optional[User]:

@@ -79,9 +79,9 @@ export type TimetableSlot = {
 };
 
 export type TimetableImportResult = {
-  campus_id: number;
-  campus_code: string;
+  campuses: string[];
   slots_created: number;
+  slots_updated: number;
   classes_created: number;
   teachers_matched: number;
   teachers_unmatched: string[];
@@ -161,10 +161,9 @@ export const substitutesApi = {
     return res.data;
   },
 
-  importTimetable: async (file: File, campusId: number): Promise<TimetableImportResult> => {
+  importTimetable: async (file: File): Promise<TimetableImportResult> => {
     const form = new FormData();
     form.append('file', file);
-    form.append('campus_id', String(campusId));
     const res = await api.post('/substitutes/timetable/import', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

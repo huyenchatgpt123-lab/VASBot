@@ -21,6 +21,7 @@ from app.repositories.campus_repository import CampusRepository
 from app.utils.auth import require_admin, hash_password
 from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
 from app.utils.user_serializer import serialize_user
+from app.utils.teacher_code import TeacherCodeAllocator
 from app.models.user import User
 from app.schemas.position import PositionCreate, PositionUpdate, PositionResponse
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
@@ -382,6 +383,7 @@ async def import_users_excel(
     column_map = build_column_map(all_rows[0])
     data_rows = all_rows[1:]
     seen_nicknames: set[str] = set()
+    code_allocator = TeacherCodeAllocator(db)
 
     for i, row in enumerate(data_rows, start=2):
         if is_empty_row(row):
@@ -487,6 +489,8 @@ async def import_users_excel(
                     errors.append(f"Dòng {i}: mã GV '{teacher_code}' đã tồn tại")
                     skipped += 1
                     continue
+            else:
+                teacher_code = code_allocator.allocate()
 
             user_data = UserCreate(
                 name=name,

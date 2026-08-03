@@ -1,7 +1,7 @@
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -239,7 +239,6 @@ def delete_timetable_slot(
 
 @router.post("/timetable/import", response_model=TimetableImportResult)
 async def import_timetable(
-    campus_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_bgh),
@@ -251,7 +250,7 @@ async def import_timetable(
         )
     content = await file.read()
     try:
-        return TimetableService(db).import_excel(content, campus_id)
+        return TimetableService(db).import_excel(content)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:

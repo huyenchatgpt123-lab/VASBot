@@ -53,9 +53,9 @@ class TimetableSlotUpdate(BaseModel):
 
 
 class TimetableImportResult(BaseModel):
-    campus_id: int
-    campus_code: str
+    campuses: List[str] = []
     slots_created: int
+    slots_updated: int = 0
     classes_created: int
     teachers_matched: int
     teachers_unmatched: List[str] = []
