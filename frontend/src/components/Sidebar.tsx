@@ -21,7 +21,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
-  { path: '/bgh-calendar', label: 'Thời gian biểu', icon: '🗓️' },
+  { path: '/bgh-calendar', label: 'Lịch hoạt động', icon: '🗓️' },
   { path: '/timetable', label: 'Thời khóa biểu', icon: '📋', hideForBgh: true, requiresTimetableAccess: true, showSubBadge: true },
   { path: '/substitutes', label: 'Dạy thay', icon: '🔄', bghOnly: true },
   { path: '/documents', label: 'Tài liệu', icon: '📄' },

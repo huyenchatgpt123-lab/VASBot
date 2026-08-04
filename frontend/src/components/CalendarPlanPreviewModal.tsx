@@ -63,14 +63,14 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
     setError('');
 
     if (!includeInCalendar) {
-      if (!confirm('Kế hoạch này sẽ KHÔNG hiện trên Thời gian biểu. Tiếp tục?')) return;
+      if (!confirm('Kế hoạch này sẽ KHÔNG hiện trên Lịch hoạt động. Tiếp tục?')) return;
     } else {
       if (!title.trim()) {
         setError('Cần có tiêu đề sự kiện.');
         return;
       }
       if (!startDate) {
-        setError('Cần chọn ngày bắt đầu để đưa kế hoạch lên Thời gian biểu.');
+        setError('Cần chọn ngày bắt đầu để đưa kế hoạch lên Lịch hoạt động.');
         return;
       }
       if (endDate && endDate < startDate) {
@@ -109,7 +109,7 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
       onSaved();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(detail || 'Không thể lưu sự kiện lên Thời gian biểu.');
+      setError(detail || 'Không thể lưu sự kiện lên Lịch hoạt động.');
     } finally {
       setSaving(false);
     }
@@ -150,7 +150,7 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
               className="mt-0.5 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             <span className="min-w-0">
-              <span className="block text-sm font-medium text-gray-900">Đưa kế hoạch lên Thời gian biểu</span>
+              <span className="block text-sm font-medium text-gray-900">Đưa kế hoạch lên Lịch hoạt động</span>
               <span className="block text-xs text-gray-500 mt-0.5">
                 Bỏ chọn nếu trích xuất sai hoặc kế hoạch này không cần hiện trên lịch BGH. Sự kiện đã
                 lưu trước đó của tài liệu sẽ được xóa khỏi lịch.
@@ -161,7 +161,7 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
           {preview.needs_review && includeInCalendar && !startDate && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
               Không tìm thấy ngày/giờ trong file — hãy nhập ngày bắt đầu bên dưới, hoặc bỏ chọn đưa
-              lên Thời gian biểu.
+              lên Lịch hoạt động.
             </p>
           )}
 
@@ -341,8 +341,8 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
             {saving
               ? 'Đang lưu...'
               : includeInCalendar
-                ? 'Lưu lên Thời gian biểu'
-                : 'Bỏ khỏi Thời gian biểu'}
+                ? 'Lưu lên Lịch hoạt động'
+                : 'Bỏ khỏi Lịch hoạt động'}
           </button>
         </div>
       </div>

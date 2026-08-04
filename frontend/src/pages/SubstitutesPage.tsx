@@ -11,6 +11,7 @@ import {
 } from '../api/substitutes';
 import OperationProgressBar from '../components/OperationProgressBar';
 import { useOperationProgress } from '../hooks/useOperationProgress';
+import { useAuth } from '../context/AuthContext';
 
 const DAYS = [
   { value: 2, label: 'Thứ 2' },
@@ -93,6 +94,7 @@ function formatGvName(name: string | null | undefined): string {
 }
 
 export default function SubstitutesPage() {
+  const { isAdmin } = useAuth();
   const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
   const [campusId, setCampusId] = useState<number | ''>('');
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
@@ -489,31 +491,29 @@ export default function SubstitutesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dạy thay</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Lịch dạy thay đã xếp — chỉ xem. Import TKB hoặc tạo lịch bằng nút bên phải.
+            Lịch dạy thay đã xếp — chỉ xem.
+            {isAdmin ? ' Import TKB hoặc tạo lịch bằng nút bên phải.' : ' Tạo lịch bằng nút bên phải.'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full sm:w-auto">
-          <a
-            href="/mau_thoi_khoa_bieu_luoi.xlsx"
-            download
-            className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium text-center"
-          >
-            Mẫu lưới
-          </a>
-          <a
-            href="/mau_thoi_khoa_bieu.xlsx"
-            download
-            className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium text-center"
-          >
-            Mẫu phẳng
-          </a>
-          <button
-            type="button"
-            onClick={openImport}
-            className="px-4 py-2 border border-primary-300 text-primary-700 bg-white hover:bg-primary-50 rounded-lg text-sm font-medium w-full sm:w-auto"
-          >
-            Import Excel TKB
-          </button>
+          {isAdmin && (
+            <>
+              <a
+                href="/mau_thoi_khoa_bieu_luoi.xlsx"
+                download
+                className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium text-center"
+              >
+                Tải mẫu
+              </a>
+              <button
+                type="button"
+                onClick={openImport}
+                className="px-4 py-2 border border-primary-300 text-primary-700 bg-white hover:bg-primary-50 rounded-lg text-sm font-medium w-full sm:w-auto"
+              >
+                Import TKB
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={openCreate}
@@ -657,9 +657,9 @@ export default function SubstitutesPage() {
         <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900">Import thời khóa biểu</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Import TKB</h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                Hỗ trợ file lưới (Mã GV, Cơ sở, Giáo viên, Buổi dạy, Thứ 2–6) hoặc bảng phẳng (Mã GV, Cơ sở, Thứ, Tiết, Lớp).
+                Dùng file lưới (Mã GV, Cơ sở, Giáo viên, Buổi dạy, Thứ 2–6). Tải mẫu trước khi import.
               </p>
             </div>
             <div className="px-5 py-4 space-y-3">

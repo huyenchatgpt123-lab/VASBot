@@ -283,8 +283,13 @@ def delete_timetable_slot(
 async def import_timetable(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(get_current_user),
 ):
+    if not is_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ Admin mới được import thời khóa biểu",
+        )
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

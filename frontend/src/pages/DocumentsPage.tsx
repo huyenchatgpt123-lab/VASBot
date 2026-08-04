@@ -293,7 +293,7 @@ export default function DocumentsPage() {
     } catch (err: unknown) {
       failProgress();
       const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
-      alert(typeof detail === 'string' ? detail : 'Trích lên Thời gian biểu thất bại.');
+      alert(typeof detail === 'string' ? detail : 'Trích lên Lịch hoạt động thất bại.');
     } finally {
       setReExtractingId(null);
     }
@@ -319,7 +319,7 @@ export default function DocumentsPage() {
       return;
     }
     if (!hasReExtractRight) {
-      alert('Bạn không có quyền trích lên Thời gian biểu.');
+      alert('Bạn không có quyền trích lên Lịch hoạt động.');
       return;
     }
     await runReExtractCalendar(reExtractDocId);
@@ -556,7 +556,7 @@ export default function DocumentsPage() {
                           onClick={() => openReExtractChooser(doc.id)}
                           disabled={reExtractingId === doc.id}
                           className="text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50"
-                          title="Trích lại công việc hoặc Thời gian biểu"
+                          title="Trích lại công việc hoặc Lịch hoạt động"
                         >
                           {reExtractingId === doc.id ? '...' : 'Trích lại'}
                         </button>
@@ -753,7 +753,7 @@ export default function DocumentsPage() {
                   className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 shrink-0"
                 />
                 <span className="text-sm text-gray-700">
-                  Đưa vào Thời gian biểu
+                  Đưa vào Lịch hoạt động
                   <span className="text-gray-400 font-normal"> — lịch BGH</span>
                 </span>
               </label>
@@ -868,7 +868,7 @@ export default function DocumentsPage() {
                   onClick={() => handleReExtractChoice('calendar')}
                   className="w-full text-left rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50/50 px-4 py-3 disabled:opacity-50"
                 >
-                  <p className="text-sm font-semibold text-gray-900">Trích lên Thời gian biểu</p>
+                  <p className="text-sm font-semibold text-gray-900">Trích lên Lịch hoạt động</p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     AI lấy tiêu đề / ngày giờ → đưa hoặc cập nhật trên lịch BGH
                   </p>

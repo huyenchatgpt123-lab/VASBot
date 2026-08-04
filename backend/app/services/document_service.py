@@ -174,7 +174,7 @@ class DocumentService:
         """
         Re-extract plan title/date/location from file.
         preview_only=True → return extracted fields without writing DB.
-        put_on_calendar=True → refresh/create calendar event (Thời gian biểu).
+        put_on_calendar=True → refresh/create calendar event (Lịch hoạt động).
         put_on_calendar=False → only update document metadata, stay off calendar.
         """
         doc = self.doc_repo.get_by_id(doc_id)
@@ -247,9 +247,9 @@ class DocumentService:
             primary = events[0] if events else None
             needs_review = bool(primary.needs_review) if primary else (put_on_calendar and not plan_event)
             if put_on_calendar and primary and primary.needs_review:
-                message = "Đã trích lên Thời gian biểu — cần chỉnh sửa ngày/giờ"
+                message = "Đã trích lên Lịch hoạt động — cần chỉnh sửa ngày/giờ"
             elif put_on_calendar:
-                message = "Đã trích xuất và đưa lên Thời gian biểu"
+                message = "Đã trích xuất và đưa lên Lịch hoạt động"
             elif plan_event or plan_title:
                 message = "Đã trích xuất lại thông tin kế hoạch"
             else:
@@ -297,7 +297,7 @@ class DocumentService:
             "event_count": 0,
             "needs_review": False,
             "preview_only": False,
-            "message": "Đã bỏ kế hoạch này khỏi Thời gian biểu",
+            "message": "Đã bỏ kế hoạch này khỏi Lịch hoạt động",
         }
 
     def confirm_plan_event(
@@ -330,7 +330,7 @@ class DocumentService:
             return self._remove_document_from_calendar(doc)
 
         if starts_at is None:
-            raise ValueError("Cần chọn ngày bắt đầu để đưa kế hoạch lên Thời gian biểu")
+            raise ValueError("Cần chọn ngày bắt đầu để đưa kế hoạch lên Lịch hoạt động")
 
         display_title = (title or doc.plan_title or doc.filename or "Kế hoạch").strip()
         slots = timeline if isinstance(timeline, list) else []
@@ -374,7 +374,7 @@ class DocumentService:
             "event_count": len(events),
             "needs_review": bool(primary.needs_review) if primary else starts_at is None,
             "preview_only": False,
-            "message": "Đã lưu sự kiện lên Thời gian biểu",
+            "message": "Đã lưu sự kiện lên Lịch hoạt động",
         }
 
     def get_all_documents(self):

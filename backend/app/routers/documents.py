@@ -203,7 +203,7 @@ def re_extract_plan_metadata(
     doc_id: int,
     put_on_calendar: bool = Query(
         True,
-        description="True = đưa/cập nhật trên Thời gian biểu; False = chỉ cập nhật metadata",
+        description="True = đưa/cập nhật trên Lịch hoạt động; False = chỉ cập nhật metadata",
     ),
     preview_only: bool = Query(
         False,
@@ -348,7 +348,7 @@ def create_plan_event(
         ends_at=created.ends_at,
         source=created.source,
         needs_review=created.needs_review,
-        message="Đã thêm sự kiện vào Thời gian biểu",
+        message="Đã thêm sự kiện vào Lịch hoạt động",
     )
 
 
