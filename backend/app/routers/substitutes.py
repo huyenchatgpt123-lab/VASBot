@@ -16,6 +16,8 @@ from app.schemas.timetable import (
     MySubstitutesResponse,
     MyTimetableSummary,
     SubstituteAssignmentResponse,
+    RejectSubstituteRequest,
+    CancelSubstituteRequest,
     AbsentPeriodsRequest,
     AbsentPeriodItem,
     SuggestTeacherItem,
@@ -186,14 +188,42 @@ def assign_batch(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@router.post("/assignments/{assignment_id}/confirm", response_model=SubstituteAssignmentResponse)
+def confirm_assignment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        return SubstituteService(db).confirm(assignment_id, actor=current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/assignments/{assignment_id}/reject", response_model=SubstituteAssignmentResponse)
+def reject_assignment(
+    assignment_id: int,
+    body: RejectSubstituteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        return SubstituteService(db).reject(
+            assignment_id, actor=current_user, reason=body.reason
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.post("/assignments/{assignment_id}/cancel", response_model=SubstituteAssignmentResponse)
 def cancel_assignment(
     assignment_id: int,
+    body: CancelSubstituteRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_bgh),
 ):
     try:
-        return SubstituteService(db).cancel(assignment_id)
+        return SubstituteService(db).cancel(assignment_id, reason=body.reason)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

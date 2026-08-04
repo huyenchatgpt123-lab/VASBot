@@ -4,7 +4,14 @@ from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.timetable import ClassRoom, TimetableSlot, SubstituteAssignment
+from app.models.timetable import (
+    ClassRoom,
+    TimetableSlot,
+    SubstituteAssignment,
+    SUB_ACTIVE_STATUSES,
+    SUB_BOARD_STATUSES,
+    SUB_STATUS_PENDING,
+)
 from app.models.user import User
 
 
@@ -195,10 +202,7 @@ class TimetableRepository:
                 joinedload(SubstituteAssignment.absent_teacher),
                 joinedload(SubstituteAssignment.substitute_teacher),
             )
-            .filter(
-                SubstituteAssignment.substitute_teacher_id == teacher_id,
-                SubstituteAssignment.status == "assigned",
-            )
+            .filter(SubstituteAssignment.substitute_teacher_id == teacher_id)
         )
         if from_date:
             q = q.filter(SubstituteAssignment.date >= from_date)
@@ -206,7 +210,7 @@ class TimetableRepository:
             q = q.filter(SubstituteAssignment.date <= to_date)
         return q.order_by(SubstituteAssignment.date, SubstituteAssignment.period).all()
 
-    def count_mine(
+    def count_mine_pending(
         self,
         teacher_id: int,
         from_date: Optional[date] = None,
@@ -214,13 +218,22 @@ class TimetableRepository:
     ) -> int:
         q = self.db.query(func.count(SubstituteAssignment.id)).filter(
             SubstituteAssignment.substitute_teacher_id == teacher_id,
-            SubstituteAssignment.status == "assigned",
+            SubstituteAssignment.status == SUB_STATUS_PENDING,
         )
         if from_date:
             q = q.filter(SubstituteAssignment.date >= from_date)
         if to_date:
             q = q.filter(SubstituteAssignment.date <= to_date)
         return int(q.scalar() or 0)
+
+    def count_mine(
+        self,
+        teacher_id: int,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+    ) -> int:
+        """Badge: số tiết chờ xác nhận."""
+        return self.count_mine_pending(teacher_id, from_date=from_date, to_date=to_date)
 
     def count_slots_for_teacher(self, teacher_id: int) -> int:
         return (
@@ -246,7 +259,7 @@ class TimetableRepository:
                 joinedload(SubstituteAssignment.substitute_teacher),
             )
             .filter(
-                SubstituteAssignment.status == "assigned",
+                SubstituteAssignment.status.in_(SUB_BOARD_STATUSES),
                 SubstituteAssignment.date >= from_date,
                 SubstituteAssignment.date <= to_date,
             )
@@ -319,7 +332,7 @@ class TimetableRepository:
             )
             .filter(
                 SubstituteAssignment.date == on_date,
-                SubstituteAssignment.status == "assigned",
+                SubstituteAssignment.status.in_(SUB_ACTIVE_STATUSES),
                 SubstituteAssignment.substitute_teacher_id.isnot(None),
             )
             .all()
@@ -334,14 +347,14 @@ class TimetableRepository:
     def count_subs_in_range(
         self, from_date: date, to_date: date
     ) -> dict:
-        """teacher_id -> count of assigned substitute lessons in [from, to]."""
+        """teacher_id -> count of active substitute lessons in [from, to]."""
         rows = (
             self.db.query(
                 SubstituteAssignment.substitute_teacher_id,
                 func.count(SubstituteAssignment.id),
             )
             .filter(
-                SubstituteAssignment.status == "assigned",
+                SubstituteAssignment.status.in_(SUB_ACTIVE_STATUSES),
                 SubstituteAssignment.substitute_teacher_id.isnot(None),
                 SubstituteAssignment.date >= from_date,
                 SubstituteAssignment.date <= to_date,
@@ -360,7 +373,7 @@ class TimetableRepository:
                 SubstituteAssignment.substitute_teacher_id == teacher_id,
                 SubstituteAssignment.date == on_date,
                 SubstituteAssignment.period == period,
-                SubstituteAssignment.status == "assigned",
+                SubstituteAssignment.status.in_(SUB_ACTIVE_STATUSES),
             )
             .first()
         )
@@ -374,7 +387,7 @@ class TimetableRepository:
                 SubstituteAssignment.class_id == class_id,
                 SubstituteAssignment.date == on_date,
                 SubstituteAssignment.period == period,
-                SubstituteAssignment.status == "assigned",
+                SubstituteAssignment.status.in_(SUB_ACTIVE_STATUSES),
             )
             .first()
         )

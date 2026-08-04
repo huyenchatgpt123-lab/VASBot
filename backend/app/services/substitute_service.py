@@ -7,15 +7,23 @@ Within a tier: fewer lessons that day, then fewer substitutes that week.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.timetable import period_label, session_for_period
+from app.models.timetable import (
+    period_label,
+    session_for_period,
+    SUB_STATUS_PENDING,
+    SUB_STATUS_CONFIRMED,
+    SUB_STATUS_REJECTED,
+    SUB_STATUS_CANCELLED,
+)
 from app.models.user import User, UserRole
 from app.repositories.timetable_repository import TimetableRepository
 from app.services.timetable_service import TimetableService
+from app.utils.permissions import is_admin
 
 
 def date_to_day_of_week(d: date) -> Optional[int]:
@@ -278,7 +286,7 @@ class SubstituteService:
                 campus_id=campus_id,
                 date=on_date,
                 period=period,
-                status="assigned",
+                status=SUB_STATUS_PENDING,
                 assigned_by_id=assigned_by_id,
             )
             taken_teacher.add(key_t)
@@ -296,17 +304,70 @@ class SubstituteService:
             "created": len(saved),
             "items": saved,
             "errors": errors,
-            "message": f"Đã xếp {len(saved)} tiết dạy thay"
+            "message": f"Đã xếp {len(saved)} tiết dạy thay (chờ GV xác nhận)"
             + (f" ({len(errors)} lỗi)" if errors else ""),
         }
 
-    def cancel(self, assignment_id: int) -> dict:
+    def _can_respond(self, item, actor: User) -> bool:
+        if is_admin(actor):
+            return True
+        return item.substitute_teacher_id == actor.id
+
+    def confirm(self, assignment_id: int, *, actor: User) -> dict:
         item = self.repo.get_assignment(assignment_id)
         if not item:
             raise ValueError("Không tìm thấy lịch dạy thay")
-        if item.status == "cancelled":
+        if not self._can_respond(item, actor):
+            raise ValueError("Bạn không có quyền xác nhận lịch này")
+        if item.status == SUB_STATUS_CANCELLED:
+            raise ValueError("Lịch đã bị hủy")
+        if item.status == SUB_STATUS_REJECTED:
+            raise ValueError("Lịch đã bị từ chối — không thể xác nhận")
+        if item.status == SUB_STATUS_CONFIRMED:
             return self.tt._format_assignment(item)
-        item.status = "cancelled"
+        if item.status != SUB_STATUS_PENDING:
+            raise ValueError("Chỉ xác nhận được lịch đang chờ")
+        item.status = SUB_STATUS_CONFIRMED
+        item.confirmed_at = datetime.now(timezone.utc)
+        item.confirmed_by_id = actor.id
+        item.rejection_reason = None
         self.db.commit()
+        return self.tt._format_assignment(self.repo.get_assignment(assignment_id))
+
+    def reject(self, assignment_id: int, *, actor: User, reason: str) -> dict:
         item = self.repo.get_assignment(assignment_id)
-        return self.tt._format_assignment(item)
+        if not item:
+            raise ValueError("Không tìm thấy lịch dạy thay")
+        if not self._can_respond(item, actor):
+            raise ValueError("Bạn không có quyền từ chối lịch này")
+        note = (reason or "").strip()
+        if len(note) < 3:
+            raise ValueError("Vui lòng nhập lý do từ chối (ít nhất 3 ký tự)")
+        if item.status == SUB_STATUS_CANCELLED:
+            raise ValueError("Lịch đã bị hủy")
+        if item.status == SUB_STATUS_CONFIRMED:
+            raise ValueError("Lịch đã xác nhận — hãy liên hệ BGH để hủy")
+        if item.status == SUB_STATUS_REJECTED:
+            return self.tt._format_assignment(item)
+        if item.status != SUB_STATUS_PENDING:
+            raise ValueError("Chỉ từ chối được lịch đang chờ")
+        item.status = SUB_STATUS_REJECTED
+        item.rejection_reason = note[:500]
+        item.confirmed_at = None
+        item.confirmed_by_id = None
+        self.db.commit()
+        return self.tt._format_assignment(self.repo.get_assignment(assignment_id))
+
+    def cancel(self, assignment_id: int, *, reason: str) -> dict:
+        item = self.repo.get_assignment(assignment_id)
+        if not item:
+            raise ValueError("Không tìm thấy lịch dạy thay")
+        note = (reason or "").strip()
+        if len(note) < 3:
+            raise ValueError("Vui lòng nhập lý do hủy (ít nhất 3 ký tự) để thông báo cho GV")
+        if item.status == SUB_STATUS_CANCELLED:
+            return self.tt._format_assignment(item)
+        item.status = SUB_STATUS_CANCELLED
+        item.cancel_reason = note[:500]
+        self.db.commit()
+        return self.tt._format_assignment(self.repo.get_assignment(assignment_id))

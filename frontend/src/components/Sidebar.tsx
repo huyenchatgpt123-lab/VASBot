@@ -91,7 +91,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     try {
       const summary = await substitutesApi.myTimetableSummary();
       setSubCount(summary.substitute_count);
-      setHasTimetableAccess(summary.has_timetable || summary.substitute_count > 0);
+      setHasTimetableAccess(
+        summary.has_timetable
+        || summary.substitute_count > 0
+        || summary.has_upcoming_substitutes,
+      );
     } catch {
       setSubCount(0);
       setHasTimetableAccess(false);

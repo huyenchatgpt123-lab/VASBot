@@ -79,6 +79,10 @@ class SubstituteAssignmentResponse(BaseModel):
     substitute_teacher_id: Optional[int] = None
     substitute_teacher_name: Optional[str] = None
     status: str
+    confirmed_at: Optional[datetime] = None
+    confirmed_by_id: Optional[int] = None
+    rejection_reason: Optional[str] = None
+    cancel_reason: Optional[str] = None
     created_at: Optional[datetime] = None
 
 
@@ -90,7 +94,16 @@ class MySubstitutesResponse(BaseModel):
 class MyTimetableSummary(BaseModel):
     has_timetable: bool
     slot_count: int = 0
-    substitute_count: int = 0
+    substitute_count: int = 0  # pending only (badge)
+    has_upcoming_substitutes: bool = False
+
+
+class RejectSubstituteRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
+class CancelSubstituteRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
 
 
 class AbsentPeriodsRequest(BaseModel):

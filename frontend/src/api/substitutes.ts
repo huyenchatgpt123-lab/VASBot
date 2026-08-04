@@ -1,5 +1,7 @@
 import api from './client';
 
+export type SubstituteStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled' | string;
+
 export type SubstituteAssignment = {
   id: number;
   date: string;
@@ -15,7 +17,11 @@ export type SubstituteAssignment = {
   absent_teacher_department?: string | null;
   substitute_teacher_id?: number | null;
   substitute_teacher_name?: string | null;
-  status: string;
+  status: SubstituteStatus;
+  confirmed_at?: string | null;
+  confirmed_by_id?: number | null;
+  rejection_reason?: string | null;
+  cancel_reason?: string | null;
   created_at?: string | null;
 };
 
@@ -138,8 +144,18 @@ export const substitutesApi = {
     return res.data;
   },
 
-  cancelAssignment: async (id: number): Promise<SubstituteAssignment> => {
-    const res = await api.post(`/substitutes/assignments/${id}/cancel`);
+  confirmAssignment: async (id: number): Promise<SubstituteAssignment> => {
+    const res = await api.post(`/substitutes/assignments/${id}/confirm`);
+    return res.data;
+  },
+
+  rejectAssignment: async (id: number, reason: string): Promise<SubstituteAssignment> => {
+    const res = await api.post(`/substitutes/assignments/${id}/reject`, { reason });
+    return res.data;
+  },
+
+  cancelAssignment: async (id: number, reason: string): Promise<SubstituteAssignment> => {
+    const res = await api.post(`/substitutes/assignments/${id}/cancel`, { reason });
     return res.data;
   },
 
@@ -161,6 +177,7 @@ export const substitutesApi = {
     has_timetable: boolean;
     slot_count: number;
     substitute_count: number;
+    has_upcoming_substitutes: boolean;
   }> => {
     const res = await api.get('/substitutes/mine/summary');
     return res.data;

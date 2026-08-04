@@ -34,3 +34,25 @@ def sync_timetable_schema(db: Session, engine) -> None:
 
     # Tables classes / timetable_slots / substitute_assignments are created via
     # Base.metadata.create_all when models are imported before startup.
+
+    if inspector.has_table("substitute_assignments"):
+        sub_columns = {c["name"] for c in inspector.get_columns("substitute_assignments")}
+        alter_cols = [
+            ("confirmed_at", "TIMESTAMP WITH TIME ZONE"),
+            ("confirmed_by_id", "INTEGER REFERENCES users(id)"),
+            ("rejection_reason", "VARCHAR(500)"),
+            ("cancel_reason", "VARCHAR(500)"),
+        ]
+        for col_name, col_type in alter_cols:
+            if col_name not in sub_columns:
+                db.execute(text(
+                    f"ALTER TABLE substitute_assignments ADD COLUMN {col_name} {col_type}"
+                ))
+                logger.info("Added substitute_assignments.%s", col_name)
+
+        # Legacy status "assigned" → treat as already confirmed (do not re-prompt teachers)
+        db.execute(text(
+            "UPDATE substitute_assignments SET status = 'confirmed' "
+            "WHERE status = 'assigned'"
+        ))
+        db.commit()

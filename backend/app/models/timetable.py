@@ -84,6 +84,15 @@ class TimetableSlot(Base):
     campus = relationship("Campus")
 
 
+# Active bookings that occupy a teacher/class slot
+SUB_STATUS_PENDING = "pending"
+SUB_STATUS_CONFIRMED = "confirmed"
+SUB_STATUS_REJECTED = "rejected"
+SUB_STATUS_CANCELLED = "cancelled"
+SUB_ACTIVE_STATUSES = (SUB_STATUS_PENDING, SUB_STATUS_CONFIRMED)
+SUB_BOARD_STATUSES = (SUB_STATUS_PENDING, SUB_STATUS_CONFIRMED, SUB_STATUS_REJECTED)
+
+
 class SubstituteAssignment(Base):
     """Concrete substitute lesson on a calendar date (not a weekly template)."""
 
@@ -100,8 +109,13 @@ class SubstituteAssignment(Base):
     campus_id = Column(Integer, ForeignKey("campuses.id"), nullable=False)
     date = Column(Date, nullable=False)
     period = Column(SmallInteger, nullable=False)  # 1..8
-    status = Column(String(20), nullable=False, default="assigned")  # assigned|cancelled
+    # pending → confirmed | rejected; BGH may cancel (with reason)
+    status = Column(String(20), nullable=False, default=SUB_STATUS_PENDING)
     assigned_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    confirmed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    rejection_reason = Column(String(500), nullable=True)
+    cancel_reason = Column(String(500), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     absent_teacher = relationship("User", foreign_keys=[absent_teacher_id])

@@ -70,6 +70,7 @@ export default function TimetablePage() {
   const [teacherSearch, setTeacherSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actingId, setActingId] = useState<number | null>(null);
 
   const weekDates = useMemo(() => {
     return DAYS.map((d, i) => {
@@ -141,19 +142,81 @@ export default function TimetablePage() {
     return map;
   }, [slots]);
 
+  const confirmedSubs = useMemo(
+    () => subs.filter((a) => a.status === 'confirmed'),
+    [subs],
+  );
+
   const subByDatePeriod = useMemo(() => {
     const map = new Map<string, SubstituteAssignment>();
-    for (const a of subs) {
+    for (const a of confirmedSubs) {
       if (a.date < (fromDate || '') || a.date > (toDate || '')) continue;
       map.set(`${a.date}-${a.period}`, a);
     }
     return map;
-  }, [subs, fromDate, toDate]);
+  }, [confirmedSubs, fromDate, toDate]);
 
   const weekSubs = useMemo(
-    () => subs.filter((a) => a.date >= (fromDate || '') && a.date <= (toDate || '')),
-    [subs, fromDate, toDate],
+    () => confirmedSubs.filter((a) => a.date >= (fromDate || '') && a.date <= (toDate || '')),
+    [confirmedSubs, fromDate, toDate],
   );
+
+  const pendingCount = useMemo(() => subs.filter((a) => a.status === 'pending').length, [subs]);
+
+  const canRespond = (item: SubstituteAssignment) => {
+    if (item.status !== 'pending') return false;
+    if (isAdmin) return true;
+    return item.substitute_teacher_id === user?.id;
+  };
+
+  const handleConfirm = async (id: number) => {
+    if (!confirm('Xác nhận nhận lịch dạy thay này?')) return;
+    setActingId(id);
+    try {
+      await substitutesApi.confirmAssignment(id);
+      await load();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      alert(detail || 'Không xác nhận được');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const handleReject = async (id: number) => {
+    const reason = window.prompt('Nhập lý do từ chối (bắt buộc):');
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      alert('Lý do từ chối cần ít nhất 3 ký tự');
+      return;
+    }
+    setActingId(id);
+    try {
+      await substitutesApi.rejectAssignment(id, reason.trim());
+      await load();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      alert(detail || 'Không từ chối được');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const statusLabel = (status: string) => {
+    if (status === 'pending') return 'Chờ xác nhận';
+    if (status === 'confirmed') return 'Đã xác nhận';
+    if (status === 'rejected') return 'Đã từ chối';
+    if (status === 'cancelled') return 'Đã hủy';
+    return status;
+  };
+
+  const statusClass = (status: string) => {
+    if (status === 'pending') return 'bg-orange-100 text-orange-800 border-orange-200';
+    if (status === 'confirmed') return 'bg-green-100 text-green-800 border-green-200';
+    if (status === 'rejected') return 'bg-red-100 text-red-800 border-red-200';
+    if (status === 'cancelled') return 'bg-gray-100 text-gray-700 border-gray-200';
+    return 'bg-gray-100 text-gray-700 border-gray-200';
+  };
 
   if (isBghOnly) {
     return <Navigate to={homePath} replace />;
@@ -166,7 +229,7 @@ export default function TimetablePage() {
           <h1 className="text-2xl font-bold text-gray-900">Thời khóa biểu</h1>
           <p className="text-sm text-gray-500 mt-1">
             Lịch dạy của {isAdmin && viewingTeacherId !== user?.id ? 'giáo viên đang chọn' : 'bạn'}
-            {' — '}tiết dạy thay được tô nổi.
+            {' — '}chỉ tiết đã xác nhận hiện trên lưới TKB.
           </p>
         </div>
       </div>
@@ -233,46 +296,76 @@ export default function TimetablePage() {
       )}
 
       {/* Danh sách dạy thay */}
-      <div className="mb-6 border border-amber-200 bg-amber-50 rounded-xl overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-amber-100 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-amber-900">
+      <div className="mb-6 border border-orange-200 bg-orange-50/40 rounded-xl overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-orange-100 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-orange-950">
             Lịch dạy thay ({subs.length})
           </h2>
-          <span className="text-[11px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-            Từ hôm nay
-          </span>
+          <div className="flex items-center gap-2">
+            {pendingCount > 0 && (
+              <span className="text-[11px] text-orange-800 bg-orange-100 px-2 py-0.5 rounded-full">
+                {pendingCount} chờ xác nhận
+              </span>
+            )}
+            <span className="text-[11px] text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
+              Từ hôm nay
+            </span>
+          </div>
         </div>
         {subs.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-amber-800/80">Chưa có tiết dạy thay sắp tới.</p>
+          <p className="px-4 py-3 text-sm text-gray-500">Chưa có tiết dạy thay sắp tới.</p>
         ) : (
-          <ul className="divide-y divide-amber-100">
-            {subs.map((item) => {
-              const inWeek = item.date >= (fromDate || '') && item.date <= (toDate || '');
-              return (
-                <li
-                  key={item.id}
-                  className={`px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm ${
-                    inWeek ? 'bg-amber-100/50' : ''
-                  }`}
-                >
-                  <span className="shrink-0 font-medium text-amber-950 tabular-nums">
+          <ul className="divide-y divide-orange-100 bg-white">
+            {subs.map((item) => (
+              <li key={item.id} className="px-4 py-2.5 flex flex-col gap-2 text-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                  <span className="shrink-0 font-medium text-gray-900 tabular-nums">
                     {new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN', {
                       weekday: 'short',
                       day: '2-digit',
                       month: '2-digit',
                     })}
                   </span>
-                  <span className="shrink-0 text-amber-800 font-semibold">{item.period_label}</span>
+                  <span className="shrink-0 font-semibold text-primary-800">{item.period_label}</span>
                   <span className="min-w-0 break-words text-gray-900">
                     Lớp {item.class_name || '—'}
                     {item.campus_code ? ` · ${item.campus_code}` : ''}
                   </span>
-                  <span className="text-xs text-gray-500 sm:ml-auto">
+                  <span className="text-xs text-gray-500">
                     Thay {formatAbsentForUser(item.absent_teacher_name, item.absent_teacher_department)}
                   </span>
-                </li>
-              );
-            })}
+                  <span className={`sm:ml-auto shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${statusClass(item.status)}`}>
+                    {statusLabel(item.status)}
+                  </span>
+                </div>
+                {item.status === 'rejected' && item.rejection_reason && (
+                  <p className="text-xs text-red-700">Lý do từ chối: {item.rejection_reason}</p>
+                )}
+                {item.status === 'cancelled' && item.cancel_reason && (
+                  <p className="text-xs text-gray-600">BGH hủy: {item.cancel_reason}</p>
+                )}
+                {canRespond(item) && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={actingId === item.id}
+                      onClick={() => handleConfirm(item.id)}
+                      className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50"
+                    >
+                      {actingId === item.id ? 'Đang xử lý...' : 'Xác nhận'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actingId === item.id}
+                      onClick={() => handleReject(item.id)}
+                      className="px-3 py-1.5 text-xs font-medium text-red-700 border border-red-200 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                    >
+                      Từ chối
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
           </ul>
         )}
       </div>
@@ -282,8 +375,8 @@ export default function TimetablePage() {
         <div className="flex items-center justify-between gap-2 mb-2">
           <h2 className="text-sm font-semibold text-gray-900">Thời khóa biểu tuần</h2>
           {weekSubs.length > 0 && (
-            <span className="text-xs text-amber-800 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
-              {weekSubs.length} tiết dạy thay trong tuần
+            <span className="text-xs text-green-800 bg-green-50 border border-green-100 px-2 py-0.5 rounded-full">
+              {weekSubs.length} tiết đã xác nhận trong tuần
             </span>
           )}
         </div>
@@ -326,11 +419,11 @@ export default function TimetablePage() {
                         if (sub) {
                           return (
                             <td key={d.value} className="px-1 py-1 align-top">
-                              <div className="min-h-[52px] rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5">
-                                <span className="block font-medium text-amber-950 break-words">
+                              <div className="min-h-[52px] rounded-lg border border-green-300 bg-green-50 px-2 py-1.5">
+                                <span className="block font-medium text-green-950 break-words">
                                   {sub.class_name || '—'}
                                 </span>
-                                <span className="block text-[10px] text-amber-800 font-semibold">Dạy thay</span>
+                                <span className="block text-[10px] text-green-800 font-semibold">Dạy thay</span>
                                 <span className="block text-[10px] text-gray-600 truncate">
                                   Thay {formatAbsentForUser(sub.absent_teacher_name, sub.absent_teacher_department)}
                                 </span>
@@ -386,15 +479,15 @@ export default function TimetablePage() {
                         {daySlots.map(({ period, slot, sub }) => (
                           <li
                             key={period}
-                            className={`px-3 py-2 text-sm ${sub ? 'bg-amber-50' : ''}`}
+                            className={`px-3 py-2 text-sm ${sub ? 'bg-green-50' : ''}`}
                           >
                             <span className="font-semibold text-primary-800 mr-2">
                               {periodHeader(period)}
                             </span>
                             {sub ? (
                               <>
-                                <span className="font-medium text-amber-950">{sub.class_name}</span>
-                                <span className="block text-xs text-amber-800 mt-0.5">
+                                <span className="font-medium text-green-950">{sub.class_name}</span>
+                                <span className="block text-xs text-green-800 mt-0.5">
                                   Dạy thay · Thay {formatAbsentForUser(sub.absent_teacher_name, sub.absent_teacher_department)}
                                 </span>
                               </>
@@ -411,7 +504,7 @@ export default function TimetablePage() {
             </div>
 
             <p className="mt-3 text-xs text-gray-500">
-              Ô vàng = tiết dạy thay trong tuần đang xem. Tiết thường lấy từ TKB mẫu theo thứ.
+              Ô xanh = tiết dạy thay đã xác nhận trong tuần đang xem. Tiết chờ xác nhận chỉ hiện ở danh sách phía trên.
             </p>
           </>
         )}

@@ -464,14 +464,35 @@ export default function SubstitutesPage() {
   };
 
   const handleCancel = async (id: number) => {
-    if (!confirm('Hủy lịch dạy thay này?')) return;
+    const reason = window.prompt(
+      'Nhập lý do hủy (bắt buộc — sẽ thông báo cho GV dạy thay):',
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      alert('Lý do hủy cần ít nhất 3 ký tự');
+      return;
+    }
     try {
-      await substitutesApi.cancelAssignment(id);
+      await substitutesApi.cancelAssignment(id, reason.trim());
       setDetail(null);
       await loadBoard();
     } catch (err: unknown) {
       alert(apiErrorMessage(err, 'Không hủy được'));
     }
+  };
+
+  const boardStatusClass = (status: string) => {
+    if (status === 'pending') return 'border-orange-300 bg-orange-50 hover:bg-orange-100';
+    if (status === 'confirmed') return 'border-green-300 bg-green-50 hover:bg-green-100';
+    if (status === 'rejected') return 'border-red-300 bg-red-50 hover:bg-red-100';
+    return 'border-gray-200 bg-gray-50 hover:bg-gray-100';
+  };
+
+  const boardStatusLabel = (status: string) => {
+    if (status === 'pending') return 'Chờ xác nhận';
+    if (status === 'confirmed') return 'Đã xác nhận';
+    if (status === 'rejected') return 'Từ chối';
+    return status;
   };
 
   const removeRow = (key: string) => {
@@ -601,11 +622,12 @@ export default function SubstitutesPage() {
                                   key={a.id}
                                   type="button"
                                   onClick={() => setDetail(a)}
-                                  className="w-full text-left rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2 py-1.5"
+                                  className={`w-full text-left rounded-lg border px-2 py-1.5 ${boardStatusClass(a.status)}`}
                                 >
                                   <span className="block font-medium text-gray-900 break-words">{a.class_name}</span>
-                                  <span className="block text-[11px] text-amber-900 truncate">{formatGvName(a.substitute_teacher_name)}</span>
+                                  <span className="block text-[11px] text-gray-800 truncate">{formatGvName(a.substitute_teacher_name)}</span>
                                   <span className="block text-[10px] text-gray-500 truncate">thay {formatGvName(a.absent_teacher_name)}</span>
+                                  <span className="block text-[10px] font-medium mt-0.5">{boardStatusLabel(a.status)}</span>
                                 </button>
                               ))}
                             </div>
@@ -633,12 +655,13 @@ export default function SubstitutesPage() {
                     <ul className="divide-y divide-gray-100">
                       {dayItems.map((a) => (
                         <li key={a.id}>
-                          <button type="button" onClick={() => setDetail(a)} className="w-full text-left px-3 py-2.5 hover:bg-amber-50">
+                          <button type="button" onClick={() => setDetail(a)} className={`w-full text-left px-3 py-2.5 ${boardStatusClass(a.status)}`}>
                             <span className="text-primary-700 font-semibold mr-2">{a.period_label}</span>
                             <span className="text-gray-900">{a.class_name}</span>
-                            <span className="block text-xs text-amber-800 mt-0.5">
+                            <span className="block text-xs mt-0.5">
                               {formatGvName(a.substitute_teacher_name)} thay {formatGvName(a.absent_teacher_name)}
                             </span>
+                            <span className="block text-[10px] font-medium mt-0.5">{boardStatusLabel(a.status)}</span>
                           </button>
                         </li>
                       ))}
@@ -648,7 +671,9 @@ export default function SubstitutesPage() {
               );
             })}
           </div>
-          <p className="mt-3 text-xs text-gray-500">Ô vàng = đã xếp dạy thay. Bấm ô để xem / hủy.</p>
+          <p className="mt-3 text-xs text-gray-500">
+            Cam = chờ xác nhận · Xanh = đã xác nhận · Đỏ = từ chối. Bấm ô để xem / hủy.
+          </p>
         </>
       )}
 
@@ -1033,11 +1058,23 @@ export default function SubstitutesPage() {
               <p><span className="text-gray-500">Cơ sở:</span> {detail.campus_code || '—'}</p>
               <p><span className="text-gray-500">GV nghỉ:</span> {formatGvName(detail.absent_teacher_name)}</p>
               <p><span className="text-gray-500">GV dạy thay:</span> {formatGvName(detail.substitute_teacher_name)}</p>
+              <p>
+                <span className="text-gray-500">Trạng thái:</span>{' '}
+                <span className="font-medium">{boardStatusLabel(detail.status)}</span>
+              </p>
+              {detail.status === 'rejected' && detail.rejection_reason && (
+                <p className="text-red-700">Lý do từ chối: {detail.rejection_reason}</p>
+              )}
+              {detail.status === 'cancelled' && detail.cancel_reason && (
+                <p className="text-gray-600">Lý do hủy: {detail.cancel_reason}</p>
+              )}
             </div>
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-between gap-2">
-              <button type="button" onClick={() => handleCancel(detail.id)} className="px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">
-                Hủy lịch này
-              </button>
+            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+              {detail.status !== 'cancelled' && (
+                <button type="button" onClick={() => handleCancel(detail.id)} className="mr-auto px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">
+                  Hủy lịch này
+                </button>
+              )}
               <button type="button" onClick={() => setDetail(null)} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
                 Đóng
               </button>

@@ -75,6 +75,10 @@ class TimetableService:
                 item.substitute_teacher.name if item.substitute_teacher else None
             ),
             "status": item.status,
+            "confirmed_at": item.confirmed_at,
+            "confirmed_by_id": item.confirmed_by_id,
+            "rejection_reason": item.rejection_reason,
+            "cancel_reason": item.cancel_reason,
             "created_at": item.created_at,
         }
 
@@ -352,11 +356,13 @@ class TimetableService:
 
     def my_timetable_summary(self, user_id: int) -> dict:
         slot_count = self.repo.count_slots_for_teacher(user_id)
-        sub_count = self.repo.count_mine(user_id, from_date=date.today())
+        pending_count = self.repo.count_mine_pending(user_id, from_date=date.today())
+        any_subs = len(self.repo.list_mine(user_id, from_date=date.today())) > 0
         return {
             "has_timetable": slot_count > 0,
             "slot_count": slot_count,
-            "substitute_count": sub_count,
+            "substitute_count": pending_count,
+            "has_upcoming_substitutes": any_subs,
         }
 
     def list_my_timetable(self, user_id: int) -> List[dict]:
