@@ -161,7 +161,7 @@ export default function TimetablePage() {
     [confirmedSubs, fromDate, toDate],
   );
 
-  const pendingCount = useMemo(() => subs.filter((a) => a.status === 'pending').length, [subs]);
+  const pendingSubs = useMemo(() => subs.filter((a) => a.status === 'pending'), [subs]);
 
   const canRespond = (item: SubstituteAssignment) => {
     if (item.status !== 'pending') return false;
@@ -200,22 +200,6 @@ export default function TimetablePage() {
     } finally {
       setActingId(null);
     }
-  };
-
-  const statusLabel = (status: string) => {
-    if (status === 'pending') return 'Chờ xác nhận';
-    if (status === 'confirmed') return 'Đã xác nhận';
-    if (status === 'rejected') return 'Đã từ chối';
-    if (status === 'cancelled') return 'Đã hủy';
-    return status;
-  };
-
-  const statusClass = (status: string) => {
-    if (status === 'pending') return 'bg-orange-100 text-orange-800 border-orange-200';
-    if (status === 'confirmed') return 'bg-green-100 text-green-800 border-green-200';
-    if (status === 'rejected') return 'bg-red-100 text-red-800 border-red-200';
-    if (status === 'cancelled') return 'bg-gray-100 text-gray-700 border-gray-200';
-    return 'bg-gray-100 text-gray-700 border-gray-200';
   };
 
   if (isBghOnly) {
@@ -264,6 +248,63 @@ export default function TimetablePage() {
         </div>
       )}
 
+      {/* Chỉ hiện khi còn lịch chờ xác nhận — phía trên bộ lọc tuần */}
+      {pendingSubs.length > 0 && (
+        <div className="mb-4 border border-orange-200 bg-orange-50/40 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-orange-100 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-orange-950">
+              Xác nhận lịch dạy thay
+            </h2>
+            <span className="text-[11px] font-bold text-white bg-orange-500 px-2 py-0.5 rounded-full min-w-[20px] text-center">
+              {pendingSubs.length}
+            </span>
+          </div>
+          <ul className="divide-y divide-orange-100 bg-white">
+            {pendingSubs.map((item) => (
+              <li key={item.id} className="px-4 py-2.5 flex flex-col gap-2 text-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                  <span className="shrink-0 font-medium text-gray-900 tabular-nums">
+                    {new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN', {
+                      weekday: 'short',
+                      day: '2-digit',
+                      month: '2-digit',
+                    })}
+                  </span>
+                  <span className="shrink-0 font-semibold text-primary-800">{item.period_label}</span>
+                  <span className="min-w-0 break-words text-gray-900">
+                    Lớp {item.class_name || '—'}
+                    {item.campus_code ? ` · ${item.campus_code}` : ''}
+                  </span>
+                  <span className="text-xs text-gray-500 sm:ml-auto">
+                    Thay {formatAbsentForUser(item.absent_teacher_name, item.absent_teacher_department)}
+                  </span>
+                </div>
+                {canRespond(item) && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={actingId === item.id}
+                      onClick={() => handleConfirm(item.id)}
+                      className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50"
+                    >
+                      {actingId === item.id ? 'Đang xử lý...' : 'Xác nhận'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actingId === item.id}
+                      onClick={() => handleReject(item.id)}
+                      className="px-3 py-1.5 text-xs font-medium text-red-700 border border-red-200 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                    >
+                      Từ chối
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-3 items-center">
         <button
           type="button"
@@ -295,81 +336,6 @@ export default function TimetablePage() {
         </div>
       )}
 
-      {/* Danh sách dạy thay */}
-      <div className="mb-6 border border-orange-200 bg-orange-50/40 rounded-xl overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-orange-100 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-orange-950">
-            Lịch dạy thay ({subs.length})
-          </h2>
-          <div className="flex items-center gap-2">
-            {pendingCount > 0 && (
-              <span className="text-[11px] text-orange-800 bg-orange-100 px-2 py-0.5 rounded-full">
-                {pendingCount} chờ xác nhận
-              </span>
-            )}
-            <span className="text-[11px] text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
-              Từ hôm nay
-            </span>
-          </div>
-        </div>
-        {subs.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-gray-500">Chưa có tiết dạy thay sắp tới.</p>
-        ) : (
-          <ul className="divide-y divide-orange-100 bg-white">
-            {subs.map((item) => (
-              <li key={item.id} className="px-4 py-2.5 flex flex-col gap-2 text-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                  <span className="shrink-0 font-medium text-gray-900 tabular-nums">
-                    {new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN', {
-                      weekday: 'short',
-                      day: '2-digit',
-                      month: '2-digit',
-                    })}
-                  </span>
-                  <span className="shrink-0 font-semibold text-primary-800">{item.period_label}</span>
-                  <span className="min-w-0 break-words text-gray-900">
-                    Lớp {item.class_name || '—'}
-                    {item.campus_code ? ` · ${item.campus_code}` : ''}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    Thay {formatAbsentForUser(item.absent_teacher_name, item.absent_teacher_department)}
-                  </span>
-                  <span className={`sm:ml-auto shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full border ${statusClass(item.status)}`}>
-                    {statusLabel(item.status)}
-                  </span>
-                </div>
-                {item.status === 'rejected' && item.rejection_reason && (
-                  <p className="text-xs text-red-700">Lý do từ chối: {item.rejection_reason}</p>
-                )}
-                {item.status === 'cancelled' && item.cancel_reason && (
-                  <p className="text-xs text-gray-600">BGH hủy: {item.cancel_reason}</p>
-                )}
-                {canRespond(item) && (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={actingId === item.id}
-                      onClick={() => handleConfirm(item.id)}
-                      className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50"
-                    >
-                      {actingId === item.id ? 'Đang xử lý...' : 'Xác nhận'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={actingId === item.id}
-                      onClick={() => handleReject(item.id)}
-                      className="px-3 py-1.5 text-xs font-medium text-red-700 border border-red-200 hover:bg-red-50 rounded-lg disabled:opacity-50"
-                    >
-                      Từ chối
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
       {/* Lưới TKB */}
       <div>
         <div className="flex items-center justify-between gap-2 mb-2">
@@ -386,9 +352,11 @@ export default function TimetablePage() {
         ) : slots.length === 0 ? (
           <div className="border border-dashed border-gray-300 rounded-xl px-4 py-10 text-center text-sm text-gray-500">
             Chưa có thời khóa biểu.
-            {subs.length > 0
-              ? ' Bạn vẫn xem được lịch dạy thay phía trên.'
-              : ' Liên hệ BGH để import TKB hoặc kiểm tra mã GV trên tài khoản.'}
+            {pendingSubs.length > 0
+              ? ' Hãy xác nhận lịch dạy thay phía trên trước.'
+              : confirmedSubs.length > 0
+                ? ' Các tiết dạy thay đã xác nhận sẽ hiện khi có TKB mẫu.'
+                : ' Liên hệ BGH để import TKB hoặc kiểm tra mã GV trên tài khoản.'}
           </div>
         ) : (
           <>
