@@ -52,6 +52,7 @@ export default function UsersPage() {
   const [missingCodeFilter, setMissingCodeFilter] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'users' | 'departments' | 'positions'>('users');
 
   useEffect(() => {
     loadUsers();
@@ -572,8 +573,31 @@ export default function UsersPage() {
         </div>
       )}
 
+      <div className="mb-6 flex flex-wrap gap-2 border-b border-gray-200 pb-3">
+        {([
+          { key: 'users' as const, label: 'Người dùng' },
+          { key: 'departments' as const, label: 'Tổ / Phòng ban' },
+          { key: 'positions' as const, label: 'Chức vụ & Phân quyền' },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === tab.key
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'users' && (
+      <>
       {/* Danh sách người dùng */}
-      <div className="mb-8">
+      <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Người dùng</h2>
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
@@ -921,9 +945,11 @@ export default function UsersPage() {
         )}
       </div>
       </div>
+      </>
+      )}
 
-      {/* Quản lý phòng ban */}
-      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+      {activeTab === 'departments' && (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
           <h2 className="text-lg font-semibold text-gray-900">Tổ / Phòng ban</h2>
           <button
@@ -991,9 +1017,10 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+      )}
 
-      {/* Quản lý chức vụ */}
-      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+      {activeTab === 'positions' && (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
           <h2 className="text-lg font-semibold text-gray-900">Chức vụ & Phân quyền</h2>
           <button
@@ -1159,6 +1186,7 @@ export default function UsersPage() {
           })}
         </div>
       </div>
+      )}
     </div>
   );
 }

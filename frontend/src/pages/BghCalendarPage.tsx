@@ -406,8 +406,8 @@ export default function BghCalendarPage() {
         <h1 className="text-2xl font-bold text-gray-900">Lịch hoạt động</h1>
         <p className="text-gray-500 mt-1">
           {canManageCalendar
-            ? 'Lịch hoạt động và kế hoạch diễn ra tại trường'
-            : 'Lịch hoạt động tại trường — chỉ xem'}
+            ? 'Quản lí lịch hoạt động và kế hoạch diễn ra tại trường'
+            : 'Lịch hoạt động và kế hoạch diễn ra tại trường'}
         </p>
       </div>
 
