@@ -45,10 +45,26 @@ DEFAULT_POSITIONS = [
     {
         "name": "Ban giám hiệu",
         "can_upload": True,
-        "can_manage_tasks": True,
+        "can_manage_tasks": False,
         "can_delete_documents": True,
         "scope_all_departments": True,
+        "can_access_substitutes": True,
+        "can_manage_calendar": False,
+        "can_import_timetable": False,
+        "bgh_workspace": True,
         "sort_order": 1,
+    },
+    {
+        "name": "Học vụ",
+        "can_upload": True,
+        "can_manage_tasks": False,
+        "can_delete_documents": True,
+        "scope_all_departments": True,
+        "can_access_substitutes": True,
+        "can_manage_calendar": True,
+        "can_import_timetable": True,
+        "bgh_workspace": False,
+        "sort_order": 2,
     },
     {
         "name": "Tổ trưởng",
@@ -56,7 +72,11 @@ DEFAULT_POSITIONS = [
         "can_manage_tasks": True,
         "can_delete_documents": True,
         "scope_all_departments": False,
-        "sort_order": 2,
+        "can_access_substitutes": False,
+        "can_manage_calendar": False,
+        "can_import_timetable": False,
+        "bgh_workspace": False,
+        "sort_order": 3,
     },
     {
         "name": "Giáo viên",
@@ -64,17 +84,49 @@ DEFAULT_POSITIONS = [
         "can_manage_tasks": False,
         "can_delete_documents": False,
         "scope_all_departments": False,
-        "sort_order": 3,
+        "can_access_substitutes": False,
+        "can_manage_calendar": False,
+        "can_import_timetable": False,
+        "bgh_workspace": False,
+        "sort_order": 4,
     },
 ]
 
+_POSITION_PERM_KEYS = (
+    "can_upload",
+    "can_manage_tasks",
+    "can_delete_documents",
+    "scope_all_departments",
+    "can_access_substitutes",
+    "can_manage_calendar",
+    "can_import_timetable",
+    "bgh_workspace",
+    "sort_order",
+)
+
+
+_SYNC_ALWAYS_NAMES = {"Ban giám hiệu", "Học vụ"}
+
 
 def _seed_positions(db):
+    """Create missing defaults; always re-apply flags for BGH + Học vụ."""
     pos_repo = PositionRepository(db)
     for item in DEFAULT_POSITIONS:
         existing = pos_repo.get_by_name(item["name"])
         if not existing:
             pos_repo.create(**item)
+            continue
+        if item["name"] not in _SYNC_ALWAYS_NAMES:
+            continue
+        changed = False
+        for key in _POSITION_PERM_KEYS:
+            if key not in item:
+                continue
+            if getattr(existing, key, None) != item[key]:
+                setattr(existing, key, item[key])
+                changed = True
+        if changed:
+            db.commit()
 
 
 def _migrate_user_positions(db):
@@ -247,6 +299,20 @@ def startup():
                 db.commit()
 
         sync_timetable_schema(db, engine)
+
+        if inspector.has_table("positions"):
+            pos_columns = [c["name"] for c in inspector.get_columns("positions")]
+            for col_name in (
+                "can_access_substitutes",
+                "can_manage_calendar",
+                "can_import_timetable",
+                "bgh_workspace",
+            ):
+                if col_name not in pos_columns:
+                    db.execute(text(
+                        f"ALTER TABLE positions ADD COLUMN {col_name} BOOLEAN NOT NULL DEFAULT FALSE"
+                    ))
+                    db.commit()
 
         _seed_positions(db)
         _seed_departments(db)

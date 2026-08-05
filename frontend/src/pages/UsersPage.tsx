@@ -36,6 +36,10 @@ export default function UsersPage() {
     can_manage_tasks: false,
     can_delete_documents: false,
     scope_all_departments: false,
+    can_access_substitutes: false,
+    can_manage_calendar: false,
+    can_import_timetable: false,
+    bgh_workspace: false,
     sort_order: 0,
   });
   const [importResult, setImportResult] = useState<{ message: string; errors: string[] } | null>(null);
@@ -325,6 +329,10 @@ export default function UsersPage() {
       can_manage_tasks: false,
       can_delete_documents: false,
       scope_all_departments: false,
+      can_access_substitutes: false,
+      can_manage_calendar: false,
+      can_import_timetable: false,
+      bgh_workspace: false,
       sort_order: positions.length + 1,
     });
     setEditingPosition(null);
@@ -339,6 +347,10 @@ export default function UsersPage() {
       can_manage_tasks: pos.can_manage_tasks,
       can_delete_documents: pos.can_delete_documents,
       scope_all_departments: pos.scope_all_departments,
+      can_access_substitutes: pos.can_access_substitutes ?? false,
+      can_manage_calendar: pos.can_manage_calendar ?? false,
+      can_import_timetable: pos.can_import_timetable ?? false,
+      bgh_workspace: pos.bgh_workspace ?? false,
       sort_order: pos.sort_order,
     });
     setShowPositionForm(true);
@@ -688,6 +700,10 @@ export default function UsersPage() {
                 can_manage_tasks: false,
                 can_delete_documents: false,
                 scope_all_departments: false,
+                can_access_substitutes: false,
+                can_manage_calendar: false,
+                can_import_timetable: false,
+                bgh_workspace: false,
                 sort_order: positions.length + 1,
               });
               setShowPositionForm(true);
@@ -730,6 +746,22 @@ export default function UsersPage() {
               <input type="checkbox" checked={positionForm.scope_all_departments} onChange={(e) => setPositionForm({ ...positionForm, scope_all_departments: e.target.checked })} />
               Toàn trường (tất cả tổ)
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_access_substitutes} onChange={(e) => setPositionForm({ ...positionForm, can_access_substitutes: e.target.checked })} />
+              Dạy thay
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_manage_calendar} onChange={(e) => setPositionForm({ ...positionForm, can_manage_calendar: e.target.checked })} />
+              Quản lý lịch hoạt động
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_import_timetable} onChange={(e) => setPositionForm({ ...positionForm, can_import_timetable: e.target.checked })} />
+              Import thời khóa biểu
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.bgh_workspace} onChange={(e) => setPositionForm({ ...positionForm, bgh_workspace: e.target.checked })} />
+              Hồ sơ BGH (ẩn TKB + Công việc)
+            </label>
             <div className="md:col-span-2 flex gap-2">
               <button type="submit" className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">
                 {editingPosition ? 'Cập nhật' : 'Tạo'}
@@ -750,6 +782,10 @@ export default function UsersPage() {
                 <th className="py-2 pr-3">Công việc</th>
                 <th className="py-2 pr-3">Xóa TL</th>
                 <th className="py-2 pr-3">Toàn trường</th>
+                <th className="py-2 pr-3">Dạy thay</th>
+                <th className="py-2 pr-3">QL lịch</th>
+                <th className="py-2 pr-3">Import TKB</th>
+                <th className="py-2 pr-3">Hồ sơ BGH</th>
                 <th className="py-2 pr-3">Users</th>
                 <th className="py-2 text-right">Thao tác</th>
               </tr>
@@ -762,6 +798,10 @@ export default function UsersPage() {
                   <td className="py-2 pr-3">{p.can_manage_tasks ? '✓' : '—'}</td>
                   <td className="py-2 pr-3">{p.can_delete_documents ? '✓' : '—'}</td>
                   <td className="py-2 pr-3">{p.scope_all_departments ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_access_substitutes ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_manage_calendar ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_import_timetable ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.bgh_workspace ? '✓' : '—'}</td>
                   <td className="py-2 pr-3">{p.user_count}</td>
                   <td className="py-2 text-right space-x-2">
                     <button onClick={() => handleEditPosition(p)} className="text-primary-600 hover:underline">Sửa</button>
@@ -780,6 +820,10 @@ export default function UsersPage() {
               p.can_manage_tasks && 'Quản lý công việc',
               p.can_delete_documents && 'Xóa tài liệu',
               p.scope_all_departments && 'Toàn trường',
+              p.can_access_substitutes && 'Dạy thay',
+              p.can_manage_calendar && 'Quản lý lịch',
+              p.can_import_timetable && 'Import TKB',
+              p.bgh_workspace && 'Hồ sơ BGH',
             ].filter(Boolean) as string[];
             return (
               <div key={p.id} className="py-3 first:pt-0">

@@ -143,7 +143,7 @@ function openDocumentPreview(documentId: number) {
 }
 
 export default function BghCalendarPage() {
-  const { isAdmin } = useAuth();
+  const { canManageCalendar } = useAuth();
   const toast = useToast();
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()));
@@ -275,7 +275,7 @@ export default function BghCalendarPage() {
     }
   };
 
-  const unscheduledForAdmin = isAdmin ? (data?.unscheduled_plans ?? []) : [];
+  const unscheduledForAdmin = canManageCalendar ? (data?.unscheduled_plans ?? []) : [];
   const adminNeedsAttentionCount = unscheduledForAdmin.length;
 
   const filterRange = useMemo(
@@ -405,7 +405,7 @@ export default function BghCalendarPage() {
       <div className="mb-5 shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">Lịch hoạt động</h1>
         <p className="text-gray-500 mt-1">
-          {isAdmin
+          {canManageCalendar
             ? 'Lịch hoạt động và kế hoạch diễn ra tại trường'
             : 'Lịch hoạt động tại trường — chỉ xem'}
         </p>
@@ -582,7 +582,7 @@ export default function BghCalendarPage() {
                         : 'Không có hoạt động nào trong khoảng đã chọn'}
                   </p>
                 </div>
-                {isAdmin && adminNeedsAttentionCount > 0 && (
+                {canManageCalendar && adminNeedsAttentionCount > 0 && (
                   <button
                     type="button"
                     onClick={() => setShowUnscheduled((v) => !v)}
@@ -592,9 +592,9 @@ export default function BghCalendarPage() {
                   </button>
                 )}
               </div>
-              {isAdmin && adminNeedsAttentionCount > 0 && (
+              {canManageCalendar && adminNeedsAttentionCount > 0 && (
                 <p className="text-xs text-amber-700 mt-2">
-                  Chỉ Admin thấy cảnh báo này — bổ sung ngày/giờ để kế hoạch hiện trên lịch BGH.
+                  Bổ sung ngày/giờ để kế hoạch hiện trên lịch.
                 </p>
               )}
             </div>
@@ -636,9 +636,9 @@ export default function BghCalendarPage() {
                             <PlanRow
                               key={`${plan.event_id ?? 'doc'}-${plan.document_id}-${plan.date}-${plan.start_time}`}
                               plan={plan}
-                              isAdmin={isAdmin}
-                              onEdit={isAdmin ? () => setEditingPlan(plan) : undefined}
-                              onDelete={isAdmin ? () => handleDeletePlan(plan) : undefined}
+                              canManage={canManageCalendar}
+                              onEdit={canManageCalendar ? () => setEditingPlan(plan) : undefined}
+                              onDelete={canManageCalendar ? () => handleDeletePlan(plan) : undefined}
                               onViewTimeline={() => setTimelinePlan(plan)}
                             />
                           ))}
@@ -649,12 +649,12 @@ export default function BghCalendarPage() {
                 </div>
               )}
 
-              {/* Unscheduled — Admin only */}
-              {isAdmin && showUnscheduled && unscheduledForAdmin.length > 0 && (
+              {/* Unscheduled — Admin / Học vụ */}
+              {canManageCalendar && showUnscheduled && unscheduledForAdmin.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <h3 className="text-sm font-semibold text-amber-800 mb-1">Cần cập nhật ngày/giờ</h3>
                   <p className="text-xs text-gray-400 mb-3">
-                    Kế hoạch đã chọn đưa vào Lịch hoạt động nhưng chưa có ngày/giờ. Chỉ Admin có thể sửa.
+                    Kế hoạch đã chọn đưa vào Lịch hoạt động nhưng chưa có ngày/giờ.
                   </p>
                   <ul className="space-y-2">
                     {unscheduledForAdmin.map((plan) => (
@@ -743,13 +743,13 @@ export default function BghCalendarPage() {
 
 function PlanRow({
   plan,
-  isAdmin,
+  canManage,
   onEdit,
   onDelete,
   onViewTimeline,
 }: {
   plan: BghCalendarPlan;
-  isAdmin: boolean;
+  canManage: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
   onViewTimeline: () => void;
@@ -772,7 +772,7 @@ function PlanRow({
       >
         🗓️
       </button>
-      {isAdmin && onEdit && (
+      {canManage && onEdit && (
         <button
           type="button"
           onClick={onEdit}
@@ -782,7 +782,7 @@ function PlanRow({
           Sửa
         </button>
       )}
-      {isAdmin && onDelete && plan.event_id && !plan.is_continuation && (
+      {canManage && onDelete && plan.event_id && !plan.is_continuation && (
         <button
           type="button"
           onClick={onDelete}
@@ -805,7 +805,7 @@ function PlanRow({
 
   return (
     <li className={`group px-4 py-3 rounded-xl bg-white border hover:shadow-sm transition-all ${
-      isAdmin && plan.needs_review ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100 hover:border-primary-200'
+      canManage && plan.needs_review ? 'border-amber-200 hover:border-amber-300' : 'border-gray-100 hover:border-primary-200'
     }`}>
       <div className="flex items-start gap-3">
       <div className={`shrink-0 min-w-[3.5rem] pt-0.5 text-right tabular-nums font-bold ${
@@ -824,7 +824,7 @@ function PlanRow({
         ) : (
           <p className="text-xs text-gray-400 mt-0.5">Địa điểm: —</p>
         )}
-        {isAdmin && plan.needs_review && (
+        {canManage && plan.needs_review && (
           <p className="text-xs text-amber-700 mt-0.5">Cần cập nhật ngày/giờ</p>
         )}
         {plan.event_end_date && !plan.is_continuation && (

@@ -41,12 +41,12 @@ export function AdminRoute({ children }: { children: React.ReactNode }) {
 }
 
 export function BghRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, scopeAllDepartments, homePath } = useAuth();
+  const { user, loading, canAccessSubstitutes, homePath } = useAuth();
 
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.must_change_password) return <Navigate to="/change-password" replace />;
-  if (!scopeAllDepartments) return <Navigate to={homePath} replace />;
+  if (!canAccessSubstitutes) return <Navigate to={homePath} replace />;
 
   return <>{children}</>;
 }

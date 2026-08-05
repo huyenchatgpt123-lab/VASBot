@@ -65,7 +65,7 @@ function formatAbsentForUser(
 }
 
 export default function TimetablePage() {
-  const { user, isAdmin, isBghOnly, homePath } = useAuth();
+  const { user, isAdmin, isBghOnly, homePath, canImportTimetable } = useAuth();
   const toast = useToast();
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
@@ -276,10 +276,10 @@ export default function TimetablePage() {
           <p className="text-sm text-gray-500 mt-1">
             Lịch dạy của {isAdmin && viewingTeacherId !== user?.id ? 'giáo viên đang chọn' : 'bạn'}
             {' — '}chỉ tiết đã xác nhận hiện trên lưới TKB.
-            {isAdmin ? ' Admin có thể tải mẫu / import TKB.' : ''}
+            {canImportTimetable ? ' Có thể tải mẫu / import TKB.' : ''}
           </p>
         </div>
-        {isAdmin && (
+        {canImportTimetable && (
           <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full sm:w-auto">
             <a
               href="/mau_thoi_khoa_bieu_luoi.xlsx"

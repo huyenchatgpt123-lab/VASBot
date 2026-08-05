@@ -24,12 +24,13 @@ from app.services.storage_service import (
     get_preview_url,
     get_download_url,
 )
-from app.utils.auth import get_current_user, require_admin
+from app.utils.auth import get_current_user
 from app.utils.permissions import (
     can_upload,
     can_upload_to_department,
     can_delete_document,
     can_re_extract_document,
+    can_manage_calendar,
     has_scope_all_departments,
     is_admin,
 )
@@ -39,6 +40,15 @@ from app.repositories.campus_repository import CampusRepository
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["Documents"])
+
+
+def _require_calendar_manage(user: User = Depends(get_current_user)) -> User:
+    if not can_manage_calendar(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Không có quyền quản lý Lịch hoạt động",
+        )
+    return user
 
 
 ALLOWED_EXTENSIONS = (".pdf", ".docx")
@@ -293,7 +303,7 @@ def update_plan_event(
     event_id: int,
     data: PlanEventUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(_require_calendar_manage),
 ):
     service = PlanEventService(db)
     event = service.get_by_id(event_id)
@@ -347,9 +357,9 @@ def update_plan_event(
 def delete_plan_event(
     event_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(_require_calendar_manage),
 ):
-    """Admin: xóa một ngày/sự kiện khỏi Lịch hoạt động."""
+    """Xóa một ngày/sự kiện khỏi Lịch hoạt động (Admin / Học vụ)."""
     service = PlanEventService(db)
     event = service.get_by_id(event_id)
     if not event:
@@ -381,7 +391,7 @@ def create_plan_event(
     doc_id: int,
     data: PlanEventCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(_require_calendar_manage),
 ):
     repo = DocumentRepository(db)
     doc = repo.get_by_id(doc_id)

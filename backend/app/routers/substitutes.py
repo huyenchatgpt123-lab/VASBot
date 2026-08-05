@@ -27,16 +27,16 @@ from app.schemas.timetable import (
 from app.services.timetable_service import TimetableService
 from app.services.substitute_service import SubstituteService
 from app.utils.auth import get_current_user
-from app.utils.permissions import is_admin, has_scope_all_departments
+from app.utils.permissions import is_admin, can_access_substitutes, can_import_timetable
 
 router = APIRouter(prefix="/substitutes", tags=["substitutes"])
 
 
-def _require_bgh(user: User = Depends(get_current_user)) -> User:
-    if not (is_admin(user) or has_scope_all_departments(user)):
+def _require_substitutes_access(user: User = Depends(get_current_user)) -> User:
+    if not can_access_substitutes(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chỉ Ban giám hiệu / Admin mới dùng được chức năng này",
+            detail="Không có quyền dùng chức năng Dạy thay",
         )
     return user
 
@@ -102,7 +102,7 @@ def my_timetable(
 def list_teachers(
     campus_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     q = db.query(User).filter(User.role != UserRole.admin).order_by(User.name)
     if campus_id:
@@ -125,7 +125,7 @@ def list_assignments(
     to_date: date = Query(...),
     campus_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     return SubstituteService(db).list_board(
         from_date=from_date, to_date=to_date, campus_id=campus_id
@@ -136,7 +136,7 @@ def list_assignments(
 def absent_periods(
     body: AbsentPeriodsRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     try:
         return SubstituteService(db).absent_periods(
@@ -157,7 +157,7 @@ def suggestions(
     limit: int = Query(20, ge=1, le=200),
     q: Optional[str] = Query(None, description="Tìm theo tên / tổ / mã GV"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     try:
         return SubstituteService(db).suggest(
@@ -177,7 +177,7 @@ def suggestions(
 def assign_batch(
     body: AssignBatchRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     try:
         return SubstituteService(db).assign_batch(
@@ -220,7 +220,7 @@ def cancel_assignment(
     assignment_id: int,
     body: CancelSubstituteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     try:
         return SubstituteService(db).cancel(assignment_id, reason=body.reason)
@@ -232,7 +232,7 @@ def cancel_assignment(
 def list_classes(
     campus_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     return TimetableService(db).list_classes(campus_id)
 
@@ -241,7 +241,7 @@ def list_classes(
 def create_class(
     body: ClassRoomCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     try:
         return TimetableService(db).create_class(
@@ -257,7 +257,7 @@ def list_timetable(
     teacher_id: Optional[int] = Query(None),
     class_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     return TimetableService(db).list_slots(
         campus_id=campus_id, teacher_id=teacher_id, class_id=class_id
@@ -268,7 +268,7 @@ def list_timetable(
 def create_timetable_slot(
     body: TimetableSlotCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     try:
         return TimetableService(db).create_slot(
@@ -287,7 +287,7 @@ def update_timetable_slot(
     slot_id: int,
     body: TimetableSlotUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     try:
         data = body.model_dump(exclude_unset=True)
@@ -300,7 +300,7 @@ def update_timetable_slot(
 def delete_timetable_slot(
     slot_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_bgh),
+    current_user: User = Depends(_require_substitutes_access),
 ):
     try:
         TimetableService(db).delete_slot(slot_id)
@@ -315,10 +315,10 @@ async def import_timetable(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not is_admin(current_user):
+    if not can_import_timetable(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chỉ Admin mới được import thời khóa biểu",
+            detail="Không có quyền import thời khóa biểu",
         )
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(

@@ -3,6 +3,10 @@ export interface UserPermissions {
   can_manage_tasks: boolean;
   can_delete_documents: boolean;
   scope_all_departments: boolean;
+  can_access_substitutes: boolean;
+  can_manage_calendar: boolean;
+  can_import_timetable: boolean;
+  bgh_workspace: boolean;
 }
 
 export interface Department {
@@ -37,6 +41,10 @@ export interface Position {
   can_manage_tasks: boolean;
   can_delete_documents: boolean;
   scope_all_departments: boolean;
+  can_access_substitutes: boolean;
+  can_manage_calendar: boolean;
+  can_import_timetable: boolean;
+  bgh_workspace: boolean;
   sort_order: number;
   user_count: number;
 }

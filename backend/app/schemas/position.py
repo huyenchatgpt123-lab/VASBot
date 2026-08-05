@@ -7,6 +7,10 @@ class PositionPermissions(BaseModel):
     can_manage_tasks: bool = False
     can_delete_documents: bool = False
     scope_all_departments: bool = False
+    can_access_substitutes: bool = False
+    can_manage_calendar: bool = False
+    can_import_timetable: bool = False
+    bgh_workspace: bool = False
 
 
 class PositionResponse(BaseModel):
@@ -16,6 +20,10 @@ class PositionResponse(BaseModel):
     can_manage_tasks: bool
     can_delete_documents: bool
     scope_all_departments: bool
+    can_access_substitutes: bool = False
+    can_manage_calendar: bool = False
+    can_import_timetable: bool = False
+    bgh_workspace: bool = False
     sort_order: int
     user_count: int = 0
 
@@ -29,6 +37,10 @@ class PositionCreate(BaseModel):
     can_manage_tasks: bool = False
     can_delete_documents: bool = False
     scope_all_departments: bool = False
+    can_access_substitutes: bool = False
+    can_manage_calendar: bool = False
+    can_import_timetable: bool = False
+    bgh_workspace: bool = False
     sort_order: int = 0
 
 
@@ -38,4 +50,8 @@ class PositionUpdate(BaseModel):
     can_manage_tasks: Optional[bool] = None
     can_delete_documents: Optional[bool] = None
     scope_all_departments: Optional[bool] = None
+    can_access_substitutes: Optional[bool] = None
+    can_manage_calendar: Optional[bool] = None
+    can_import_timetable: Optional[bool] = None
+    bgh_workspace: Optional[bool] = None
     sort_order: Optional[int] = None

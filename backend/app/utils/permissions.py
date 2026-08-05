@@ -4,6 +4,17 @@ from app.models.user import User, UserRole
 from app.models.task import Task
 from app.models.document import Document
 
+_PERM_KEYS = (
+    "can_upload",
+    "can_manage_tasks",
+    "can_delete_documents",
+    "scope_all_departments",
+    "can_access_substitutes",
+    "can_manage_calendar",
+    "can_import_timetable",
+    "bgh_workspace",
+)
+
 
 def is_admin(user: User) -> bool:
     return user.role == UserRole.admin
@@ -15,25 +26,20 @@ def _position(user: User):
 
 def get_permissions(user: User) -> dict:
     if is_admin(user):
-        return {
-            "can_upload": True,
-            "can_manage_tasks": True,
-            "can_delete_documents": True,
-            "scope_all_departments": True,
-        }
+        # Admin has all operational rights; BGH workspace is a non-admin UI profile.
+        return {key: (False if key == "bgh_workspace" else True) for key in _PERM_KEYS}
     pos = _position(user)
     if not pos:
-        return {
-            "can_upload": False,
-            "can_manage_tasks": False,
-            "can_delete_documents": False,
-            "scope_all_departments": False,
-        }
+        return {key: False for key in _PERM_KEYS}
     return {
         "can_upload": bool(pos.can_upload),
         "can_manage_tasks": bool(pos.can_manage_tasks),
         "can_delete_documents": bool(pos.can_delete_documents),
         "scope_all_departments": bool(pos.scope_all_departments),
+        "can_access_substitutes": bool(getattr(pos, "can_access_substitutes", False)),
+        "can_manage_calendar": bool(getattr(pos, "can_manage_calendar", False)),
+        "can_import_timetable": bool(getattr(pos, "can_import_timetable", False)),
+        "bgh_workspace": bool(getattr(pos, "bgh_workspace", False)),
     }
 
 
@@ -51,6 +57,25 @@ def can_delete_documents(user: User) -> bool:
 
 def has_scope_all_departments(user: User) -> bool:
     return get_permissions(user)["scope_all_departments"]
+
+
+def can_access_substitutes(user: User) -> bool:
+    return get_permissions(user)["can_access_substitutes"]
+
+
+def can_manage_calendar(user: User) -> bool:
+    return get_permissions(user)["can_manage_calendar"]
+
+
+def can_import_timetable(user: User) -> bool:
+    return get_permissions(user)["can_import_timetable"]
+
+
+def has_bgh_workspace(user: User) -> bool:
+    """BGH UI profile: hide TKB + Công việc, home = Lịch hoạt động."""
+    if is_admin(user):
+        return False
+    return get_permissions(user)["bgh_workspace"]
 
 
 def can_access_department(user: User, department: Optional[str]) -> bool:
@@ -92,7 +117,7 @@ def can_delete_document(user: User, doc: Document) -> bool:
 
 
 def can_re_extract_document(user: User, doc: Document) -> bool:
-    """Admin/BGH: any document. Tổ trưởng (upload or task rights): own department only."""
+    """Admin / scope-all with upload|tasks: any doc. Lead: own department only."""
     if is_admin(user):
         return True
     perms = get_permissions(user)

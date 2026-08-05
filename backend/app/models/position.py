@@ -12,4 +12,9 @@ class Position(Base):
     can_manage_tasks = Column(Boolean, default=False, nullable=False)
     can_delete_documents = Column(Boolean, default=False, nullable=False)
     scope_all_departments = Column(Boolean, default=False, nullable=False)
+    # New permission model
+    can_access_substitutes = Column(Boolean, default=False, nullable=False)
+    can_manage_calendar = Column(Boolean, default=False, nullable=False)
+    can_import_timetable = Column(Boolean, default=False, nullable=False)
+    bgh_workspace = Column(Boolean, default=False, nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)

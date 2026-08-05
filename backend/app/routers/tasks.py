@@ -11,6 +11,7 @@ from app.schemas.calendar import BghCalendarResponse
 from app.utils.permissions import (
     is_admin,
     can_manage_tasks,
+    can_manage_calendar,
 )
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskStatusUpdate,
@@ -69,8 +70,8 @@ def get_bgh_calendar(
 ):
     service = TaskService(db)
     data = service.get_bgh_calendar(start_date, end_date, campus_id=campus_id)
-    # Cảnh báo thiếu giờ / cần sửa chỉ dành cho Admin; User & BGH chỉ xem lịch đã xếp
-    if not is_admin(current_user):
+    # Cảnh báo thiếu giờ / cần sửa chỉ cho người có quyền quản lý lịch
+    if not can_manage_calendar(current_user):
         data["unscheduled_plans"] = []
         for plan in data.get("scheduled_plans", []):
             plan["needs_review"] = False

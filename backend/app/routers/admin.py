@@ -170,6 +170,23 @@ def update_user(
     return serialize_user(updated)
 
 
+def _position_to_response(pos, user_count: int = 0) -> PositionResponse:
+    return PositionResponse(
+        id=pos.id,
+        name=pos.name,
+        can_upload=pos.can_upload,
+        can_manage_tasks=pos.can_manage_tasks,
+        can_delete_documents=pos.can_delete_documents,
+        scope_all_departments=pos.scope_all_departments,
+        can_access_substitutes=bool(getattr(pos, "can_access_substitutes", False)),
+        can_manage_calendar=bool(getattr(pos, "can_manage_calendar", False)),
+        can_import_timetable=bool(getattr(pos, "can_import_timetable", False)),
+        bgh_workspace=bool(getattr(pos, "bgh_workspace", False)),
+        sort_order=pos.sort_order,
+        user_count=user_count,
+    )
+
+
 @router.get("/positions", response_model=List[PositionResponse])
 def get_positions(
     db: Session = Depends(get_db),
@@ -178,16 +195,7 @@ def get_positions(
     pos_repo = PositionRepository(db)
     positions = pos_repo.get_all()
     return [
-        PositionResponse(
-            id=p.id,
-            name=p.name,
-            can_upload=p.can_upload,
-            can_manage_tasks=p.can_manage_tasks,
-            can_delete_documents=p.can_delete_documents,
-            scope_all_departments=p.scope_all_departments,
-            sort_order=p.sort_order,
-            user_count=pos_repo.count_users(p.id),
-        )
+        _position_to_response(p, pos_repo.count_users(p.id))
         for p in positions
     ]
 
@@ -202,16 +210,7 @@ def create_position(
     if pos_repo.get_by_name(data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chức vụ đã tồn tại")
     pos = pos_repo.create(**data.model_dump())
-    return PositionResponse(
-        id=pos.id,
-        name=pos.name,
-        can_upload=pos.can_upload,
-        can_manage_tasks=pos.can_manage_tasks,
-        can_delete_documents=pos.can_delete_documents,
-        scope_all_departments=pos.scope_all_departments,
-        sort_order=pos.sort_order,
-        user_count=0,
-    )
+    return _position_to_response(pos, 0)
 
 
 @router.put("/positions/{position_id}", response_model=PositionResponse)
@@ -233,16 +232,7 @@ def update_position(
     for u in users_with_pos:
         u.position = pos.name
     db.commit()
-    return PositionResponse(
-        id=pos.id,
-        name=pos.name,
-        can_upload=pos.can_upload,
-        can_manage_tasks=pos.can_manage_tasks,
-        can_delete_documents=pos.can_delete_documents,
-        scope_all_departments=pos.scope_all_departments,
-        sort_order=pos.sort_order,
-        user_count=pos_repo.count_users(pos.id),
-    )
+    return _position_to_response(pos, pos_repo.count_users(pos.id))
 
 
 @router.delete("/positions/{position_id}")

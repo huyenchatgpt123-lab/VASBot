@@ -8,6 +8,10 @@ class UserPermissions(BaseModel):
     can_manage_tasks: bool = False
     can_delete_documents: bool = False
     scope_all_departments: bool = False
+    can_access_substitutes: bool = False
+    can_manage_calendar: bool = False
+    can_import_timetable: bool = False
+    bgh_workspace: bool = False
 
 
 class UserCreate(BaseModel):

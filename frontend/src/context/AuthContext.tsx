@@ -7,6 +7,10 @@ const defaultPermissions: UserPermissions = {
   can_manage_tasks: false,
   can_delete_documents: false,
   scope_all_departments: false,
+  can_access_substitutes: false,
+  can_manage_calendar: false,
+  can_import_timetable: false,
+  bgh_workspace: false,
 };
 
 interface ChangePasswordPayload {
@@ -22,7 +26,7 @@ interface AuthContextType {
   changePassword: (data: ChangePasswordPayload) => Promise<User>;
   logout: () => void;
   isAdmin: boolean;
-  /** BGH (scope all) nhưng không phải Admin — không dùng module Công việc */
+  /** Hồ sơ BGH: ẩn TKB + Công việc, home = Lịch hoạt động */
   isBghOnly: boolean;
   homePath: string;
   permissions: UserPermissions;
@@ -30,6 +34,9 @@ interface AuthContextType {
   canManageTasks: boolean;
   canDeleteDocuments: boolean;
   scopeAllDepartments: boolean;
+  canAccessSubstitutes: boolean;
+  canManageCalendar: boolean;
+  canImportTimetable: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -90,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = user?.role === 'admin';
   const scopeAllDepartments = isAdmin || permissions.scope_all_departments;
-  const isBghOnly = Boolean(user && scopeAllDepartments && !isAdmin);
+  const isBghOnly = Boolean(user && !isAdmin && permissions.bgh_workspace);
   const homePath = isBghOnly ? '/bgh-calendar' : '/tasks';
 
   return (
@@ -109,6 +116,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         canManageTasks: isAdmin || permissions.can_manage_tasks,
         canDeleteDocuments: isAdmin || permissions.can_delete_documents,
         scopeAllDepartments,
+        canAccessSubstitutes: isAdmin || permissions.can_access_substitutes,
+        canManageCalendar: isAdmin || permissions.can_manage_calendar,
+        canImportTimetable: isAdmin || permissions.can_import_timetable,
       }}
     >
       {children}

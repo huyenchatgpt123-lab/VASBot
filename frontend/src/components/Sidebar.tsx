@@ -10,7 +10,7 @@ type NavItem = {
   label: string;
   icon: string;
   adminOnly?: boolean;
-  bghOnly?: boolean;
+  substitutesOnly?: boolean;
   hideForBgh?: boolean;
   showBadge?: boolean;
   showSubBadge?: boolean;
@@ -23,7 +23,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: true },
   { path: '/bgh-calendar', label: 'Lịch hoạt động', icon: '🗓️' },
   { path: '/timetable', label: 'Thời khóa biểu', icon: '📋', hideForBgh: true, requiresTimetableAccess: true, showSubBadge: true },
-  { path: '/substitutes', label: 'Dạy thay', icon: '🔄', bghOnly: true },
+  { path: '/substitutes', label: 'Dạy thay', icon: '🔄', substitutesOnly: true },
   { path: '/documents', label: 'Tài liệu', icon: '📄' },
   { path: '/tasks', label: 'Công việc', icon: '✅', showBadge: true },
   { path: '/feedback', label: 'Feedback', icon: '💡', showFeedbackBadge: true },
@@ -37,7 +37,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
-  const { isAdmin, scopeAllDepartments, isBghOnly } = useAuth();
+  const { isAdmin, canAccessSubstitutes, canImportTimetable, isBghOnly } = useAuth();
   const [taskCount, setTaskCount] = useState(0);
   const [subCount, setSubCount] = useState(0);
   const [hasTimetableAccess, setHasTimetableAccess] = useState(false);
@@ -138,10 +138,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         {navItems
           .filter((item) => {
             if (item.adminOnly && !isAdmin) return false;
-            if (item.bghOnly && !scopeAllDepartments) return false;
+            if (item.substitutesOnly && !canAccessSubstitutes) return false;
             if (item.hideForBgh && isBghOnly) return false;
             if (item.path === '/tasks' && isBghOnly) return false;
-            if (item.requiresTimetableAccess && !isAdmin && !hasTimetableAccess) return false;
+            if (item.requiresTimetableAccess && !isAdmin && !canImportTimetable && !hasTimetableAccess) return false;
             return true;
           })
           .map((item) => (
