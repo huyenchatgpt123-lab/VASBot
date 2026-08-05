@@ -353,7 +353,10 @@ class DocumentService:
         def _coerce_dt(value):
             if value is not None and not isinstance(value, dt):
                 return None
-            return value
+            if value is None:
+                return None
+            # Form sends naive ISO; DB/Pydantic may yield aware — normalize before compare.
+            return value.replace(tzinfo=None) if getattr(value, "tzinfo", None) else value
 
         plan_svc = PlanEventService(self.db)
 

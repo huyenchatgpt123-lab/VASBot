@@ -13,6 +13,15 @@ logger = logging.getLogger(__name__)
 _TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 
 
+def _as_naive(value: Optional[datetime]) -> Optional[datetime]:
+    """Strip tzinfo so DB-aware and form-naive datetimes can be compared safely."""
+    if value is None:
+        return None
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=None) if value.tzinfo else value
+
+
 def clean_timeline_slots(timeline: Optional[list]) -> Optional[List[Dict[str, Any]]]:
     if not isinstance(timeline, list):
         return None
@@ -73,6 +82,8 @@ class PlanEventService:
         if len(title) > 500:
             title = title[:500]
 
+        starts_at = _as_naive(starts_at)
+        ends_at = _as_naive(ends_at)
         if ends_at and starts_at and ends_at < starts_at:
             starts_at, ends_at = ends_at, starts_at
 
@@ -112,6 +123,9 @@ class PlanEventService:
             raise ValueError("Tiêu đề không được để trống")
         if len(title) > 500:
             title = title[:500]
+
+        starts_at = _as_naive(starts_at)
+        ends_at = _as_naive(ends_at)
         if ends_at and starts_at and ends_at < starts_at:
             starts_at, ends_at = ends_at, starts_at
 
@@ -187,7 +201,10 @@ class PlanEventService:
         for spec in specs:
             if not isinstance(spec, dict):
                 continue
-            spec_start = spec.get("starts_at")
+            spec_start = _as_naive(spec.get("starts_at"))
+            spec_end = _as_naive(spec.get("ends_at"))
+            if spec_start and spec_end and spec_end < spec_start:
+                spec_start, spec_end = spec_end, spec_start
             display_title = (spec.get("title") or default_title or "Kế hoạch").strip()[:500]
             loc = (spec.get("location") if spec.get("location") is not None else location) or ""
             loc = str(loc).strip()[:300]
@@ -199,7 +216,7 @@ class PlanEventService:
                 location=loc or None,
                 timeline=slots,
                 starts_at=spec_start,
-                ends_at=spec.get("ends_at") if spec_start else None,
+                ends_at=spec_end if spec_start else None,
                 source="ai",
                 needs_review=needs_review,
             )
@@ -218,21 +235,22 @@ class PlanEventService:
         events = self.list_for_document(document.id)
         dated = [e for e in events if e.starts_at is not None]
         if dated:
-            primary = min(dated, key=lambda e: e.starts_at)
+            # Normalize before min/max — DB may return aware while new rows are naive.
+            primary = min(dated, key=lambda e: _as_naive(e.starts_at) or datetime.min)
             latest_end = max(
                 (
-                    (e.ends_at or e.starts_at)
+                    _as_naive(e.ends_at) or _as_naive(e.starts_at)
                     for e in dated
                     if e.starts_at is not None
                 ),
                 default=None,
             )
-            document.plan_event_at = primary.starts_at
-            # Show span across discrete days on Documents page (min start → max end/start)
-            if latest_end and latest_end.date() > primary.starts_at.date():
+            primary_start = _as_naive(primary.starts_at)
+            document.plan_event_at = primary_start
+            if latest_end and primary_start and latest_end.date() > primary_start.date():
                 document.plan_event_end_at = latest_end
             else:
-                document.plan_event_end_at = primary.ends_at
+                document.plan_event_end_at = _as_naive(primary.ends_at)
             if primary.title:
                 document.plan_title = primary.title
         elif events:
@@ -275,8 +293,8 @@ class PlanEventService:
                     PlanEvent(
                         document_id=doc.id,
                         title=title,
-                        starts_at=doc.plan_event_at,
-                        ends_at=doc.plan_event_end_at,
+                        starts_at=_as_naive(doc.plan_event_at),
+                        ends_at=_as_naive(doc.plan_event_end_at),
                         source="ai",
                         needs_review=False,
                     )

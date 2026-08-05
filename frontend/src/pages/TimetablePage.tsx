@@ -6,7 +6,10 @@ import {
   SubstituteAssignment,
   TeacherOption,
   TimetableSlot,
+  TimetableImportResult,
 } from '../api/substitutes';
+import OperationProgressBar from '../components/OperationProgressBar';
+import { useOperationProgress } from '../hooks/useOperationProgress';
 
 const DAYS = [
   { value: 2, label: 'Thứ 2' },
@@ -60,6 +63,24 @@ function formatAbsentForUser(
   return department ? `${base} · ${department}` : base;
 }
 
+function apiErrorMessage(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && 'msg' in item) {
+          return String((item as { msg: unknown }).msg);
+        }
+        return '';
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join('; ');
+  }
+  return fallback;
+}
+
 export default function TimetablePage() {
   const { user, isAdmin, isBghOnly, homePath } = useAuth();
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
@@ -68,9 +89,13 @@ export default function TimetablePage() {
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [teacherId, setTeacherId] = useState<number | ''>('');
   const [teacherSearch, setTeacherSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actingId, setActingId] = useState<number | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importResult, setImportResult] = useState<TimetableImportResult | null>(null);
+  const { progress, start, finish, fail } = useOperationProgress();
 
   const weekDates = useMemo(() => {
     return DAYS.map((d, i) => {
@@ -99,13 +124,38 @@ export default function TimetablePage() {
     }
   }, [isAdmin, user?.id, teacherId]);
 
+  const departmentOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of teachers) {
+      if (t.department) set.add(t.department);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [teachers]);
+
   const filteredTeachers = useMemo(() => {
     const q = teacherSearch.trim().toLowerCase();
     return teachers.filter((t) => {
+      if (deptFilter && t.department !== deptFilter) return false;
       if (!q) return true;
       return `${t.name} ${t.teacher_code || ''} ${t.department || ''}`.toLowerCase().includes(q);
     });
-  }, [teachers, teacherSearch]);
+  }, [teachers, teacherSearch, deptFilter]);
+
+  // If current teacher falls outside the department filter, reset to self / first match
+  useEffect(() => {
+    if (!isAdmin || !deptFilter || !teacherId) return;
+    const stillVisible = filteredTeachers.some((t) => t.id === teacherId)
+      || (user?.id === teacherId);
+    if (stillVisible) return;
+    if (user?.id) setTeacherId(user.id);
+    else if (filteredTeachers[0]) setTeacherId(filteredTeachers[0].id);
+    else setTeacherId('');
+  }, [isAdmin, deptFilter, teacherId, filteredTeachers, user?.id]);
+
+  const openImport = () => {
+    setImportResult(null);
+    setShowImport(true);
+  };
 
   const load = useCallback(async () => {
     if (!viewingTeacherId) return;
@@ -129,6 +179,26 @@ export default function TimetablePage() {
       setLoading(false);
     }
   }, [viewingTeacherId, isAdmin, user?.id]);
+
+  const handleImport = async (file: File) => {
+    if (!confirm(
+      `Import TKB từ "${file.name}"?\n\nMỗi dòng cần có cột Cơ sở (VA1, VA3, EMC…). `
+      + `Tiết trùng sẽ được cập nhật, không xóa TKB cũ.`,
+    )) {
+      return;
+    }
+    start('Đang import thời khóa biểu...');
+    setImportResult(null);
+    try {
+      const result = await substitutesApi.importTimetable(file);
+      setImportResult(result);
+      await finish();
+      await load();
+    } catch (err: unknown) {
+      fail();
+      alert(apiErrorMessage(err, 'Import thất bại'));
+    }
+  };
 
   useEffect(() => {
     load();
@@ -214,12 +284,53 @@ export default function TimetablePage() {
           <p className="text-sm text-gray-500 mt-1">
             Lịch dạy của {isAdmin && viewingTeacherId !== user?.id ? 'giáo viên đang chọn' : 'bạn'}
             {' — '}chỉ tiết đã xác nhận hiện trên lưới TKB.
+            {isAdmin ? ' Admin có thể tải mẫu / import TKB.' : ''}
           </p>
         </div>
+        {isAdmin && (
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full sm:w-auto">
+            <a
+              href="/mau_thoi_khoa_bieu_luoi.xlsx"
+              download
+              className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium text-center"
+            >
+              Tải mẫu
+            </a>
+            <button
+              type="button"
+              onClick={openImport}
+              className="px-4 py-2 border border-primary-300 text-primary-700 bg-white hover:bg-primary-50 rounded-lg text-sm font-medium w-full sm:w-auto"
+            >
+              Import TKB
+            </button>
+          </div>
+        )}
       </div>
+
+      {importResult && (
+        <div className="mb-4 text-sm bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 space-y-1">
+          <p className="font-medium text-amber-900">{importResult.message}</p>
+          {importResult.teachers_unmatched.length > 0 && (
+            <p className="text-amber-800">
+              Chưa khớp: {importResult.teachers_unmatched.slice(0, 10).join(', ')}
+              {importResult.teachers_unmatched.length > 10 ? '…' : ''}
+            </p>
+          )}
+        </div>
+      )}
 
       {isAdmin && (
         <div className="mb-4 flex flex-col sm:flex-row gap-2 sm:items-center">
+          <select
+            value={deptFilter}
+            onChange={(e) => setDeptFilter(e.target.value)}
+            className="w-full sm:w-44 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="">Tất cả tổ</option>
+            {departmentOptions.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
           <input
             type="text"
             placeholder="Tìm giáo viên..."
@@ -232,7 +343,7 @@ export default function TimetablePage() {
             onChange={(e) => setTeacherId(e.target.value ? Number(e.target.value) : '')}
             className="w-full sm:flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
           >
-            {user && (
+            {user && (!deptFilter || !user.department || user.department === deptFilter) && (
               <option value={user.id}>{user.name} (Bạn)</option>
             )}
             {filteredTeachers
@@ -477,6 +588,60 @@ export default function TimetablePage() {
           </>
         )}
       </div>
+
+      {showImport && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">Import TKB</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Dùng file lưới (Mã GV, Cơ sở, Giáo viên, Buổi dạy, Thứ 2–6). Tải mẫu trước khi import.
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                File có thể chứa <strong>nhiều cơ sở</strong> (VA1, VA3, EMC…) — mỗi dòng bắt buộc có cột Cơ sở.
+                Tiết đã có sẽ được <strong>cập nhật</strong>, không xóa toàn bộ TKB.
+              </p>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                disabled={progress.visible}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleImport(f);
+                  e.target.value = '';
+                }}
+                className="block w-full text-sm"
+              />
+              <OperationProgressBar visible={progress.visible} percent={progress.percent} label={progress.label} />
+              {importResult && (
+                <div className="text-sm space-y-1">
+                  <p className="font-medium text-gray-900">{importResult.message}</p>
+                  {importResult.errors.length > 0 && (
+                    <details>
+                      <summary className="text-amber-800 cursor-pointer">{importResult.errors.length} cảnh báo</summary>
+                      <ul className="mt-1 list-disc pl-5 max-h-32 overflow-y-auto text-amber-800">
+                        {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowImport(false)}
+                disabled={progress.visible}
+                className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
