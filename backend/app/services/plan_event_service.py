@@ -159,7 +159,26 @@ class PlanEventService:
             .all()
         )
 
-    def replace_ai_events_for_document(
+    def delete_event(self, event: PlanEvent) -> dict:
+        """Delete one calendar day/event. Clears include_in_calendar if none remain."""
+        document_id = event.document_id
+        document = event.document or self.db.query(Document).filter(Document.id == document_id).first()
+        self.db.delete(event)
+        self.db.flush()
+        remaining = 0
+        if document:
+            remaining = len(self.list_for_document(document.id))
+            if remaining == 0:
+                document.include_in_calendar = False
+            self.sync_document_summary(document)
+        self.db.commit()
+        return {
+            "document_id": document_id,
+            "remaining": remaining,
+            "include_in_calendar": bool(document.include_in_calendar) if document else False,
+        }
+
+    def replace_events_for_document(
         self,
         document: Document,
         *,
@@ -172,13 +191,11 @@ class PlanEventService:
         events: Optional[List[Dict[str, Any]]] = None,
     ) -> List[PlanEvent]:
         """
-        Replace AI-sourced events. Accepts either a single event (legacy kwargs)
-        or an `events` list for multi-day / non-contiguous packages.
-        Manual events are preserved.
+        Replace ALL calendar events for a document (ai + manual).
+        Used after admin confirms re-extract / upload review so Lịch hoạt động stays in sync.
         """
         self.db.query(PlanEvent).filter(
             PlanEvent.document_id == document.id,
-            PlanEvent.source == "ai",
         ).delete(synchronize_session=False)
 
         default_title = (title or document.plan_title or document.filename or "Kế hoạch").strip()
@@ -229,6 +246,10 @@ class PlanEventService:
         self.db.flush()
         self.sync_document_summary(document)
         return created
+
+    def replace_ai_events_for_document(self, *args, **kwargs) -> List[PlanEvent]:
+        """Backward-compatible alias — now replaces all events for the document."""
+        return self.replace_events_for_document(*args, **kwargs)
 
     def sync_document_summary(self, document: Document) -> None:
         """Keep denormalized document.plan_* columns in sync with plan_events (Documents page)."""

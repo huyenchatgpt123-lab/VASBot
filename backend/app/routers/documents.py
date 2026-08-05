@@ -343,6 +343,39 @@ def update_plan_event(
     )
 
 
+@router.delete("/plan-events/{event_id}", response_model=PlanEventResponse)
+def delete_plan_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin: xóa một ngày/sự kiện khỏi Lịch hoạt động."""
+    service = PlanEventService(db)
+    event = service.get_by_id(event_id)
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sự kiện không tồn tại")
+    document_id = event.document_id
+    result = service.delete_event(event)
+    remaining = result.get("remaining", 0)
+    return PlanEventResponse(
+        id=None,
+        document_id=document_id,
+        title=None,
+        location=None,
+        starts_at=None,
+        ends_at=None,
+        timeline=None,
+        source=None,
+        needs_review=False,
+        message=(
+            "Đã xóa ngày khỏi Lịch hoạt động"
+            if remaining
+            else "Đã xóa ngày cuối — kế hoạch đã bỏ khỏi Lịch hoạt động"
+        ),
+        removed=True,
+    )
+
+
 @router.post("/{doc_id}/plan-events", response_model=PlanEventResponse)
 def create_plan_event(
     doc_id: int,

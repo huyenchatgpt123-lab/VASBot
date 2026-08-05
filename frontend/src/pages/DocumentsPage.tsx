@@ -7,6 +7,7 @@ import {
   CalendarPreviewPayload,
 } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { Document } from '../types';
 import axios from 'axios';
 import TaskExtractPreviewModal from '../components/TaskExtractPreviewModal';
@@ -59,6 +60,7 @@ export default function DocumentsPage() {
   const pageSize = 20;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { canUpload, canDeleteDocuments, scopeAllDepartments, user, isAdmin, canManageTasks } = useAuth();
+  const toast = useToast();
   const [reExtractingId, setReExtractingId] = useState<number | null>(null);
   const [reExtractDocId, setReExtractDocId] = useState<number | null>(null);
 
@@ -169,7 +171,7 @@ export default function DocumentsPage() {
 
   const handleUploadSubmit = async (force = false) => {
     if (!uploadFile || !uploadDept || !uploadMonth || !uploadYear || uploadCampusIds.length === 0) {
-      alert('Vui lòng điền đầy đủ thông tin và chọn ít nhất một trường.');
+      toast.error('Thiếu thông tin', 'Vui lòng điền đầy đủ thông tin và chọn ít nhất một trường.');
       return;
     }
 
@@ -193,6 +195,7 @@ export default function DocumentsPage() {
       // Keep the modal open until 100% is shown, then hand off to review modals.
       await finishProgress();
       setShowUploadModal(false);
+      toast.success('Upload thành công', result.filename || result.message);
 
       const calPreview = result.calendar_preview || null;
       const preview = result.task_preview as TaskPreviewPayload | null | undefined;
@@ -218,10 +221,11 @@ export default function DocumentsPage() {
         const detail = err.response.data?.detail;
         if (detail && typeof detail === 'object' && detail.code === 'duplicate_filename') {
           setDuplicateWarning(detail as DuplicateUploadDetail);
+          toast.error('Trùng tên file', (detail as DuplicateUploadDetail).message || 'File đã tồn tại');
           return;
         }
       }
-      alert('Upload thất bại. Vui lòng thử lại.');
+      toast.apiError(err, 'Upload thất bại');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -233,8 +237,9 @@ export default function DocumentsPage() {
     try {
       await documentsApi.delete(id);
       await loadDocuments();
-    } catch {
-      alert('Xóa thất bại.');
+      toast.success('Đã xóa tài liệu');
+    } catch (err) {
+      toast.apiError(err, 'Xóa thất bại');
     }
   };
 
@@ -268,8 +273,7 @@ export default function DocumentsPage() {
       });
     } catch (err: unknown) {
       failProgress();
-      const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
-      alert(typeof detail === 'string' ? detail : 'Trích xuất công việc thất bại.');
+      toast.apiError(err, 'Trích xuất công việc thất bại');
     } finally {
       setReExtractingId(null);
     }
@@ -292,10 +296,10 @@ export default function DocumentsPage() {
         events: result.events || [],
         needs_review: Boolean(result.needs_review),
       });
+      toast.success('Đã trích lịch trình', 'Kiểm tra rồi bấm Lưu để cập nhật Lịch hoạt động.');
     } catch (err: unknown) {
       failProgress();
-      const detail = axios.isAxiosError(err) ? err.response?.data?.detail : undefined;
-      alert(typeof detail === 'string' ? detail : 'Trích lên Lịch hoạt động thất bại.');
+      toast.apiError(err, 'Trích lên Lịch hoạt động thất bại');
     } finally {
       setReExtractingId(null);
     }
@@ -314,14 +318,14 @@ export default function DocumentsPage() {
     if (!reExtractDocId || !choice) return;
     if (choice === 'tasks') {
       if (!canManageTasks) {
-        alert('Bạn không có quyền trích xuất công việc.');
+        toast.error('Không có quyền', 'Bạn không có quyền trích xuất công việc.');
         return;
       }
       await runReExtractTasks(reExtractDocId);
       return;
     }
     if (!hasReExtractRight) {
-      alert('Bạn không có quyền trích lên Lịch hoạt động.');
+      toast.error('Không có quyền', 'Bạn không có quyền trích lên Lịch hoạt động.');
       return;
     }
     await runReExtractCalendar(reExtractDocId);

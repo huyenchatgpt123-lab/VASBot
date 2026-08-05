@@ -6,6 +6,7 @@ import {
   TimelineSlotPreview,
   PlanEventConfirmPayload,
 } from '../api/documents';
+import { useToast } from '../context/ToastContext';
 
 type Props = {
   preview: CalendarPreviewPayload;
@@ -124,6 +125,7 @@ export default function CalendarPlanPreviewModal({
   onReExtract,
   reExtracting = false,
 }: Props) {
+  const toast = useToast();
   const isSingleEventEdit = Boolean(eventId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -282,10 +284,14 @@ export default function CalendarPlanPreviewModal({
           timeline: cleanedSlotsFromDay(day),
         });
       }
+      toast.success(
+        includeInCalendar ? 'Đã cập nhật Lịch hoạt động' : 'Đã bỏ khỏi Lịch hoạt động',
+      );
       onSaved();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(detail || 'Không thể lưu sự kiện lên Lịch hoạt động.');
+      toast.apiError(err, 'Lưu lịch hoạt động thất bại');
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { adminApi } from '../api/admin';
 import { documentsApi } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { User, Position, Department } from '../types';
 
 function resolveDepartmentId(user: User, departments: Department[]): number | undefined {
@@ -12,6 +13,7 @@ function resolveDepartmentId(user: User, departments: Department[]): number | un
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
+  const toast = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -153,7 +155,7 @@ export default function UsersPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.department_id) {
-      alert('Vui lòng chọn phòng ban.');
+      toast.error('Thiếu thông tin', 'Vui lòng chọn phòng ban.');
       return;
     }
     try {
@@ -170,8 +172,9 @@ export default function UsersPage() {
       });
       resetForm();
       loadUsers();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Tạo người dùng thất bại.');
+      toast.success('Đã tạo tài khoản', form.name || form.email);
+    } catch (err: unknown) {
+      toast.apiError(err, 'Tạo người dùng thất bại');
     }
   };
 
@@ -196,7 +199,7 @@ export default function UsersPage() {
     e.preventDefault();
     if (!editingUser) return;
     if (!form.department_id) {
-      alert('Vui lòng chọn phòng ban.');
+      toast.error('Thiếu thông tin', 'Vui lòng chọn phòng ban.');
       return;
     }
 
@@ -232,8 +235,9 @@ export default function UsersPage() {
       await adminApi.updateUser(editingUser.id, data);
       resetForm();
       loadUsers();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Cập nhật thất bại.');
+      toast.success('Đã cập nhật tài khoản', form.name || form.email);
+    } catch (err: unknown) {
+      toast.apiError(err, 'Cập nhật thất bại');
     }
   };
 
@@ -247,8 +251,9 @@ export default function UsersPage() {
         return next;
       });
       loadUsers();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Xóa thất bại.');
+      toast.success('Đã xóa tài khoản');
+    } catch (err: unknown) {
+      toast.apiError(err, 'Xóa thất bại');
     }
   };
 
@@ -265,12 +270,15 @@ export default function UsersPage() {
 
     setBulkDeleting(true);
     const failed: string[] = [];
+    let ok = 0;
     for (const id of ids) {
       const u = users.find((user) => user.id === id);
       try {
         await adminApi.deleteUser(id);
-      } catch (err: any) {
-        failed.push(`${u?.name || `ID ${id}`}: ${err.response?.data?.detail || 'Lỗi không xác định'}`);
+        ok += 1;
+      } catch (err: unknown) {
+        const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+        failed.push(`${u?.name || `ID ${id}`}: ${detail || 'Lỗi không xác định'}`);
       }
     }
     setBulkDeleting(false);
@@ -278,7 +286,12 @@ export default function UsersPage() {
     loadUsers();
 
     if (failed.length) {
-      alert(`Một số người dùng không xóa được:\n${failed.join('\n')}`);
+      toast.error(
+        ok ? `Đã xóa ${ok}, lỗi ${failed.length}` : 'Xóa hàng loạt thất bại',
+        failed.slice(0, 8).join('\n'),
+      );
+    } else {
+      toast.success(`Đã xóa ${ok} tài khoản`);
     }
   };
 
@@ -290,8 +303,16 @@ export default function UsersPage() {
       const result = await adminApi.importExcel(file);
       setImportResult(result);
       loadUsers();
-    } catch {
-      alert('Import thất bại.');
+      if (result.errors?.length) {
+        toast.error(
+          result.message || 'Import hoàn tất có lỗi',
+          result.errors.slice(0, 8).join('\n'),
+        );
+      } else {
+        toast.success(result.message || 'Import tài khoản thành công');
+      }
+    } catch (err: unknown) {
+      toast.apiError(err, 'Import tài khoản thất bại');
     } finally {
       if (excelInputRef.current) excelInputRef.current.value = '';
     }
@@ -326,19 +347,21 @@ export default function UsersPage() {
   const handleSavePosition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!positionForm.name.trim()) {
-      alert('Vui lòng nhập tên chức vụ');
+      toast.error('Thiếu thông tin', 'Vui lòng nhập tên chức vụ');
       return;
     }
     try {
       if (editingPosition) {
         await adminApi.updatePosition(editingPosition.id, positionForm);
+        toast.success('Đã cập nhật chức vụ', positionForm.name.trim());
       } else {
         await adminApi.createPosition(positionForm);
+        toast.success('Đã tạo chức vụ', positionForm.name.trim());
       }
       resetPositionForm();
       loadPositions();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Lưu chức vụ thất bại');
+    } catch (err: unknown) {
+      toast.apiError(err, 'Lưu chức vụ thất bại');
     }
   };
 
@@ -347,8 +370,9 @@ export default function UsersPage() {
     try {
       await adminApi.deletePosition(pos.id);
       loadPositions();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Không thể xóa chức vụ');
+      toast.success('Đã xóa chức vụ', pos.name);
+    } catch (err: unknown) {
+      toast.apiError(err, 'Không thể xóa chức vụ');
     }
   };
 
@@ -367,20 +391,22 @@ export default function UsersPage() {
   const handleSaveDept = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deptForm.name.trim()) {
-      alert('Vui lòng nhập tên phòng ban');
+      toast.error('Thiếu thông tin', 'Vui lòng nhập tên phòng ban');
       return;
     }
     try {
       if (editingDept) {
         await adminApi.updateDepartment(editingDept.id, deptForm);
+        toast.success('Đã cập nhật phòng ban', deptForm.name.trim());
       } else {
         await adminApi.createDepartment(deptForm);
+        toast.success('Đã tạo phòng ban', deptForm.name.trim());
       }
       resetDeptForm();
       loadDepartments();
       loadUsers();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Lưu phòng ban thất bại');
+    } catch (err: unknown) {
+      toast.apiError(err, 'Lưu phòng ban thất bại');
     }
   };
 
@@ -389,8 +415,9 @@ export default function UsersPage() {
     try {
       await adminApi.deleteDepartment(dept.id);
       loadDepartments();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Không thể xóa phòng ban');
+      toast.success('Đã xóa phòng ban', dept.name);
+    } catch (err: unknown) {
+      toast.apiError(err, 'Không thể xóa phòng ban');
     }
   };
 

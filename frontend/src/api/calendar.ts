@@ -66,6 +66,10 @@ export const calendarApi = {
     const res = await api.patch(`/documents/plan-events/${eventId}`, data);
     return res.data;
   },
+  deletePlanEvent: async (eventId: number): Promise<PlanEventResult> => {
+    const res = await api.delete(`/documents/plan-events/${eventId}`);
+    return res.data;
+  },
   createPlanEvent: async (documentId: number, data: PlanEventPayload): Promise<PlanEventResult> => {
     const res = await api.post(`/documents/${documentId}/plan-events`, data);
     return res.data;

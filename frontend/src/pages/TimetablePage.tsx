@@ -10,6 +10,7 @@ import {
 } from '../api/substitutes';
 import OperationProgressBar from '../components/OperationProgressBar';
 import { useOperationProgress } from '../hooks/useOperationProgress';
+import { useToast } from '../context/ToastContext';
 
 const DAYS = [
   { value: 2, label: 'Thứ 2' },
@@ -63,26 +64,9 @@ function formatAbsentForUser(
   return department ? `${base} · ${department}` : base;
 }
 
-function apiErrorMessage(err: unknown, fallback: string): string {
-  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
-  if (typeof detail === 'string' && detail.trim()) return detail;
-  if (Array.isArray(detail)) {
-    const parts = detail
-      .map((item) => {
-        if (typeof item === 'string') return item;
-        if (item && typeof item === 'object' && 'msg' in item) {
-          return String((item as { msg: unknown }).msg);
-        }
-        return '';
-      })
-      .filter(Boolean);
-    if (parts.length) return parts.join('; ');
-  }
-  return fallback;
-}
-
 export default function TimetablePage() {
   const { user, isAdmin, isBghOnly, homePath } = useAuth();
+  const toast = useToast();
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [subs, setSubs] = useState<SubstituteAssignment[]>([]);
@@ -194,9 +178,17 @@ export default function TimetablePage() {
       setImportResult(result);
       await finish();
       await load();
+      if (result.errors?.length) {
+        toast.error(
+          result.message || 'Import TKB hoàn tất có cảnh báo',
+          result.errors.slice(0, 8).join('\n'),
+        );
+      } else {
+        toast.success(result.message || 'Import TKB thành công');
+      }
     } catch (err: unknown) {
       fail();
-      alert(apiErrorMessage(err, 'Import thất bại'));
+      toast.apiError(err, 'Import TKB thất bại');
     }
   };
 
@@ -245,9 +237,9 @@ export default function TimetablePage() {
     try {
       await substitutesApi.confirmAssignment(id);
       await load();
+      toast.success('Đã xác nhận lịch dạy thay');
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      alert(detail || 'Không xác nhận được');
+      toast.apiError(err, 'Không xác nhận được');
     } finally {
       setActingId(null);
     }
@@ -257,16 +249,16 @@ export default function TimetablePage() {
     const reason = window.prompt('Nhập lý do từ chối (bắt buộc):');
     if (reason === null) return;
     if (reason.trim().length < 3) {
-      alert('Lý do từ chối cần ít nhất 3 ký tự');
+      toast.error('Lý do từ chối cần ít nhất 3 ký tự');
       return;
     }
     setActingId(id);
     try {
       await substitutesApi.rejectAssignment(id, reason.trim());
       await load();
+      toast.success('Đã từ chối lịch dạy thay');
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      alert(detail || 'Không từ chối được');
+      toast.apiError(err, 'Không từ chối được');
     } finally {
       setActingId(null);
     }

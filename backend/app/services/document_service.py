@@ -302,7 +302,6 @@ class DocumentService:
 
         self.db.query(PlanEvent).filter(
             PlanEvent.document_id == doc.id,
-            PlanEvent.source == "ai",
         ).delete(synchronize_session=False)
         self.db.flush()
 

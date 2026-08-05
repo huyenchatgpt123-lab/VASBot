@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { calendarApi, BghCalendarPlan, Campus } from '../api/calendar';
 import { documentsApi, CalendarPreviewPayload } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import CalendarPlanPreviewModal from '../components/CalendarPlanPreviewModal';
 import OperationProgressBar from '../components/OperationProgressBar';
 import { useOperationProgress } from '../hooks/useOperationProgress';
@@ -143,6 +144,7 @@ function openDocumentPreview(documentId: number) {
 
 export default function BghCalendarPage() {
   const { isAdmin } = useAuth();
+  const toast = useToast();
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()));
   const [activePreset, setActivePreset] = useState<DatePreset>('today');
@@ -235,6 +237,7 @@ export default function BghCalendarPage() {
         const hit = events.find((ev) => (ev.plan_event_at || '').startsWith(editingPlan.date!));
         if (hit) matched = hit;
       }
+      toast.success('Đã trích lại', 'Kiểm tra form rồi bấm Lưu để cập nhật lịch.');
       return {
         document_id: result.document_id || editingPlan.document_id,
         plan_title: matched?.plan_title || result.plan_title || editingPlan.plan_name,
@@ -246,12 +249,29 @@ export default function BghCalendarPage() {
         needs_review: Boolean(result.needs_review),
         event_id: editingPlan.event_id ?? null,
       };
-    } catch {
+    } catch (err) {
       failProgress();
-      alert('Trích lại lịch thất bại. Vui lòng thử lại.');
+      toast.apiError(err, 'Trích lại lịch thất bại');
       return null;
     } finally {
       setReExtracting(false);
+    }
+  };
+
+  const handleDeletePlan = async (plan: BghCalendarPlan) => {
+    if (!plan.event_id) {
+      toast.error('Không xóa được', 'Sự kiện chưa có trên lịch (thiếu ngày/giờ). Hãy Sửa hoặc bỏ khỏi lịch.');
+      return;
+    }
+    if (!confirm(`Xóa lịch ngày ${plan.date || ''} — «${displayPlanName(plan.plan_name)}» khỏi Lịch hoạt động?`)) {
+      return;
+    }
+    try {
+      const result = await calendarApi.deletePlanEvent(plan.event_id);
+      toast.success(result.message || 'Đã xóa khỏi Lịch hoạt động');
+      await loadCalendar();
+    } catch (err) {
+      toast.apiError(err, 'Xóa lịch thất bại');
     }
   };
 
@@ -618,6 +638,7 @@ export default function BghCalendarPage() {
                               plan={plan}
                               isAdmin={isAdmin}
                               onEdit={isAdmin ? () => setEditingPlan(plan) : undefined}
+                              onDelete={isAdmin ? () => handleDeletePlan(plan) : undefined}
                               onViewTimeline={() => setTimelinePlan(plan)}
                             />
                           ))}
@@ -666,6 +687,15 @@ export default function BghCalendarPage() {
                         >
                           Sửa
                         </button>
+                        {plan.event_id ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePlan(plan)}
+                            className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-200 text-red-700 hover:bg-red-50"
+                          >
+                            Xóa
+                          </button>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -715,11 +745,13 @@ function PlanRow({
   plan,
   isAdmin,
   onEdit,
+  onDelete,
   onViewTimeline,
 }: {
   plan: BghCalendarPlan;
   isAdmin: boolean;
   onEdit?: () => void;
+  onDelete?: () => void;
   onViewTimeline: () => void;
 }) {
   const hasTimeline = Array.isArray(plan.timeline) && plan.timeline.length > 0;
@@ -748,6 +780,16 @@ function PlanRow({
           className="shrink-0 px-2 h-9 text-xs font-medium text-amber-800 hover:bg-amber-50 rounded-lg transition-colors"
         >
           Sửa
+        </button>
+      )}
+      {isAdmin && onDelete && plan.event_id && !plan.is_continuation && (
+        <button
+          type="button"
+          onClick={onDelete}
+          title="Xóa ngày này khỏi lịch"
+          className="shrink-0 px-2 h-9 text-xs font-medium text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+        >
+          Xóa
         </button>
       )}
       <button
