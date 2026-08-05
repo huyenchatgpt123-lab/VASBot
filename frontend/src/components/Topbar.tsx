@@ -14,8 +14,11 @@ function getUserSubtitle(user: User | null | undefined): string {
   if (position?.toLowerCase() === 'ban giám hiệu') return 'Ban Giám Hiệu';
 
   const department = user.department?.trim();
-  if (position && department) return `${position} ${department}`;
-  return '—';
+  if (position && department) {
+    if (position.toLowerCase() === department.toLowerCase()) return position;
+    return `${position} · ${department}`;
+  }
+  return position || department || '—';
 }
 
 export default function Topbar({ onMenuClick }: TopbarProps) {

@@ -437,39 +437,9 @@ export default function UsersPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Người dùng</h1>
-          <p className="text-gray-500 mt-1">Quản lý tài khoản người dùng</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-          <input
-            ref={excelInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleImportExcel}
-            className="hidden"
-          />
-          <a
-            href="/mau_danh_sach_giao_vien.xlsx"
-            download
-            className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors text-center"
-          >
-            Tải file mẫu
-          </a>
-          <button
-            onClick={() => excelInputRef.current?.click()}
-            className="px-5 py-2.5 border border-primary-600 text-primary-600 rounded-lg font-medium hover:bg-primary-50 transition-colors"
-          >
-            Import Excel
-          </button>
-          <button
-            onClick={() => { resetForm(); setShowForm(true); }}
-            className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
-          >
-            + Thêm người dùng
-          </button>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Quản lí và phân quyền User</h1>
+        <p className="text-gray-500 mt-1">Quản lý tài khoản, tổ và phân quyền chức vụ</p>
       </div>
 
       {importResult && (
@@ -602,6 +572,40 @@ export default function UsersPage() {
         </div>
       )}
 
+      {/* Danh sách người dùng */}
+      <div className="mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h2 className="text-lg font-semibold text-gray-900">Người dùng</h2>
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+          <input
+            ref={excelInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleImportExcel}
+            className="hidden"
+          />
+          <a
+            href="/mau_danh_sach_giao_vien.xlsx"
+            download
+            className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors text-center"
+          >
+            Tải file mẫu
+          </a>
+          <button
+            onClick={() => excelInputRef.current?.click()}
+            className="px-5 py-2.5 border border-primary-600 text-primary-600 rounded-lg font-medium hover:bg-primary-50 transition-colors"
+          >
+            Import Excel
+          </button>
+          <button
+            onClick={() => { resetForm(); setShowForm(true); }}
+            className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
+          >
+            + Thêm người dùng
+          </button>
+        </div>
+      </div>
+
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 break-words">
         File Excel cần các cột:{' '}
         <strong>Họ tên, Email, Mật khẩu, Vai trò, Phòng ban, Biệt danh, Chức vụ, Mã GV, Cơ sở</strong>.
@@ -615,244 +619,6 @@ export default function UsersPage() {
         >
           Tải file mẫu
         </a>
-      </div>
-
-      {/* Quản lý phòng ban */}
-      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-          <h2 className="text-lg font-semibold text-gray-900">Tổ / Phòng ban</h2>
-          <button
-            onClick={() => {
-              setEditingDept(null);
-              setDeptForm({ name: '', sort_order: departmentList.length + 1 });
-              setShowDeptForm(true);
-            }}
-            className="w-full sm:w-auto px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            + Thêm phòng ban
-          </button>
-        </div>
-
-        {showDeptForm && (
-          <form onSubmit={handleSaveDept} className="mb-4 p-4 bg-gray-50 rounded-lg flex flex-wrap gap-3 items-end">
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs text-gray-500 mb-1">Tên phòng ban</label>
-              <input
-                value={deptForm.name}
-                onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                required
-              />
-            </div>
-            <div className="w-24">
-              <label className="block text-xs text-gray-500 mb-1">Thứ tự</label>
-              <input
-                type="number"
-                value={deptForm.sort_order}
-                onChange={(e) => setDeptForm({ ...deptForm, sort_order: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              />
-            </div>
-            <button type="submit" className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">
-              {editingDept ? 'Cập nhật' : 'Tạo'}
-            </button>
-            <button type="button" onClick={resetDeptForm} className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
-              Hủy
-            </button>
-          </form>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase border-b">
-                <th className="py-2 pr-3">Phòng ban</th>
-                <th className="py-2 pr-3">Users</th>
-                <th className="py-2 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {departmentList.map((d) => (
-                <tr key={d.id} className="border-b border-gray-100">
-                  <td className="py-2 pr-3 font-medium break-words">{d.name}</td>
-                  <td className="py-2 pr-3">{d.user_count}</td>
-                  <td className="py-2 text-right space-x-2">
-                    <button onClick={() => handleEditDept(d)} className="text-primary-600 hover:underline">Sửa</button>
-                    <button onClick={() => handleDeleteDept(d)} className="text-red-600 hover:underline">Xóa</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Quản lý chức vụ */}
-      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-          <h2 className="text-lg font-semibold text-gray-900">Chức vụ & Phân quyền</h2>
-          <button
-            onClick={() => {
-              setEditingPosition(null);
-              setPositionForm({
-                name: '',
-                can_upload: false,
-                can_manage_tasks: false,
-                can_delete_documents: false,
-                scope_all_departments: false,
-                can_access_substitutes: false,
-                can_manage_calendar: false,
-                can_import_timetable: false,
-                bgh_workspace: false,
-                sort_order: positions.length + 1,
-              });
-              setShowPositionForm(true);
-            }}
-            className="w-full sm:w-auto px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            + Thêm chức vụ
-          </button>
-        </div>
-
-        {showPositionForm && (
-          <form onSubmit={handleSavePosition} className="mb-4 p-4 bg-gray-50 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              placeholder="Tên chức vụ"
-              value={positionForm.name}
-              onChange={(e) => setPositionForm({ ...positionForm, name: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              required
-            />
-            <input
-              type="number"
-              placeholder="Thứ tự"
-              value={positionForm.sort_order}
-              onChange={(e) => setPositionForm({ ...positionForm, sort_order: parseInt(e.target.value) || 0 })}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            />
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={positionForm.can_upload} onChange={(e) => setPositionForm({ ...positionForm, can_upload: e.target.checked })} />
-              Upload tài liệu
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={positionForm.can_manage_tasks} onChange={(e) => setPositionForm({ ...positionForm, can_manage_tasks: e.target.checked })} />
-              Quản lý công việc
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={positionForm.can_delete_documents} onChange={(e) => setPositionForm({ ...positionForm, can_delete_documents: e.target.checked })} />
-              Xóa tài liệu
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={positionForm.scope_all_departments} onChange={(e) => setPositionForm({ ...positionForm, scope_all_departments: e.target.checked })} />
-              Toàn trường (tất cả tổ)
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={positionForm.can_access_substitutes} onChange={(e) => setPositionForm({ ...positionForm, can_access_substitutes: e.target.checked })} />
-              Dạy thay
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={positionForm.can_manage_calendar} onChange={(e) => setPositionForm({ ...positionForm, can_manage_calendar: e.target.checked })} />
-              Quản lý lịch hoạt động
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={positionForm.can_import_timetable} onChange={(e) => setPositionForm({ ...positionForm, can_import_timetable: e.target.checked })} />
-              Import thời khóa biểu
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={positionForm.bgh_workspace} onChange={(e) => setPositionForm({ ...positionForm, bgh_workspace: e.target.checked })} />
-              Hồ sơ BGH (ẩn TKB + Công việc)
-            </label>
-            <div className="md:col-span-2 flex gap-2">
-              <button type="submit" className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">
-                {editingPosition ? 'Cập nhật' : 'Tạo'}
-              </button>
-              <button type="button" onClick={resetPositionForm} className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
-                Hủy
-              </button>
-            </div>
-          </form>
-        )}
-
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase border-b">
-                <th className="py-2 pr-3">Chức vụ</th>
-                <th className="py-2 pr-3">Upload</th>
-                <th className="py-2 pr-3">Công việc</th>
-                <th className="py-2 pr-3">Xóa TL</th>
-                <th className="py-2 pr-3">Toàn trường</th>
-                <th className="py-2 pr-3">Dạy thay</th>
-                <th className="py-2 pr-3">QL lịch</th>
-                <th className="py-2 pr-3">Import TKB</th>
-                <th className="py-2 pr-3">Hồ sơ BGH</th>
-                <th className="py-2 pr-3">Users</th>
-                <th className="py-2 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {positions.map((p) => (
-                <tr key={p.id} className="border-b border-gray-100">
-                  <td className="py-2 pr-3 font-medium break-words">{p.name}</td>
-                  <td className="py-2 pr-3">{p.can_upload ? '✓' : '—'}</td>
-                  <td className="py-2 pr-3">{p.can_manage_tasks ? '✓' : '—'}</td>
-                  <td className="py-2 pr-3">{p.can_delete_documents ? '✓' : '—'}</td>
-                  <td className="py-2 pr-3">{p.scope_all_departments ? '✓' : '—'}</td>
-                  <td className="py-2 pr-3">{p.can_access_substitutes ? '✓' : '—'}</td>
-                  <td className="py-2 pr-3">{p.can_manage_calendar ? '✓' : '—'}</td>
-                  <td className="py-2 pr-3">{p.can_import_timetable ? '✓' : '—'}</td>
-                  <td className="py-2 pr-3">{p.bgh_workspace ? '✓' : '—'}</td>
-                  <td className="py-2 pr-3">{p.user_count}</td>
-                  <td className="py-2 text-right space-x-2">
-                    <button onClick={() => handleEditPosition(p)} className="text-primary-600 hover:underline">Sửa</button>
-                    <button onClick={() => handleDeletePosition(p)} className="text-red-600 hover:underline">Xóa</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="md:hidden divide-y divide-gray-100">
-          {positions.map((p) => {
-            const rights = [
-              p.can_upload && 'Upload tài liệu',
-              p.can_manage_tasks && 'Quản lý công việc',
-              p.can_delete_documents && 'Xóa tài liệu',
-              p.scope_all_departments && 'Toàn trường',
-              p.can_access_substitutes && 'Dạy thay',
-              p.can_manage_calendar && 'Quản lý lịch',
-              p.can_import_timetable && 'Import TKB',
-              p.bgh_workspace && 'Hồ sơ BGH',
-            ].filter(Boolean) as string[];
-            return (
-              <div key={p.id} className="py-3 first:pt-0">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-gray-900 break-words min-w-0">{p.name}</p>
-                  <span className="shrink-0 text-xs text-gray-500">{p.user_count} users</span>
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {rights.length === 0 ? (
-                    <span className="text-xs text-gray-400">Không có quyền đặc biệt</span>
-                  ) : (
-                    rights.map((r) => (
-                      <span
-                        key={r}
-                        className="px-1.5 py-0.5 rounded border border-primary-200 bg-primary-50 text-primary-700 text-[11px]"
-                      >
-                        {r}
-                      </span>
-                    ))
-                  )}
-                </div>
-                <div className="mt-2 flex gap-3 text-sm">
-                  <button onClick={() => handleEditPosition(p)} className="text-primary-600 hover:underline">Sửa</button>
-                  <button onClick={() => handleDeletePosition(p)} className="text-red-600 hover:underline">Xóa</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {/* Filters */}
@@ -1153,6 +919,245 @@ export default function UsersPage() {
           </div>
           </>
         )}
+      </div>
+      </div>
+
+      {/* Quản lý phòng ban */}
+      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">Tổ / Phòng ban</h2>
+          <button
+            onClick={() => {
+              setEditingDept(null);
+              setDeptForm({ name: '', sort_order: departmentList.length + 1 });
+              setShowDeptForm(true);
+            }}
+            className="w-full sm:w-auto px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            + Thêm phòng ban
+          </button>
+        </div>
+
+        {showDeptForm && (
+          <form onSubmit={handleSaveDept} className="mb-4 p-4 bg-gray-50 rounded-lg flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs text-gray-500 mb-1">Tên phòng ban</label>
+              <input
+                value={deptForm.name}
+                onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                required
+              />
+            </div>
+            <div className="w-24">
+              <label className="block text-xs text-gray-500 mb-1">Thứ tự</label>
+              <input
+                type="number"
+                value={deptForm.sort_order}
+                onChange={(e) => setDeptForm({ ...deptForm, sort_order: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+            <button type="submit" className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">
+              {editingDept ? 'Cập nhật' : 'Tạo'}
+            </button>
+            <button type="button" onClick={resetDeptForm} className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
+              Hủy
+            </button>
+          </form>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                <th className="py-2 pr-3">Phòng ban</th>
+                <th className="py-2 pr-3">Users</th>
+                <th className="py-2 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {departmentList.map((d) => (
+                <tr key={d.id} className="border-b border-gray-100">
+                  <td className="py-2 pr-3 font-medium break-words">{d.name}</td>
+                  <td className="py-2 pr-3">{d.user_count}</td>
+                  <td className="py-2 text-right space-x-2">
+                    <button onClick={() => handleEditDept(d)} className="text-primary-600 hover:underline">Sửa</button>
+                    <button onClick={() => handleDeleteDept(d)} className="text-red-600 hover:underline">Xóa</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Quản lý chức vụ */}
+      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">Chức vụ & Phân quyền</h2>
+          <button
+            onClick={() => {
+              setEditingPosition(null);
+              setPositionForm({
+                name: '',
+                can_upload: false,
+                can_manage_tasks: false,
+                can_delete_documents: false,
+                scope_all_departments: false,
+                can_access_substitutes: false,
+                can_manage_calendar: false,
+                can_import_timetable: false,
+                bgh_workspace: false,
+                sort_order: positions.length + 1,
+              });
+              setShowPositionForm(true);
+            }}
+            className="w-full sm:w-auto px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            + Thêm chức vụ
+          </button>
+        </div>
+
+        {showPositionForm && (
+          <form onSubmit={handleSavePosition} className="mb-4 p-4 bg-gray-50 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input
+              placeholder="Tên chức vụ"
+              value={positionForm.name}
+              onChange={(e) => setPositionForm({ ...positionForm, name: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              required
+            />
+            <input
+              type="number"
+              placeholder="Thứ tự"
+              value={positionForm.sort_order}
+              onChange={(e) => setPositionForm({ ...positionForm, sort_order: parseInt(e.target.value) || 0 })}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_upload} onChange={(e) => setPositionForm({ ...positionForm, can_upload: e.target.checked })} />
+              Upload tài liệu
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_manage_tasks} onChange={(e) => setPositionForm({ ...positionForm, can_manage_tasks: e.target.checked })} />
+              Quản lý công việc
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_delete_documents} onChange={(e) => setPositionForm({ ...positionForm, can_delete_documents: e.target.checked })} />
+              Xóa tài liệu
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.scope_all_departments} onChange={(e) => setPositionForm({ ...positionForm, scope_all_departments: e.target.checked })} />
+              Toàn trường (tất cả tổ)
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_access_substitutes} onChange={(e) => setPositionForm({ ...positionForm, can_access_substitutes: e.target.checked })} />
+              Dạy thay
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_manage_calendar} onChange={(e) => setPositionForm({ ...positionForm, can_manage_calendar: e.target.checked })} />
+              Quản lý lịch hoạt động
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.can_import_timetable} onChange={(e) => setPositionForm({ ...positionForm, can_import_timetable: e.target.checked })} />
+              Import thời khóa biểu
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={positionForm.bgh_workspace} onChange={(e) => setPositionForm({ ...positionForm, bgh_workspace: e.target.checked })} />
+              Hồ sơ BGH (ẩn TKB + Công việc)
+            </label>
+            <div className="md:col-span-2 flex gap-2">
+              <button type="submit" className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">
+                {editingPosition ? 'Cập nhật' : 'Tạo'}
+              </button>
+              <button type="button" onClick={resetPositionForm} className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
+                Hủy
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-500 uppercase border-b">
+                <th className="py-2 pr-3">Chức vụ</th>
+                <th className="py-2 pr-3">Upload</th>
+                <th className="py-2 pr-3">Công việc</th>
+                <th className="py-2 pr-3">Xóa TL</th>
+                <th className="py-2 pr-3">Toàn trường</th>
+                <th className="py-2 pr-3">Dạy thay</th>
+                <th className="py-2 pr-3">QL lịch</th>
+                <th className="py-2 pr-3">Import TKB</th>
+                <th className="py-2 pr-3">Hồ sơ BGH</th>
+                <th className="py-2 pr-3">Users</th>
+                <th className="py-2 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((p) => (
+                <tr key={p.id} className="border-b border-gray-100">
+                  <td className="py-2 pr-3 font-medium break-words">{p.name}</td>
+                  <td className="py-2 pr-3">{p.can_upload ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_manage_tasks ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_delete_documents ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.scope_all_departments ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_access_substitutes ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_manage_calendar ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.can_import_timetable ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.bgh_workspace ? '✓' : '—'}</td>
+                  <td className="py-2 pr-3">{p.user_count}</td>
+                  <td className="py-2 text-right space-x-2">
+                    <button onClick={() => handleEditPosition(p)} className="text-primary-600 hover:underline">Sửa</button>
+                    <button onClick={() => handleDeletePosition(p)} className="text-red-600 hover:underline">Xóa</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="md:hidden divide-y divide-gray-100">
+          {positions.map((p) => {
+            const rights = [
+              p.can_upload && 'Upload tài liệu',
+              p.can_manage_tasks && 'Quản lý công việc',
+              p.can_delete_documents && 'Xóa tài liệu',
+              p.scope_all_departments && 'Toàn trường',
+              p.can_access_substitutes && 'Dạy thay',
+              p.can_manage_calendar && 'Quản lý lịch',
+              p.can_import_timetable && 'Import TKB',
+              p.bgh_workspace && 'Hồ sơ BGH',
+            ].filter(Boolean) as string[];
+            return (
+              <div key={p.id} className="py-3 first:pt-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-900 break-words min-w-0">{p.name}</p>
+                  <span className="shrink-0 text-xs text-gray-500">{p.user_count} users</span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {rights.length === 0 ? (
+                    <span className="text-xs text-gray-400">Không có quyền đặc biệt</span>
+                  ) : (
+                    rights.map((r) => (
+                      <span
+                        key={r}
+                        className="px-1.5 py-0.5 rounded border border-primary-200 bg-primary-50 text-primary-700 text-[11px]"
+                      >
+                        {r}
+                      </span>
+                    ))
+                  )}
+                </div>
+                <div className="mt-2 flex gap-3 text-sm">
+                  <button onClick={() => handleEditPosition(p)} className="text-primary-600 hover:underline">Sửa</button>
+                  <button onClick={() => handleDeletePosition(p)} className="text-red-600 hover:underline">Xóa</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
