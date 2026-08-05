@@ -263,6 +263,9 @@ def confirm_plan_event(
 
     service = DocumentService(db)
     try:
+        events_payload = None
+        if data.events:
+            events_payload = [item.model_dump() for item in data.events]
         result = service.confirm_plan_event(
             doc_id,
             title=data.title,
@@ -271,6 +274,8 @@ def confirm_plan_event(
             location=data.location,
             timeline=data.timeline,
             include_in_calendar=data.include_in_calendar,
+            event_id=data.event_id,
+            events=events_payload,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -294,16 +299,36 @@ def update_plan_event(
     event = service.get_by_id(event_id)
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sự kiện không tồn tại")
+    document_id = event.document_id
     try:
+        timeline_payload = None
+        if data.timeline is not None:
+            timeline_payload = [slot.model_dump() for slot in data.timeline]
         updated = service.update_event(
             event,
             title=data.title,
             starts_at=data.starts_at,
             ends_at=data.ends_at,
             location=data.location,
+            timeline=timeline_payload,
+            include_in_calendar=data.include_in_calendar,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    if updated is None:
+        return PlanEventResponse(
+            id=None,
+            document_id=document_id,
+            title=None,
+            location=None,
+            starts_at=None,
+            ends_at=None,
+            timeline=None,
+            source=None,
+            needs_review=False,
+            message="Đã bỏ ngày này khỏi Lịch hoạt động",
+            removed=True,
+        )
     return PlanEventResponse(
         id=updated.id,
         document_id=updated.document_id,
@@ -311,6 +336,7 @@ def update_plan_event(
         location=updated.location,
         starts_at=updated.starts_at,
         ends_at=updated.ends_at,
+        timeline=updated.timeline,
         source=updated.source,
         needs_review=updated.needs_review,
         message="Đã cập nhật sự kiện",
@@ -330,12 +356,16 @@ def create_plan_event(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tài liệu không tồn tại")
     service = PlanEventService(db)
     try:
+        timeline_payload = None
+        if data.timeline is not None:
+            timeline_payload = [slot.model_dump() for slot in data.timeline]
         created = service.create_manual_event(
             doc,
             title=data.title,
             starts_at=data.starts_at,
             ends_at=data.ends_at,
             location=data.location,
+            timeline=timeline_payload,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -346,6 +376,7 @@ def create_plan_event(
         location=created.location,
         starts_at=created.starts_at,
         ends_at=created.ends_at,
+        timeline=created.timeline,
         source=created.source,
         needs_review=created.needs_review,
         message="Đã thêm sự kiện vào Lịch hoạt động",

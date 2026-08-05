@@ -45,6 +45,14 @@ export interface TimelineSlotPreview {
   title: string;
 }
 
+export interface CalendarDayPreview {
+  plan_title?: string | null;
+  plan_event_at?: string | null;
+  plan_event_end_at?: string | null;
+  location?: string | null;
+  timeline?: TimelineSlotPreview[];
+}
+
 export interface CalendarPreviewPayload {
   document_id: number;
   plan_title?: string | null;
@@ -52,7 +60,9 @@ export interface CalendarPreviewPayload {
   plan_event_end_at?: string | null;
   location?: string | null;
   timeline?: TimelineSlotPreview[];
+  events?: CalendarDayPreview[];
   needs_review?: boolean;
+  event_id?: number | null;
 }
 
 export interface DocumentUploadResponse {
@@ -92,10 +102,19 @@ export type PlanReExtractResult = {
   plan_event_end_at: string | null;
   location?: string | null;
   timeline?: TimelineSlotPreview[];
+  events?: CalendarDayPreview[];
   message: string;
   preview_only?: boolean;
   needs_review?: boolean;
   event_count?: number;
+};
+
+export type PlanEventConfirmDay = {
+  title?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  location?: string | null;
+  timeline?: TimelineSlotPreview[] | null;
 };
 
 export type PlanEventConfirmPayload = {
@@ -105,6 +124,8 @@ export type PlanEventConfirmPayload = {
   location?: string | null;
   timeline?: TimelineSlotPreview[] | null;
   include_in_calendar?: boolean;
+  event_id?: number | null;
+  events?: PlanEventConfirmDay[];
 };
 
 export const documentsApi = {

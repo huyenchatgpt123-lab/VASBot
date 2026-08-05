@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -8,6 +9,31 @@ from app.models.document import Document
 from app.models.plan_event import PlanEvent
 
 logger = logging.getLogger(__name__)
+
+_TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+
+
+def clean_timeline_slots(timeline: Optional[list]) -> Optional[List[Dict[str, Any]]]:
+    if not isinstance(timeline, list):
+        return None
+    cleaned: List[Dict[str, Any]] = []
+    for item in timeline:
+        if not isinstance(item, dict):
+            continue
+        start = str(item.get("start") or "").strip()
+        end = str(item.get("end") or "").strip()
+        slot_title = str(item.get("title") or "").strip()
+        if not _TIME_RE.fullmatch(start) or not slot_title:
+            continue
+        if not _TIME_RE.fullmatch(end):
+            end = ""
+        cleaned.append({
+            "start": start,
+            "end": end or None,
+            "title": slot_title[:60],
+        })
+    cleaned.sort(key=lambda s: (s["start"], s["end"] or ""))
+    return cleaned or None
 
 
 class PlanEventService:
@@ -25,7 +51,22 @@ class PlanEventService:
         starts_at: datetime,
         ends_at: Optional[datetime] = None,
         location: Optional[str] = None,
-    ) -> PlanEvent:
+        timeline: Optional[list] = None,
+        include_in_calendar: bool = True,
+    ) -> Optional[PlanEvent]:
+        document = event.document or self.db.query(Document).filter(Document.id == event.document_id).first()
+
+        if not include_in_calendar:
+            self.db.delete(event)
+            self.db.flush()
+            if document:
+                remaining = self.list_for_document(document.id)
+                if not remaining:
+                    document.include_in_calendar = False
+                self.sync_document_summary(document)
+            self.db.commit()
+            return None
+
         title = title.strip()
         if not title:
             raise ValueError("Tiêu đề không được để trống")
@@ -43,10 +84,11 @@ class PlanEventService:
         event.location = loc or None
         event.starts_at = starts_at
         event.ends_at = ends_at
+        if timeline is not None:
+            event.timeline = clean_timeline_slots(timeline)
         event.source = "manual"
         event.needs_review = False
 
-        document = event.document or self.db.query(Document).filter(Document.id == event.document_id).first()
         if document:
             document.include_in_calendar = True
             self.sync_document_summary(document)
@@ -63,6 +105,7 @@ class PlanEventService:
         starts_at: datetime,
         ends_at: Optional[datetime] = None,
         location: Optional[str] = None,
+        timeline: Optional[list] = None,
     ) -> PlanEvent:
         title = title.strip()
         if not title:
@@ -80,6 +123,7 @@ class PlanEventService:
             document_id=document.id,
             title=title,
             location=loc or None,
+            timeline=clean_timeline_slots(timeline),
             starts_at=starts_at,
             ends_at=ends_at,
             source="manual",
@@ -105,50 +149,69 @@ class PlanEventService:
         self,
         document: Document,
         *,
-        title: Optional[str],
-        starts_at: Optional[datetime],
-        ends_at: Optional[datetime],
+        title: Optional[str] = None,
+        starts_at: Optional[datetime] = None,
+        ends_at: Optional[datetime] = None,
         include_in_calendar: bool = True,
         location: Optional[str] = None,
         timeline: Optional[List[Dict[str, Any]]] = None,
+        events: Optional[List[Dict[str, Any]]] = None,
     ) -> List[PlanEvent]:
         """
-        Phase 1: replace AI-sourced events with a single extracted event (or a review placeholder).
-        Manual events are preserved for later phases.
+        Replace AI-sourced events. Accepts either a single event (legacy kwargs)
+        or an `events` list for multi-day / non-contiguous packages.
+        Manual events are preserved.
         """
         self.db.query(PlanEvent).filter(
             PlanEvent.document_id == document.id,
             PlanEvent.source == "ai",
         ).delete(synchronize_session=False)
 
-        display_title = (title or document.plan_title or document.filename or "Kế hoạch").strip()
-        if len(display_title) > 500:
-            display_title = display_title[:500]
+        default_title = (title or document.plan_title or document.filename or "Kế hoạch").strip()
+        if len(default_title) > 500:
+            default_title = default_title[:500]
 
-        loc = (location or "").strip()
-        if len(loc) > 300:
-            loc = loc[:300]
+        specs: List[Dict[str, Any]] = []
+        if events:
+            specs = list(events)
+        elif starts_at is not None or default_title:
+            specs = [{
+                "title": default_title,
+                "starts_at": starts_at,
+                "ends_at": ends_at,
+                "location": location,
+                "timeline": timeline,
+            }]
 
-        needs_review = starts_at is None
-        event = PlanEvent(
-            document_id=document.id,
-            title=display_title,
-            location=loc or None,
-            timeline=timeline or None,
-            starts_at=starts_at,
-            ends_at=ends_at if starts_at else None,
-            source="ai",
-            needs_review=needs_review,
-        )
-        self.db.add(event)
+        created: List[PlanEvent] = []
+        for spec in specs:
+            if not isinstance(spec, dict):
+                continue
+            spec_start = spec.get("starts_at")
+            display_title = (spec.get("title") or default_title or "Kế hoạch").strip()[:500]
+            loc = (spec.get("location") if spec.get("location") is not None else location) or ""
+            loc = str(loc).strip()[:300]
+            slots = clean_timeline_slots(spec.get("timeline") if "timeline" in spec else timeline)
+            needs_review = spec_start is None
+            event = PlanEvent(
+                document_id=document.id,
+                title=display_title,
+                location=loc or None,
+                timeline=slots,
+                starts_at=spec_start,
+                ends_at=spec.get("ends_at") if spec_start else None,
+                source="ai",
+                needs_review=needs_review,
+            )
+            self.db.add(event)
+            created.append(event)
 
         document.include_in_calendar = include_in_calendar
-        document.plan_title = title or document.plan_title
-        document.plan_event_at = starts_at
-        document.plan_event_end_at = ends_at if starts_at else None
-
+        if title:
+            document.plan_title = title
         self.db.flush()
-        return [event]
+        self.sync_document_summary(document)
+        return created
 
     def sync_document_summary(self, document: Document) -> None:
         """Keep denormalized document.plan_* columns in sync with plan_events (Documents page)."""
@@ -156,8 +219,20 @@ class PlanEventService:
         dated = [e for e in events if e.starts_at is not None]
         if dated:
             primary = min(dated, key=lambda e: e.starts_at)
+            latest_end = max(
+                (
+                    (e.ends_at or e.starts_at)
+                    for e in dated
+                    if e.starts_at is not None
+                ),
+                default=None,
+            )
             document.plan_event_at = primary.starts_at
-            document.plan_event_end_at = primary.ends_at
+            # Show span across discrete days on Documents page (min start → max end/start)
+            if latest_end and latest_end.date() > primary.starts_at.date():
+                document.plan_event_end_at = latest_end
+            else:
+                document.plan_event_end_at = primary.ends_at
             if primary.title:
                 document.plan_title = primary.title
         elif events:

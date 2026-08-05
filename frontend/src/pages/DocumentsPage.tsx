@@ -99,6 +99,7 @@ export default function DocumentsPage() {
       plan_event_end_at: preview.plan_event_end_at,
       location: preview.location,
       timeline: preview.timeline || [],
+      events: preview.events || [],
       needs_review: Boolean(preview.needs_review),
     });
   };
@@ -288,6 +289,7 @@ export default function DocumentsPage() {
         plan_event_end_at: result.plan_event_end_at,
         location: result.location,
         timeline: result.timeline || [],
+        events: result.events || [],
         needs_review: Boolean(result.needs_review),
       });
     } catch (err: unknown) {

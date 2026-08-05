@@ -45,6 +45,8 @@ class PlanEventUpdateRequest(BaseModel):
     starts_at: datetime
     ends_at: Optional[datetime] = None
     location: Optional[str] = Field(None, max_length=300)
+    timeline: Optional[List[TimelineSlot]] = None
+    include_in_calendar: bool = True
 
 
 class PlanEventCreateRequest(BaseModel):
@@ -52,15 +54,18 @@ class PlanEventCreateRequest(BaseModel):
     starts_at: datetime
     ends_at: Optional[datetime] = None
     location: Optional[str] = Field(None, max_length=300)
+    timeline: Optional[List[TimelineSlot]] = None
 
 
 class PlanEventResponse(BaseModel):
-    id: int
+    id: Optional[int] = None
     document_id: int
-    title: str
+    title: Optional[str] = None
     location: Optional[str] = None
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None
-    source: str
-    needs_review: bool
+    timeline: Optional[List[TimelineSlot]] = None
+    source: Optional[str] = None
+    needs_review: bool = False
     message: str = "Đã cập nhật sự kiện"
+    removed: bool = False

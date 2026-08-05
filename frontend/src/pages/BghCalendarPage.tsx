@@ -137,11 +137,6 @@ function displayPlanName(name: string): string {
   return name.replace(/\.(pdf|docx)$/i, '');
 }
 
-function toLocalDateTimeIso(date: string, time: string): string {
-  const t = time && time.length >= 4 ? time : '00:00';
-  return `${date}T${t.length === 5 ? `${t}:00` : t}`;
-}
-
 function openDocumentPreview(documentId: number) {
   window.open(documentsApi.getPreviewUrl(documentId), '_blank');
 }
@@ -161,8 +156,6 @@ export default function BghCalendarPage() {
   const [showUnscheduled, setShowUnscheduled] = useState(false);
   const [editingPlan, setEditingPlan] = useState<BghCalendarPlan | null>(null);
   const [timelinePlan, setTimelinePlan] = useState<BghCalendarPlan | null>(null);
-  const [calendarPreview, setCalendarPreview] = useState<CalendarPreviewPayload | null>(null);
-  const [savingEvent, setSavingEvent] = useState(false);
   const [reExtracting, setReExtracting] = useState(false);
   const listPanelRef = useRef<HTMLDivElement>(null);
   const daySectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -209,8 +202,25 @@ export default function BghCalendarPage() {
     }
   };
 
-  const handleReExtractFromEdit = async () => {
-    if (!editingPlan || savingEvent || reExtracting) return;
+  const planToPreview = (plan: BghCalendarPlan): CalendarPreviewPayload => {
+    const endAt =
+      plan.end_time ||
+      (plan.event_end_date ? `${plan.event_end_date}T00:00:00` : null);
+    return {
+      document_id: plan.document_id,
+      plan_title: displayPlanName(plan.plan_name),
+      plan_event_at: plan.start_time || (plan.date ? `${plan.date}T00:00:00` : null),
+      plan_event_end_at: endAt,
+      location: plan.location || null,
+      timeline: plan.timeline || [],
+      events: [],
+      needs_review: Boolean(plan.needs_review),
+      event_id: plan.event_id ?? null,
+    };
+  };
+
+  const handleReExtractFromEdit = async (): Promise<CalendarPreviewPayload | null> => {
+    if (!editingPlan || reExtracting) return null;
     setReExtracting(true);
     startProgress('Đang trích xuất lịch trình...');
     try {
@@ -218,63 +228,30 @@ export default function BghCalendarPage() {
         preview_only: true,
       });
       await finishProgress();
-      setCalendarPreview({
+      const events = Array.isArray(result.events) ? result.events : [];
+      // Prefer extracted day matching the day being edited
+      let matched = events[0];
+      if (editingPlan.date && events.length > 0) {
+        const hit = events.find((ev) => (ev.plan_event_at || '').startsWith(editingPlan.date!));
+        if (hit) matched = hit;
+      }
+      return {
         document_id: result.document_id || editingPlan.document_id,
-        plan_title: result.plan_title || editingPlan.plan_name,
-        plan_event_at: result.plan_event_at,
-        plan_event_end_at: result.plan_event_end_at,
-        location: result.location,
-        timeline: result.timeline || [],
+        plan_title: matched?.plan_title || result.plan_title || editingPlan.plan_name,
+        plan_event_at: matched?.plan_event_at || result.plan_event_at,
+        plan_event_end_at: matched?.plan_event_end_at || result.plan_event_end_at,
+        location: matched?.location ?? result.location,
+        timeline: matched?.timeline || result.timeline || [],
+        events: [],
         needs_review: Boolean(result.needs_review),
-      });
+        event_id: editingPlan.event_id ?? null,
+      };
     } catch {
       failProgress();
       alert('Trích lại lịch thất bại. Vui lòng thử lại.');
+      return null;
     } finally {
       setReExtracting(false);
-    }
-  };
-
-  const handleSaveEvent = async (payload: {
-    title: string;
-    startDate: string;
-    startTime: string;
-    endDate: string;
-    endTime: string;
-    location: string;
-  }) => {
-    if (!editingPlan) return;
-    if (!payload.title.trim() || !payload.startDate) {
-      alert('Vui lòng nhập tiêu đề và ngày bắt đầu.');
-      return;
-    }
-    const starts_at = toLocalDateTimeIso(payload.startDate, payload.startTime || '00:00');
-    let ends_at: string | null = null;
-    if (payload.endDate) {
-      ends_at = toLocalDateTimeIso(payload.endDate, payload.endTime || '00:00');
-    } else if (payload.endTime) {
-      ends_at = toLocalDateTimeIso(payload.startDate, payload.endTime);
-    }
-
-    setSavingEvent(true);
-    try {
-      const body = {
-        title: payload.title.trim(),
-        starts_at,
-        ends_at,
-        location: payload.location.trim() || null,
-      };
-      if (editingPlan.event_id) {
-        await calendarApi.updatePlanEvent(editingPlan.event_id, body);
-      } else {
-        await calendarApi.createPlanEvent(editingPlan.document_id, body);
-      }
-      setEditingPlan(null);
-      await loadCalendar();
-    } catch {
-      alert('Không lưu được sự kiện. Vui lòng thử lại.');
-    } finally {
-      setSavingEvent(false);
     }
   };
 
@@ -700,15 +677,17 @@ export default function BghCalendarPage() {
       </div>
 
       {editingPlan && (
-        <EditPlanEventModal
-          key={editingPlan.event_id ?? `doc-${editingPlan.document_id}`}
-          plan={editingPlan}
-          saving={savingEvent}
+        <CalendarPlanPreviewModal
+          key={editingPlan.event_id ?? `doc-${editingPlan.document_id}-${editingPlan.date || 'x'}`}
+          preview={planToPreview(editingPlan)}
+          eventId={editingPlan.event_id}
           reExtracting={reExtracting}
-          progress={opProgress}
-          onClose={() => !savingEvent && !reExtracting && setEditingPlan(null)}
-          onSave={handleSaveEvent}
           onReExtract={handleReExtractFromEdit}
+          onClose={() => !reExtracting && setEditingPlan(null)}
+          onSaved={async () => {
+            setEditingPlan(null);
+            await loadCalendar();
+          }}
         />
       )}
 
@@ -719,16 +698,14 @@ export default function BghCalendarPage() {
         />
       )}
 
-      {calendarPreview && (
-        <CalendarPlanPreviewModal
-          preview={calendarPreview}
-          onClose={() => setCalendarPreview(null)}
-          onSaved={async () => {
-            setCalendarPreview(null);
-            setEditingPlan(null);
-            await loadCalendar();
-          }}
-        />
+      {opProgress.visible && (
+        <div className="fixed bottom-4 right-4 z-[70] w-72 bg-white border border-gray-200 shadow-lg rounded-xl p-3">
+          <OperationProgressBar
+            visible={opProgress.visible}
+            percent={opProgress.percent}
+            label={opProgress.label}
+          />
+        </div>
       )}
     </div>
   );
@@ -974,189 +951,3 @@ function TimelineModal({
   );
 }
 
-function EditPlanEventModal({
-  plan,
-  saving,
-  reExtracting,
-  progress,
-  onClose,
-  onSave,
-  onReExtract,
-}: {
-  plan: BghCalendarPlan;
-  saving: boolean;
-  reExtracting: boolean;
-  progress: { visible: boolean; percent: number; label: string };
-  onClose: () => void;
-  onSave: (payload: {
-    title: string;
-    startDate: string;
-    startTime: string;
-    endDate: string;
-    endTime: string;
-    location: string;
-  }) => void;
-  onReExtract: () => void;
-}) {
-  const busy = saving || reExtracting;
-  const initialStart = plan.start_time ? new Date(plan.start_time) : null;
-  const initialEnd = plan.end_time
-    ? new Date(plan.end_time)
-    : plan.event_end_date
-      ? parseDateKey(plan.event_end_date)
-      : null;
-
-  const [title, setTitle] = useState(displayPlanName(plan.plan_name));
-  const [location, setLocation] = useState(plan.location || '');
-  const [startDate, setStartDate] = useState(
-    plan.date || (initialStart && !Number.isNaN(initialStart.getTime()) ? formatDateKey(initialStart) : formatDateKey(new Date())),
-  );
-  const [startTime, setStartTime] = useState(() => {
-    if (!initialStart || Number.isNaN(initialStart.getTime())) return '';
-    if (initialStart.getHours() === 0 && initialStart.getMinutes() === 0) return '';
-    return `${String(initialStart.getHours()).padStart(2, '0')}:${String(initialStart.getMinutes()).padStart(2, '0')}`;
-  });
-  const [endDate, setEndDate] = useState(() => {
-    if (!initialEnd || Number.isNaN(initialEnd.getTime())) return '';
-    return formatDateKey(initialEnd);
-  });
-  const [endTime, setEndTime] = useState(() => {
-    if (!plan.end_time || !initialEnd || Number.isNaN(initialEnd.getTime())) return '';
-    return `${String(initialEnd.getHours()).padStart(2, '0')}:${String(initialEnd.getMinutes()).padStart(2, '0')}`;
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="shrink-0 px-5 sm:px-6 pt-5 sm:pt-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Cập nhật sự kiện</h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Địa điểm lấy từ file (Địa điểm:). Trường VA1/VA3/EMC chỉ để phân loại kế hoạch.
-          </p>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 pb-4">
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={busy}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Địa điểm</label>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              disabled={busy}
-              placeholder="VD: Hội trường A, sân trường..."
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
-            />
-          </div>
-          {plan.campuses.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="text-xs text-gray-400">Thuộc trường:</span>
-              {plan.campuses.map((code) => (
-                <span
-                  key={code}
-                  className="text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100 font-medium"
-                >
-                  {code}
-                </span>
-              ))}
-            </div>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày bắt đầu *</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={busy}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ bắt đầu</label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                disabled={busy}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày kết thúc</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                disabled={busy}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ kết thúc</label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                disabled={busy}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50"
-              />
-            </div>
-          </div>
-        </div>
-        </div>
-
-        <div className="shrink-0 px-5 sm:px-6 pb-5 sm:pb-6 pt-3 border-t border-gray-100">
-        <OperationProgressBar
-          visible={progress.visible}
-          percent={progress.percent}
-          label={progress.label}
-          className="mb-3"
-        />
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onReExtract}
-            disabled={busy}
-            title="Trích lại từ tài liệu vào form — chưa lưu cho đến khi bấm Lưu"
-            className="px-3 py-2 text-sm font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50"
-          >
-            {reExtracting ? 'Đang trích...' : 'Trích lại'}
-          </button>
-          <div className="flex gap-3 ml-auto">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              Hủy
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onSave({ title, startDate, startTime, endDate, endTime, location })}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              {saving ? 'Đang lưu...' : 'Lưu'}
-            </button>
-          </div>
-        </div>
-        </div>
-      </div>
-    </div>
-  );
-}

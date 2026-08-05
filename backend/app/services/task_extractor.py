@@ -51,6 +51,22 @@ TRẢ VỀ JSON (không markdown):
 
 Nếu không tìm thấy ngày → {"date":null,"end_date":null,"time":null,"location":"... hoặc null"}"""
 
+PLAN_CALENDAR_DAYS_PROMPT = """Bạn đọc tài liệu kế hoạch và trích xuất các NGÀY DIỄN RA + lịch trình (agenda) theo từng ngày để đưa lên lịch hoạt động.
+
+QUY TẮC QUAN TRỌNG:
+- Nhiều ngày KHÔNG liền kề (VD 10/8 và 12/8, bỏ 11/8) → TÁCH thành nhiều phần tử trong events; mỗi ngày một phần tử; end_date=null. KHÔNG gộp thành khoảng 10→12.
+- Khoảng liền kề (từ 23/7 đến 25/7) và KHÔNG có agenda riêng từng ngày → MỘT phần tử với date + end_date.
+- Nếu mỗi ngày có lịch trình/agenda riêng (Day 1 / Ngày 10/8 / …) → TÁCH mỗi ngày một phần tử (kể cả khi liền kề), gắn timeline của đúng ngày đó.
+- time/end_time: HH:MM 24h hoặc null. title: tiêu đề riêng của ngày nếu khác tiêu đề chung, không thì null.
+- location: địa điểm riêng của ngày nếu khác; null nếu dùng chung shared_location.
+- timeline: mảng mốc giờ trong ngày [{"start":"HH:MM","end":"HH:MM|null","title":"..."}]; [] nếu không có.
+- shared_location: địa điểm chung từ mục "Địa điểm:" nếu có.
+
+TRẢ VỀ JSON (không markdown):
+{"shared_location":"chuỗi hoặc null","events":[{"date":"YYYY-MM-DD","end_date":null,"time":null,"end_time":null,"title":null,"location":null,"timeline":[]}]}
+
+Nếu không tìm thấy ngày → {"shared_location":null,"events":[]}"""
+
 PLAN_TITLE_PROMPT = """Bạn đọc phần đầu tài liệu kế hoạch/công tác và trích xuất TIÊU ĐỀ CHÍNH THỨC của kế hoạch (dòng tiêu đề lớn, thường ở trang đầu).
 
 QUY TẮC:
@@ -207,6 +223,16 @@ class PlanEventRange(NamedTuple):
     start: datetime
     end: Optional[datetime] = None
     location: Optional[str] = None
+
+
+class PlanDayPackage(NamedTuple):
+    """One calendar day (or contiguous range) with optional per-day timeline."""
+
+    start: datetime
+    end: Optional[datetime] = None
+    title: Optional[str] = None
+    location: Optional[str] = None
+    timeline: Optional[List[Dict[str, Optional[str]]]] = None
 
 
 def _hhmm(hour: int, minute: int) -> Optional[str]:
@@ -827,6 +853,31 @@ def _regex_extract_plan_event(text: str) -> Optional[PlanEventRange]:
     return None
 
 
+def _regex_extract_all_plan_events(text: str) -> List[PlanEventRange]:
+    """Collect every labeled Thời gian:/Ngày: line (supports non-contiguous days)."""
+    location = _regex_extract_location(text)
+    results: List[PlanEventRange] = []
+    seen_keys: set[tuple] = set()
+    for match in _EVENT_LINE_RE.finditer(text):
+        line = match.group(1).strip().rstrip(".")
+        if not line:
+            continue
+        result = _parse_plan_event_line(line)
+        if not result:
+            continue
+        key = (
+            result.start.date().isoformat(),
+            result.end.date().isoformat() if result.end else "",
+            result.start.hour,
+            result.start.minute,
+        )
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        results.append(PlanEventRange(start=result.start, end=result.end, location=location))
+    return results
+
+
 def _parse_plan_event_json(raw: dict) -> Optional[PlanEventRange]:
     location = _normalize_location(raw.get("location"))
     date_val = raw.get("date")
@@ -853,6 +904,120 @@ def _parse_plan_event_json(raw: dict) -> Optional[PlanEventRange]:
     if end.date() <= start.date():
         return PlanEventRange(start=start, end=None, location=location)
     return PlanEventRange(start=start, end=end, location=location)
+
+
+def _apply_end_time(start: datetime, end_time: Optional[str]) -> Optional[datetime]:
+    if not end_time or str(end_time).lower() == "null":
+        return None
+    parsed = _parse_hhmm_tuple(str(end_time).strip())
+    if not parsed:
+        return None
+    hour, minute = parsed
+    return start.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+def _parse_calendar_days_json(raw: dict) -> List[PlanDayPackage]:
+    if not isinstance(raw, dict):
+        return []
+    shared_location = _normalize_location(raw.get("shared_location") or raw.get("location"))
+    events_raw = raw.get("events")
+    if not isinstance(events_raw, list):
+        return []
+
+    packages: List[PlanDayPackage] = []
+    for item in events_raw:
+        if not isinstance(item, dict):
+            continue
+        date_val = item.get("date")
+        if not date_val or str(date_val).lower() == "null":
+            continue
+        time_val = item.get("time")
+        if time_val in (None, "", "null"):
+            time_val = None
+        start = _build_plan_event_datetime(str(date_val), str(time_val) if time_val else None)
+        if not start:
+            continue
+
+        end: Optional[datetime] = None
+        end_date_val = item.get("end_date")
+        if end_date_val and str(end_date_val).lower() != "null":
+            end = _build_plan_event_datetime(str(end_date_val), None)
+            if end and end.date() <= start.date():
+                end = None
+        if end is None:
+            end = _apply_end_time(start, item.get("end_time"))
+
+        title = item.get("title")
+        if title is not None:
+            title = str(title).strip() or None
+            if title and title.lower() == "null":
+                title = None
+
+        location = _normalize_location(item.get("location")) or shared_location
+        timeline = _parse_timeline_json(item.get("timeline") or [])
+        start, end = apply_timeline_time_fallback(start, end, timeline)
+        packages.append(
+            PlanDayPackage(
+                start=start,
+                end=end,
+                title=title,
+                location=location,
+                timeline=timeline or None,
+            )
+        )
+
+    packages.sort(key=lambda p: p.start)
+    return packages
+
+
+def _packages_from_ranges(
+    ranges: List[PlanEventRange],
+    *,
+    shared_location: Optional[str],
+    shared_timeline: Optional[List[Dict[str, Optional[str]]]] = None,
+) -> List[PlanDayPackage]:
+    if not ranges:
+        return []
+
+    # Multiple labeled single days (possibly non-contiguous) → one package each.
+    # Contiguous range on a single line already has end set.
+    packages: List[PlanDayPackage] = []
+    for rng in ranges:
+        start, end = rng.start, rng.end
+        timeline = shared_timeline if (shared_timeline and len(ranges) == 1) else None
+        if timeline:
+            start, end = apply_timeline_time_fallback(start, end, timeline)
+        packages.append(
+            PlanDayPackage(
+                start=start,
+                end=end,
+                title=None,
+                location=rng.location or shared_location,
+                timeline=timeline,
+            )
+        )
+    packages.sort(key=lambda p: p.start)
+    return packages
+
+
+def serialize_plan_day_packages(
+    packages: List[PlanDayPackage],
+    *,
+    default_title: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """API-friendly list for calendar preview / confirm."""
+    rows: List[Dict[str, Any]] = []
+    for pkg in packages:
+        rows.append(
+            {
+                "plan_title": (pkg.title or default_title),
+                "plan_event_at": pkg.start.isoformat() if pkg.start else None,
+                "plan_event_end_at": pkg.end.isoformat() if pkg.end else None,
+                "location": pkg.location,
+                "timeline": pkg.timeline or [],
+            }
+        )
+    return rows
 
 
 def _try_fix_truncated_json(content: str) -> List[Dict]:
@@ -1082,8 +1247,15 @@ class TaskExtractor:
         if not chunks:
             return None
 
+        packages = self.extract_plan_calendar_days_from_chunks(chunks)
+        if packages:
+            first = packages[0]
+            # Legacy single-range view: span first→last only when a contiguous package.
+            if len(packages) == 1:
+                return PlanEventRange(start=first.start, end=first.end, location=first.location)
+            return PlanEventRange(start=first.start, end=None, location=first.location)
+
         combined_all = "\n".join(chunk.get("content", "") for chunk in chunks)
-        # #6: location always attempted on full text (once)
         location = self.extract_plan_location(combined_all)
         regex_result = _regex_extract_plan_event(combined_all)
         if regex_result:
@@ -1096,6 +1268,119 @@ class TaskExtractor:
         head = chunks[:12]
         combined = "\n".join(chunk.get("content", "") for chunk in head)
         return self.extract_plan_event(combined, location=location)
+
+    def _ai_extract_calendar_days(self, snippet: str) -> List[PlanDayPackage]:
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.CHAT_MODEL,
+                messages=[
+                    {"role": "system", "content": PLAN_CALENDAR_DAYS_PROMPT},
+                    {"role": "user", "content": f"NỘI DUNG TÀI LIỆU:\n{snippet}"},
+                ],
+                temperature=0,
+                max_tokens=2000,
+            )
+            content = (response.choices[0].message.content or "").strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[-1] if "\n" in content else content[3:]
+                content = content.rstrip("`").strip()
+            raw = json.loads(content)
+            if isinstance(raw, dict):
+                return _parse_calendar_days_json(raw)
+        except Exception as e:
+            logger.warning(f"Plan calendar days extraction error: {e}")
+        return []
+
+    def extract_plan_calendar_days_from_chunks(self, chunks: List[Dict[str, Any]]) -> List[PlanDayPackage]:
+        """
+        Extract one or more calendar day packages.
+        Non-contiguous days become separate packages (no gap-filling range).
+        """
+        if not chunks:
+            return []
+
+        combined_all = "\n".join(chunk.get("content", "") for chunk in chunks)
+        shared_location = self.extract_plan_location(combined_all)
+        regex_ranges = _regex_extract_all_plan_events(combined_all)
+
+        head = "\n".join(chunk.get("content", "") for chunk in chunks[:16])
+        snippet = (head or combined_all)[:14000]
+        ai_packages = self._ai_extract_calendar_days(snippet) if snippet.strip() else []
+
+        # Prefer AI when it finds multiple days or richer per-day timelines.
+        if len(ai_packages) >= 2:
+            return [
+                PlanDayPackage(
+                    start=p.start,
+                    end=p.end,
+                    title=p.title,
+                    location=p.location or shared_location,
+                    timeline=p.timeline,
+                )
+                for p in ai_packages
+            ]
+
+        if len(regex_ranges) >= 2:
+            # Distinct labeled days (often non-contiguous). Attach AI timeline if same count.
+            packages = _packages_from_ranges(
+                regex_ranges,
+                shared_location=shared_location,
+                shared_timeline=None,
+            )
+            if ai_packages and len(ai_packages) == len(packages):
+                merged: List[PlanDayPackage] = []
+                for base, ai in zip(packages, sorted(ai_packages, key=lambda p: p.start)):
+                    start, end = apply_timeline_time_fallback(
+                        base.start, base.end, ai.timeline
+                    )
+                    merged.append(
+                        PlanDayPackage(
+                            start=start,
+                            end=end,
+                            title=ai.title or base.title,
+                            location=ai.location or base.location or shared_location,
+                            timeline=ai.timeline or base.timeline,
+                        )
+                    )
+                return merged
+            # Try per-day timeline from single shared extract only when one day package remains.
+            return packages
+
+        if ai_packages:
+            only = ai_packages[0]
+            return [
+                PlanDayPackage(
+                    start=only.start,
+                    end=only.end,
+                    title=only.title,
+                    location=only.location or shared_location,
+                    timeline=only.timeline,
+                )
+            ]
+
+        if regex_ranges:
+            timeline = self.extract_plan_timeline(combined_all)
+            return _packages_from_ranges(
+                regex_ranges[:1],
+                shared_location=shared_location,
+                shared_timeline=timeline or None,
+            )
+
+        # Fallback: legacy single-event AI/regex
+        legacy = self.extract_plan_event(snippet, location=shared_location)
+        if not legacy:
+            return []
+        timeline = self.extract_plan_timeline(combined_all)
+        start, end = apply_timeline_time_fallback(legacy.start, legacy.end, timeline)
+        return [
+            PlanDayPackage(
+                start=start,
+                end=end,
+                title=None,
+                location=legacy.location or shared_location,
+                timeline=timeline or None,
+            )
+        ]
 
     def extract_plan_timeline(self, text: str) -> List[Dict[str, Optional[str]]]:
         snippet = (text or "")[:16000].strip()

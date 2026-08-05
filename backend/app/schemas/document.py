@@ -55,6 +55,14 @@ class TimelineSlotPreview(BaseModel):
     title: str
 
 
+class CalendarDayPreview(BaseModel):
+    plan_title: Optional[str] = None
+    plan_event_at: Optional[str] = None
+    plan_event_end_at: Optional[str] = None
+    location: Optional[str] = None
+    timeline: List[TimelineSlotPreview] = []
+
+
 class CalendarPreviewPayload(BaseModel):
     document_id: int
     plan_title: Optional[str] = None
@@ -62,7 +70,9 @@ class CalendarPreviewPayload(BaseModel):
     plan_event_end_at: Optional[str] = None
     location: Optional[str] = None
     timeline: List[TimelineSlotPreview] = []
+    events: List[CalendarDayPreview] = []
     needs_review: bool = False
+    event_id: Optional[int] = None
 
 
 class DocumentUploadResponse(BaseModel):
@@ -91,10 +101,19 @@ class PlanReExtractResponse(BaseModel):
     plan_event_end_at: Optional[str] = None
     location: Optional[str] = None
     timeline: List[TimelineSlotPreview] = []
+    events: List[CalendarDayPreview] = []
     event_count: int = 0
     needs_review: bool = False
     message: str
     preview_only: bool = False
+
+
+class PlanEventConfirmDay(BaseModel):
+    title: Optional[str] = Field(None, max_length=500)
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    location: Optional[str] = Field(None, max_length=300)
+    timeline: Optional[List[Any]] = None
 
 
 class PlanEventConfirmRequest(BaseModel):
@@ -104,3 +123,5 @@ class PlanEventConfirmRequest(BaseModel):
     location: Optional[str] = Field(None, max_length=300)
     timeline: Optional[List[Any]] = None
     include_in_calendar: bool = True
+    event_id: Optional[int] = None
+    events: Optional[List[PlanEventConfirmDay]] = None

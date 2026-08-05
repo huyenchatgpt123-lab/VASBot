@@ -1,13 +1,34 @@
 import { useState } from 'react';
-import { documentsApi, CalendarPreviewPayload, TimelineSlotPreview } from '../api/documents';
+import {
+  documentsApi,
+  CalendarPreviewPayload,
+  CalendarDayPreview,
+  TimelineSlotPreview,
+  PlanEventConfirmPayload,
+} from '../api/documents';
 
 type Props = {
   preview: CalendarPreviewPayload;
   onClose: () => void;
   onSaved: () => void;
+  /** When set, save updates only this event (edit from Lịch hoạt động). */
+  eventId?: number | null;
+  onReExtract?: () => Promise<CalendarPreviewPayload | null | void> | void;
+  reExtracting?: boolean;
 };
 
 type SlotRow = TimelineSlotPreview & { end: string | null };
+
+type DayDraft = {
+  title: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  location: string;
+  slots: SlotRow[];
+  includeTimeline: boolean;
+};
 
 const TIME_RE = /^\d{2}:\d{2}$/;
 
@@ -26,86 +47,241 @@ function joinDateTime(date: string, time: string): string | null {
   return `${date}T${time || '00:00'}:00`;
 }
 
-export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: Props) {
+function dayFromPreviewFields(
+  title: string | null | undefined,
+  plan_event_at: string | null | undefined,
+  plan_event_end_at: string | null | undefined,
+  location: string | null | undefined,
+  timeline: TimelineSlotPreview[] | null | undefined,
+): DayDraft {
+  const start = splitDateTime(plan_event_at);
+  const end = splitDateTime(plan_event_end_at);
+  const slots: SlotRow[] = (Array.isArray(timeline) ? timeline : []).map((slot) => ({
+    start: slot.start,
+    end: slot.end ?? null,
+    title: slot.title,
+  }));
+  return {
+    title: title?.trim() || '',
+    startDate: start.date,
+    startTime: start.time,
+    endDate: end.date,
+    endTime: end.time,
+    location: location?.trim() || '',
+    slots,
+    includeTimeline: slots.length > 0,
+  };
+}
+
+function buildInitialDays(preview: CalendarPreviewPayload): DayDraft[] {
+  const events = Array.isArray(preview.events) ? preview.events : [];
+  if (events.length > 0) {
+    return events.map((ev: CalendarDayPreview) =>
+      dayFromPreviewFields(
+        ev.plan_title || preview.plan_title,
+        ev.plan_event_at,
+        ev.plan_event_end_at,
+        ev.location ?? preview.location,
+        ev.timeline,
+      ),
+    );
+  }
+  return [
+    dayFromPreviewFields(
+      preview.plan_title,
+      preview.plan_event_at,
+      preview.plan_event_end_at,
+      preview.location,
+      preview.timeline,
+    ),
+  ];
+}
+
+function formatDayTabLabel(day: DayDraft, index: number): string {
+  if (day.startDate) {
+    const [y, m, d] = day.startDate.split('-');
+    return `${Number(d)}/${Number(m)}`;
+  }
+  return `Ngày ${index + 1}`;
+}
+
+function cleanedSlotsFromDay(day: DayDraft): TimelineSlotPreview[] {
+  if (!day.includeTimeline) return [];
+  return day.slots
+    .filter((s) => TIME_RE.test(s.start) && s.title.trim())
+    .map((s) => ({
+      start: s.start,
+      end: s.end && TIME_RE.test(s.end) ? s.end : null,
+      title: s.title.trim(),
+    }));
+}
+
+export default function CalendarPlanPreviewModal({
+  preview,
+  onClose,
+  onSaved,
+  eventId,
+  onReExtract,
+  reExtracting = false,
+}: Props) {
+  const isSingleEventEdit = Boolean(eventId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  const initialStart = splitDateTime(preview.plan_event_at);
-  const initialEnd = splitDateTime(preview.plan_event_end_at);
-
   const [includeInCalendar, setIncludeInCalendar] = useState(true);
-  const [title, setTitle] = useState(preview.plan_title?.trim() || '');
-  const [startDate, setStartDate] = useState(initialStart.date);
-  const [startTime, setStartTime] = useState(initialStart.time);
-  const [endDate, setEndDate] = useState(initialEnd.date);
-  const [endTime, setEndTime] = useState(initialEnd.time);
-  const [location, setLocation] = useState(preview.location?.trim() || '');
+  const [days, setDays] = useState<DayDraft[]>(() => buildInitialDays(preview));
+  const [activeDay, setActiveDay] = useState(0);
 
-  const extractedSlots: SlotRow[] = (Array.isArray(preview.timeline) ? preview.timeline : []).map(
-    (slot) => ({ start: slot.start, end: slot.end ?? null, title: slot.title }),
-  );
-  const [slots, setSlots] = useState<SlotRow[]>(extractedSlots);
-  const [includeTimeline, setIncludeTimeline] = useState(extractedSlots.length > 0);
+  const applyPreview = (next: CalendarPreviewPayload) => {
+    const built = buildInitialDays(next);
+    if (isSingleEventEdit && built.length > 1) {
+      // Prefer day matching current edit date when Trích lại returns multiple days
+      const current = days[0]?.startDate;
+      const matchIdx = current
+        ? built.findIndex((d) => d.startDate === current)
+        : -1;
+      setDays([built[matchIdx >= 0 ? matchIdx : 0]]);
+    } else {
+      setDays(built);
+    }
+    setActiveDay(0);
+    setError('');
+  };
+
+  const updateActiveDay = (patch: Partial<DayDraft>) => {
+    setDays((prev) =>
+      prev.map((day, i) => (i === activeDay ? { ...day, ...patch } : day)),
+    );
+  };
 
   const updateSlot = (index: number, patch: Partial<SlotRow>) => {
-    setSlots((prev) => prev.map((slot, i) => (i === index ? { ...slot, ...patch } : slot)));
+    setDays((prev) =>
+      prev.map((day, i) => {
+        if (i !== activeDay) return day;
+        return {
+          ...day,
+          slots: day.slots.map((slot, si) => (si === index ? { ...slot, ...patch } : slot)),
+        };
+      }),
+    );
   };
 
   const removeSlot = (index: number) => {
-    setSlots((prev) => prev.filter((_, i) => i !== index));
+    setDays((prev) =>
+      prev.map((day, i) => {
+        if (i !== activeDay) return day;
+        return { ...day, slots: day.slots.filter((_, si) => si !== index) };
+      }),
+    );
   };
 
   const addSlot = () => {
-    setSlots((prev) => [...prev, { start: '', end: null, title: '' }]);
+    setDays((prev) =>
+      prev.map((day, i) => {
+        if (i !== activeDay) return day;
+        return { ...day, slots: [...day.slots, { start: '', end: null, title: '' }] };
+      }),
+    );
+  };
+
+  const handleReExtractClick = async () => {
+    if (!onReExtract || saving || reExtracting) return;
+    setError('');
+    try {
+      const result = await onReExtract();
+      if (result) applyPreview(result);
+    } catch {
+      setError('Trích lại thất bại. Vui lòng thử lại.');
+    }
   };
 
   const handleSave = async () => {
     setError('');
 
     if (!includeInCalendar) {
-      if (!confirm('Kế hoạch này sẽ KHÔNG hiện trên Lịch hoạt động. Tiếp tục?')) return;
+      const msg = isSingleEventEdit
+        ? 'Ngày này sẽ bị BỎ khỏi Lịch hoạt động. Tiếp tục?'
+        : 'Kế hoạch này sẽ KHÔNG hiện trên Lịch hoạt động. Tiếp tục?';
+      if (!confirm(msg)) return;
     } else {
-      if (!title.trim()) {
-        setError('Cần có tiêu đề sự kiện.');
-        return;
-      }
-      if (!startDate) {
-        setError('Cần chọn ngày bắt đầu để đưa kế hoạch lên Lịch hoạt động.');
-        return;
-      }
-      if (endDate && endDate < startDate) {
-        setError('Ngày kết thúc không được trước ngày bắt đầu.');
-        return;
-      }
-      if (includeTimeline) {
-        const invalid = slots.filter((s) => !TIME_RE.test(s.start) || !s.title.trim());
-        if (invalid.length > 0) {
-          setError(`Còn ${invalid.length} mốc lịch trình thiếu giờ bắt đầu hoặc nội dung.`);
+      for (let i = 0; i < days.length; i++) {
+        const day = days[i];
+        if (!day.title.trim()) {
+          setActiveDay(i);
+          setError(`Ngày ${i + 1}: cần có tiêu đề sự kiện.`);
           return;
+        }
+        if (!day.startDate) {
+          setActiveDay(i);
+          setError(`Ngày ${i + 1}: cần chọn ngày bắt đầu.`);
+          return;
+        }
+        if (day.endDate && day.endDate < day.startDate) {
+          setActiveDay(i);
+          setError(`Ngày ${i + 1}: ngày kết thúc không được trước ngày bắt đầu.`);
+          return;
+        }
+        if (day.includeTimeline) {
+          const invalid = day.slots.filter((s) => !TIME_RE.test(s.start) || !s.title.trim());
+          if (invalid.length > 0) {
+            setActiveDay(i);
+            setError(`Ngày ${i + 1}: còn ${invalid.length} mốc thiếu giờ hoặc nội dung.`);
+            return;
+          }
         }
       }
     }
 
-    const cleanedSlots = includeTimeline
-      ? slots
-          .filter((s) => TIME_RE.test(s.start) && s.title.trim())
-          .map((s) => ({
-            start: s.start,
-            end: s.end && TIME_RE.test(s.end) ? s.end : null,
-            title: s.title.trim(),
-          }))
-      : [];
-
     setSaving(true);
     try {
-      await documentsApi.confirmPlanEvent(preview.document_id, {
-        include_in_calendar: includeInCalendar,
-        title: title.trim() || undefined,
-        starts_at: joinDateTime(startDate, startTime),
-        ends_at: endDate ? joinDateTime(endDate, endTime) : endTime ? joinDateTime(startDate, endTime) : null,
-        location: location.trim() || null,
-        timeline: cleanedSlots,
-      });
+      if (isSingleEventEdit) {
+        const day = days[0];
+        const payload: PlanEventConfirmPayload = {
+          event_id: eventId!,
+          include_in_calendar: includeInCalendar,
+          title: day.title.trim() || undefined,
+          starts_at: joinDateTime(day.startDate, day.startTime),
+          ends_at: day.endDate
+            ? joinDateTime(day.endDate, day.endTime)
+            : day.endTime
+              ? joinDateTime(day.startDate, day.endTime)
+              : null,
+          location: day.location.trim() || null,
+          timeline: cleanedSlotsFromDay(day),
+        };
+        await documentsApi.confirmPlanEvent(preview.document_id, payload);
+      } else if (days.length > 1) {
+        await documentsApi.confirmPlanEvent(preview.document_id, {
+          include_in_calendar: includeInCalendar,
+          title: days[0]?.title.trim() || preview.plan_title || undefined,
+          events: includeInCalendar
+            ? days.map((day) => ({
+                title: day.title.trim(),
+                starts_at: joinDateTime(day.startDate, day.startTime),
+                ends_at: day.endDate
+                  ? joinDateTime(day.endDate, day.endTime)
+                  : day.endTime
+                    ? joinDateTime(day.startDate, day.endTime)
+                    : null,
+                location: day.location.trim() || null,
+                timeline: cleanedSlotsFromDay(day),
+              }))
+            : undefined,
+        });
+      } else {
+        const day = days[0];
+        await documentsApi.confirmPlanEvent(preview.document_id, {
+          include_in_calendar: includeInCalendar,
+          title: day.title.trim() || undefined,
+          starts_at: joinDateTime(day.startDate, day.startTime),
+          ends_at: day.endDate
+            ? joinDateTime(day.endDate, day.endTime)
+            : day.endTime
+              ? joinDateTime(day.startDate, day.endTime)
+              : null,
+          location: day.location.trim() || null,
+          timeline: cleanedSlotsFromDay(day),
+        });
+      }
       onSaved();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -117,16 +293,23 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
 
   const fieldClass =
     'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50 disabled:text-gray-400';
-  const fieldsDisabled = saving || !includeInCalendar;
+  const fieldsDisabled = saving || reExtracting || !includeInCalendar;
+  const day = days[activeDay] || days[0];
+  const multiDay = !isSingleEventEdit && days.length > 1;
 
   return (
     <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 shrink-0 flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold text-gray-900">Duyệt và chỉnh lịch trình trước khi lưu</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {isSingleEventEdit
+                ? 'Chỉnh lịch trình ngày đang chọn'
+                : 'Duyệt và chỉnh lịch trình trước khi lưu'}
+            </h2>
             <p className="text-sm text-gray-500 mt-0.5 truncate" title={preview.plan_title || undefined}>
               {preview.plan_title || `Tài liệu #${preview.document_id}`}
+              {multiDay ? ` · ${days.length} ngày` : ''}
             </p>
           </div>
           {preview.document_id ? (
@@ -146,173 +329,202 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
               type="checkbox"
               checked={includeInCalendar}
               onChange={(e) => setIncludeInCalendar(e.target.checked)}
-              disabled={saving}
+              disabled={saving || reExtracting}
               className="mt-0.5 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             <span className="min-w-0">
-              <span className="block text-sm font-medium text-gray-900">Đưa kế hoạch lên Lịch hoạt động</span>
+              <span className="block text-sm font-medium text-gray-900">
+                {isSingleEventEdit
+                  ? 'Giữ ngày này trên Lịch hoạt động'
+                  : 'Đưa kế hoạch lên Lịch hoạt động'}
+              </span>
               <span className="block text-xs text-gray-500 mt-0.5">
-                Bỏ chọn nếu trích xuất sai hoặc kế hoạch này không cần hiện trên lịch BGH. Sự kiện đã
-                lưu trước đó của tài liệu sẽ được xóa khỏi lịch.
+                {isSingleEventEdit
+                  ? 'Bỏ chọn để xóa chỉ ngày đang sửa khỏi lịch (các ngày khác của tài liệu vẫn giữ).'
+                  : 'Bỏ chọn nếu trích xuất sai hoặc kế hoạch này không cần hiện trên lịch BGH. Sự kiện đã lưu trước đó của tài liệu sẽ được xóa khỏi lịch.'}
               </span>
             </span>
           </label>
 
-          {preview.needs_review && includeInCalendar && !startDate && (
+          {preview.needs_review && includeInCalendar && !day?.startDate && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
               Không tìm thấy ngày/giờ trong file — hãy nhập ngày bắt đầu bên dưới, hoặc bỏ chọn đưa
               lên Lịch hoạt động.
             </p>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề sự kiện *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={fieldsDisabled}
-              className={fieldClass}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày bắt đầu *</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={fieldsDisabled}
-                className={fieldClass}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ bắt đầu</label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                disabled={fieldsDisabled}
-                className={fieldClass}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày kết thúc</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                disabled={fieldsDisabled}
-                className={fieldClass}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Giờ kết thúc</label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                disabled={fieldsDisabled}
-                className={fieldClass}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Địa điểm</label>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              disabled={fieldsDisabled}
-              placeholder="VD: Hội trường A, sân trường..."
-              className={fieldClass}
-            />
-          </div>
-
-          <div className="border-t border-gray-100 pt-4">
-            <label className="flex items-start gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeTimeline}
-                onChange={(e) => setIncludeTimeline(e.target.checked)}
-                disabled={fieldsDisabled}
-                className="mt-0.5 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-gray-900">Kèm lịch trình trong ngày</span>
-                <span className="block text-xs text-gray-500 mt-0.5">
-                  Bỏ chọn nếu các mốc giờ trích sai — sự kiện vẫn lên lịch nhưng không có lịch trình.
-                </span>
-              </span>
-            </label>
-
-            {includeTimeline && (
-              <div className="mt-3 space-y-2">
-                {slots.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic border border-dashed border-gray-200 rounded-lg px-4 py-5 text-center">
-                    Chưa có mốc nào — bấm «Thêm mốc giờ» để nhập tay.
-                  </p>
-                ) : (
-                  slots.map((slot, index) => (
-                    <div
-                      key={index}
-                      className="grid grid-cols-[1fr_1fr] sm:grid-cols-[110px_110px_1fr_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
-                    >
-                      <div>
-                        <label className="block text-[11px] text-gray-400 mb-0.5">Bắt đầu *</label>
-                        <input
-                          type="time"
-                          value={slot.start}
-                          onChange={(e) => updateSlot(index, { start: e.target.value })}
-                          disabled={fieldsDisabled}
-                          className={fieldClass}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-gray-400 mb-0.5">Kết thúc</label>
-                        <input
-                          type="time"
-                          value={slot.end || ''}
-                          onChange={(e) => updateSlot(index, { end: e.target.value || null })}
-                          disabled={fieldsDisabled}
-                          className={fieldClass}
-                        />
-                      </div>
-                      <div className="col-span-2 sm:col-span-1">
-                        <label className="block text-[11px] text-gray-400 mb-0.5">Nội dung *</label>
-                        <input
-                          type="text"
-                          value={slot.title}
-                          onChange={(e) => updateSlot(index, { title: e.target.value })}
-                          disabled={fieldsDisabled}
-                          maxLength={60}
-                          className={fieldClass}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeSlot(index)}
-                        disabled={fieldsDisabled}
-                        className="col-span-2 sm:col-span-1 px-2 py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
-                      >
-                        Bỏ mốc
-                      </button>
-                    </div>
-                  ))
-                )}
+          {multiDay && (
+            <div className="flex flex-wrap gap-1.5">
+              {days.map((d, i) => (
                 <button
+                  key={i}
                   type="button"
-                  onClick={addSlot}
-                  disabled={fieldsDisabled}
-                  className="text-sm font-medium text-primary-700 hover:bg-primary-50 border border-dashed border-primary-200 rounded-lg px-3 py-1.5 disabled:opacity-50"
+                  onClick={() => setActiveDay(i)}
+                  disabled={saving || reExtracting}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg border ${
+                    i === activeDay
+                      ? 'bg-primary-50 text-primary-800 border-primary-200'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
                 >
-                  + Thêm mốc giờ
+                  {formatDayTabLabel(d, i)}
                 </button>
+              ))}
+            </div>
+          )}
+
+          {day && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề sự kiện *</label>
+                <input
+                  type="text"
+                  value={day.title}
+                  onChange={(e) => updateActiveDay({ title: e.target.value })}
+                  disabled={fieldsDisabled}
+                  className={fieldClass}
+                />
               </div>
-            )}
-          </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ngày bắt đầu *</label>
+                  <input
+                    type="date"
+                    value={day.startDate}
+                    onChange={(e) => updateActiveDay({ startDate: e.target.value })}
+                    disabled={fieldsDisabled}
+                    className={fieldClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Giờ bắt đầu</label>
+                  <input
+                    type="time"
+                    value={day.startTime}
+                    onChange={(e) => updateActiveDay({ startTime: e.target.value })}
+                    disabled={fieldsDisabled}
+                    className={fieldClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ngày kết thúc</label>
+                  <input
+                    type="date"
+                    value={day.endDate}
+                    onChange={(e) => updateActiveDay({ endDate: e.target.value })}
+                    disabled={fieldsDisabled}
+                    className={fieldClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Giờ kết thúc</label>
+                  <input
+                    type="time"
+                    value={day.endTime}
+                    onChange={(e) => updateActiveDay({ endTime: e.target.value })}
+                    disabled={fieldsDisabled}
+                    className={fieldClass}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Địa điểm</label>
+                <input
+                  type="text"
+                  value={day.location}
+                  onChange={(e) => updateActiveDay({ location: e.target.value })}
+                  disabled={fieldsDisabled}
+                  placeholder="VD: Hội trường A, sân trường..."
+                  className={fieldClass}
+                />
+              </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={day.includeTimeline}
+                    onChange={(e) => updateActiveDay({ includeTimeline: e.target.checked })}
+                    disabled={fieldsDisabled}
+                    className="mt-0.5 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-gray-900">Kèm lịch trình trong ngày</span>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      Bỏ chọn nếu các mốc giờ trích sai — sự kiện vẫn lên lịch nhưng không có lịch trình.
+                    </span>
+                  </span>
+                </label>
+
+                {day.includeTimeline && (
+                  <div className="mt-3 space-y-2">
+                    {day.slots.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic border border-dashed border-gray-200 rounded-lg px-4 py-5 text-center">
+                        Chưa có mốc nào — bấm «Thêm mốc giờ» để nhập tay.
+                      </p>
+                    ) : (
+                      day.slots.map((slot, index) => (
+                        <div
+                          key={index}
+                          className="grid grid-cols-[1fr_1fr] sm:grid-cols-[110px_110px_1fr_auto] gap-2 items-end border border-gray-100 rounded-lg p-2.5"
+                        >
+                          <div>
+                            <label className="block text-[11px] text-gray-400 mb-0.5">Bắt đầu *</label>
+                            <input
+                              type="time"
+                              value={slot.start}
+                              onChange={(e) => updateSlot(index, { start: e.target.value })}
+                              disabled={fieldsDisabled}
+                              className={fieldClass}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] text-gray-400 mb-0.5">Kết thúc</label>
+                            <input
+                              type="time"
+                              value={slot.end || ''}
+                              onChange={(e) => updateSlot(index, { end: e.target.value || null })}
+                              disabled={fieldsDisabled}
+                              className={fieldClass}
+                            />
+                          </div>
+                          <div className="col-span-2 sm:col-span-1">
+                            <label className="block text-[11px] text-gray-400 mb-0.5">Nội dung *</label>
+                            <input
+                              type="text"
+                              value={slot.title}
+                              onChange={(e) => updateSlot(index, { title: e.target.value })}
+                              disabled={fieldsDisabled}
+                              maxLength={60}
+                              className={fieldClass}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeSlot(index)}
+                            disabled={fieldsDisabled}
+                            className="col-span-2 sm:col-span-1 px-2 py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                          >
+                            Bỏ mốc
+                          </button>
+                        </div>
+                      ))
+                    )}
+                    <button
+                      type="button"
+                      onClick={addSlot}
+                      disabled={fieldsDisabled}
+                      className="text-sm font-medium text-primary-700 hover:bg-primary-50 border border-dashed border-primary-200 rounded-lg px-3 py-1.5 disabled:opacity-50"
+                    >
+                      + Thêm mốc giờ
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {error && (
@@ -321,29 +533,46 @@ export default function CalendarPlanPreviewModal({ preview, onClose, onSaved }: 
           </p>
         )}
 
-        <div className="px-5 py-4 border-t border-gray-100 flex flex-wrap justify-end gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="px-3.5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
-          >
-            Hủy
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className={`px-3.5 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 ${
-              includeInCalendar ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-700 hover:bg-gray-800'
-            }`}
-          >
-            {saving
-              ? 'Đang lưu...'
-              : includeInCalendar
-                ? 'Lưu lên Lịch hoạt động'
-                : 'Bỏ khỏi Lịch hoạt động'}
-          </button>
+        <div className="px-5 py-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
+          {onReExtract ? (
+            <button
+              type="button"
+              onClick={handleReExtractClick}
+              disabled={saving || reExtracting}
+              title="Trích lại từ tài liệu vào form — chưa lưu cho đến khi bấm Lưu"
+              className="px-3 py-2 text-sm font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50"
+            >
+              {reExtracting ? 'Đang trích...' : 'Trích lại'}
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex flex-wrap justify-end gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving || reExtracting}
+              className="px-3.5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || reExtracting}
+              className={`px-3.5 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 ${
+                includeInCalendar ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-700 hover:bg-gray-800'
+              }`}
+            >
+              {saving
+                ? 'Đang lưu...'
+                : includeInCalendar
+                  ? 'Lưu lên Lịch hoạt động'
+                  : isSingleEventEdit
+                    ? 'Bỏ ngày khỏi lịch'
+                    : 'Bỏ khỏi Lịch hoạt động'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -9,8 +9,12 @@ from app.repositories.usage_repository import UsageRepository
 from app.utils.pdf_processor import process_pdf
 from app.utils.word_processor import process_docx
 from app.services.faiss_service import faiss_service
-from app.services.task_extractor import task_extractor, apply_timeline_time_fallback
-from app.services.plan_event_service import PlanEventService
+from app.services.task_extractor import (
+    task_extractor,
+    serialize_plan_day_packages,
+    PlanDayPackage,
+)
+from app.services.plan_event_service import PlanEventService, clean_timeline_slots
 from app.services.storage_service import (
     upload_document_file,
     delete_stored_file,
@@ -62,23 +66,26 @@ class DocumentService:
             if plan_title:
                 doc.plan_title = plan_title
 
-            plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
-            timeline = (
-                task_extractor.extract_plan_timeline_from_chunks(chunks)
-                if include_in_calendar
-                else []
+            day_packages = task_extractor.extract_plan_calendar_days_from_chunks(chunks)
+            primary = day_packages[0] if day_packages else None
+            starts_at = primary.start if primary else None
+            ends_at = primary.end if primary else None
+            location = primary.location if primary else None
+            timeline = list(primary.timeline or []) if primary else []
+            if len(day_packages) > 1:
+                last = day_packages[-1]
+                ends_at = last.end or last.start
+
+            event_rows = serialize_plan_day_packages(
+                day_packages,
+                default_title=plan_title or doc.plan_title or filename,
             )
-            starts_at = plan_event.start if plan_event else None
-            ends_at = plan_event.end if plan_event else None
-            location = plan_event.location if plan_event else None
-            if include_in_calendar and timeline:
-                starts_at, ends_at = apply_timeline_time_fallback(starts_at, ends_at, timeline)
 
             calendar_preview = None
             if include_in_calendar:
                 # Do not write calendar until admin confirms preview (5B).
                 doc.include_in_calendar = False
-                if plan_event:
+                if primary:
                     doc.plan_event_at = starts_at
                     doc.plan_event_end_at = ends_at
                 calendar_preview = {
@@ -88,12 +95,13 @@ class DocumentService:
                     "plan_event_end_at": ends_at.isoformat() if ends_at else None,
                     "location": location,
                     "timeline": timeline or [],
+                    "events": event_rows,
                     "needs_review": starts_at is None,
                 }
-            elif plan_event:
+            elif primary:
                 # Keep denormalized plan fields for Documents page, but not on calendar
-                doc.plan_event_at = plan_event.start
-                doc.plan_event_end_at = plan_event.end
+                doc.plan_event_at = primary.start
+                doc.plan_event_end_at = ends_at
                 doc.include_in_calendar = False
 
             self.db.commit()
@@ -190,15 +198,17 @@ class DocumentService:
                 chunks, _ = process_pdf(temp_path, doc.id)
 
             plan_title = task_extractor.extract_plan_title_from_chunks(chunks)
-            plan_event = task_extractor.extract_plan_event_from_chunks(chunks)
-            location = plan_event.location if plan_event else None
-            starts_at = plan_event.start if plan_event else None
-            ends_at = plan_event.end if plan_event else None
+            day_packages = task_extractor.extract_plan_calendar_days_from_chunks(chunks)
             display_title = plan_title or doc.plan_title
-
-            # Timeline used for clock fallback (1C) on preview and calendar extract (2C)
-            timeline = task_extractor.extract_plan_timeline_from_chunks(chunks)
-            starts_at, ends_at = apply_timeline_time_fallback(starts_at, ends_at, timeline)
+            event_rows = serialize_plan_day_packages(day_packages, default_title=display_title)
+            primary_pkg = day_packages[0] if day_packages else None
+            location = primary_pkg.location if primary_pkg else None
+            starts_at = primary_pkg.start if primary_pkg else None
+            ends_at = primary_pkg.end if primary_pkg else None
+            if len(day_packages) > 1:
+                last = day_packages[-1]
+                ends_at = last.end or last.start
+            timeline = list(primary_pkg.timeline or []) if primary_pkg else []
 
             if preview_only:
                 return {
@@ -208,12 +218,13 @@ class DocumentService:
                     "plan_event_end_at": ends_at.isoformat() if ends_at else None,
                     "location": location,
                     "timeline": timeline or [],
-                    "event_count": 0,
+                    "events": event_rows,
+                    "event_count": len(event_rows),
                     "needs_review": starts_at is None,
                     "preview_only": True,
                     "message": (
                         "Đã trích (xem trước) — bấm Lưu để cập nhật sự kiện"
-                        if (plan_event or plan_title or timeline)
+                        if (day_packages or plan_title or timeline)
                         else "Không tìm thấy tiêu đề/ngày/địa điểm trong file"
                     ),
                 }
@@ -221,19 +232,32 @@ class DocumentService:
             events = []
 
             if put_on_calendar:
+                event_specs = [
+                    {
+                        "title": row.get("plan_title") or display_title,
+                        "starts_at": pkg.start,
+                        "ends_at": pkg.end,
+                        "location": pkg.location,
+                        "timeline": pkg.timeline,
+                    }
+                    for pkg, row in zip(day_packages, event_rows)
+                ] or [{
+                    "title": display_title,
+                    "starts_at": None,
+                    "ends_at": None,
+                    "location": location,
+                    "timeline": None,
+                }]
                 events = PlanEventService(self.db).replace_ai_events_for_document(
                     doc,
                     title=display_title,
-                    starts_at=starts_at,
-                    ends_at=ends_at,
-                    location=location,
-                    timeline=timeline or None,
+                    events=event_specs,
                     include_in_calendar=True,
                 )
             else:
                 if plan_title:
                     doc.plan_title = plan_title
-                if plan_event:
+                if primary_pkg:
                     doc.plan_event_at = starts_at
                     doc.plan_event_end_at = ends_at
                 else:
@@ -245,12 +269,12 @@ class DocumentService:
             self.db.refresh(doc)
 
             primary = events[0] if events else None
-            needs_review = bool(primary.needs_review) if primary else (put_on_calendar and not plan_event)
+            needs_review = bool(primary.needs_review) if primary else (put_on_calendar and not primary_pkg)
             if put_on_calendar and primary and primary.needs_review:
                 message = "Đã trích lên Lịch hoạt động — cần chỉnh sửa ngày/giờ"
             elif put_on_calendar:
                 message = "Đã trích xuất và đưa lên Lịch hoạt động"
-            elif plan_event or plan_title:
+            elif primary_pkg or plan_title:
                 message = "Đã trích xuất lại thông tin kế hoạch"
             else:
                 message = "Đã chạy lại trích xuất — không tìm thấy tiêu đề/ngày trong file"
@@ -262,6 +286,7 @@ class DocumentService:
                 "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
                 "location": (primary.location if primary else location),
                 "timeline": timeline or [],
+                "events": event_rows,
                 "event_count": len(events),
                 "needs_review": needs_review,
                 "preview_only": False,
@@ -310,71 +335,173 @@ class DocumentService:
         location: Optional[str] = None,
         timeline: Optional[list] = None,
         include_in_calendar: bool = True,
+        event_id: Optional[int] = None,
+        events: Optional[list] = None,
     ) -> dict:
-        """Persist reviewed calendar package (date/time/location + timeline) after admin confirm."""
-        import re
+        """Persist reviewed calendar package(s) after admin confirm.
+
+        - event_id set → update/remove only that day (edit from Lịch hoạt động)
+        - events list → replace AI events with multi-day package (upload review)
+        - else → single-event replace (legacy)
+        """
         from datetime import datetime as dt
 
         doc = self.doc_repo.get_by_id(doc_id)
         if not doc:
             raise ValueError("Tài liệu không tồn tại")
 
-        if starts_at is not None and not isinstance(starts_at, dt):
-            starts_at = None
-        if ends_at is not None and not isinstance(ends_at, dt):
-            ends_at = None
-        if starts_at and ends_at and ends_at < starts_at:
-            starts_at, ends_at = ends_at, starts_at
+        def _coerce_dt(value):
+            if value is not None and not isinstance(value, dt):
+                return None
+            return value
 
+        plan_svc = PlanEventService(self.db)
+
+        # --- Edit one day only ---
+        if event_id is not None:
+            event = plan_svc.get_by_id(event_id)
+            if not event or event.document_id != doc.id:
+                raise ValueError("Sự kiện không tồn tại")
+
+            starts_at = _coerce_dt(starts_at)
+            ends_at = _coerce_dt(ends_at)
+            if starts_at and ends_at and ends_at < starts_at:
+                starts_at, ends_at = ends_at, starts_at
+
+            if not include_in_calendar:
+                plan_svc.update_event(
+                    event,
+                    title=event.title,
+                    starts_at=event.starts_at or starts_at or dt.utcnow(),
+                    ends_at=event.ends_at,
+                    location=event.location,
+                    include_in_calendar=False,
+                )
+                self.db.refresh(doc)
+                return {
+                    "document_id": doc.id,
+                    "plan_title": doc.plan_title,
+                    "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
+                    "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
+                    "location": None,
+                    "timeline": [],
+                    "events": [],
+                    "event_count": len(plan_svc.list_for_document(doc.id)),
+                    "needs_review": False,
+                    "preview_only": False,
+                    "message": "Đã bỏ ngày này khỏi Lịch hoạt động",
+                }
+
+            if starts_at is None:
+                raise ValueError("Cần chọn ngày bắt đầu để đưa kế hoạch lên Lịch hoạt động")
+
+            display_title = (title or event.title or doc.plan_title or doc.filename or "Kế hoạch").strip()
+            cleaned_slots = clean_timeline_slots(timeline) or []
+            updated = plan_svc.update_event(
+                event,
+                title=display_title,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                location=location,
+                timeline=cleaned_slots,
+                include_in_calendar=True,
+            )
+            self.db.refresh(doc)
+            return {
+                "document_id": doc.id,
+                "plan_title": doc.plan_title,
+                "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
+                "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
+                "location": updated.location if updated else location,
+                "timeline": cleaned_slots,
+                "events": [],
+                "event_count": len(plan_svc.list_for_document(doc.id)),
+                "needs_review": False,
+                "preview_only": False,
+                "message": "Đã lưu sự kiện lên Lịch hoạt động",
+            }
+
+        # --- Document-level confirm (upload / replace all AI days) ---
         if not include_in_calendar:
-            return self._remove_document_from_calendar(doc)
+            result = self._remove_document_from_calendar(doc)
+            result["events"] = []
+            return result
 
-        if starts_at is None:
+        event_specs: list = []
+        if isinstance(events, list) and events:
+            for item in events:
+                if not isinstance(item, dict):
+                    continue
+                item_start = _coerce_dt(item.get("starts_at"))
+                item_end = _coerce_dt(item.get("ends_at"))
+                if item_start and item_end and item_end < item_start:
+                    item_start, item_end = item_end, item_start
+                if item_start is None:
+                    continue
+                event_specs.append({
+                    "title": (item.get("title") or title or doc.plan_title or doc.filename or "Kế hoạch").strip(),
+                    "starts_at": item_start,
+                    "ends_at": item_end,
+                    "location": item.get("location", location),
+                    "timeline": clean_timeline_slots(item.get("timeline")),
+                })
+        else:
+            starts_at = _coerce_dt(starts_at)
+            ends_at = _coerce_dt(ends_at)
+            if starts_at and ends_at and ends_at < starts_at:
+                starts_at, ends_at = ends_at, starts_at
+            if starts_at is None:
+                raise ValueError("Cần chọn ngày bắt đầu để đưa kế hoạch lên Lịch hoạt động")
+            event_specs = [{
+                "title": (title or doc.plan_title or doc.filename or "Kế hoạch").strip(),
+                "starts_at": starts_at,
+                "ends_at": ends_at,
+                "location": location,
+                "timeline": clean_timeline_slots(timeline),
+            }]
+
+        if not event_specs:
             raise ValueError("Cần chọn ngày bắt đầu để đưa kế hoạch lên Lịch hoạt động")
 
-        display_title = (title or doc.plan_title or doc.filename or "Kế hoạch").strip()
-        slots = timeline if isinstance(timeline, list) else []
-        cleaned_slots = []
-        for item in slots:
-            if not isinstance(item, dict):
-                continue
-            start = str(item.get("start") or "").strip()
-            end = str(item.get("end") or "").strip()
-            slot_title = str(item.get("title") or "").strip()
-            if not re.fullmatch(r"\d{2}:\d{2}", start) or not slot_title:
-                continue
-            if not re.fullmatch(r"\d{2}:\d{2}", end):
-                end = ""
-            cleaned_slots.append({
-                "start": start,
-                "end": end or None,
-                "title": slot_title[:60],
-            })
-        cleaned_slots.sort(key=lambda s: (s["start"], s["end"] or ""))
-
-        events = PlanEventService(self.db).replace_ai_events_for_document(
+        display_title = (title or event_specs[0]["title"] or doc.plan_title or doc.filename or "Kế hoạch").strip()
+        created = plan_svc.replace_ai_events_for_document(
             doc,
             title=display_title,
-            starts_at=starts_at,
-            ends_at=ends_at,
-            location=location,
-            timeline=cleaned_slots or None,
+            events=event_specs,
             include_in_calendar=True,
         )
         self.db.commit()
         self.db.refresh(doc)
-        primary = events[0] if events else None
+        primary = created[0] if created else None
+        primary_timeline = clean_timeline_slots(event_specs[0].get("timeline")) or []
         return {
             "document_id": doc.id,
             "plan_title": doc.plan_title,
             "plan_event_at": doc.plan_event_at.isoformat() if doc.plan_event_at else None,
             "plan_event_end_at": doc.plan_event_end_at.isoformat() if doc.plan_event_end_at else None,
             "location": primary.location if primary else location,
-            "timeline": cleaned_slots,
-            "event_count": len(events),
-            "needs_review": bool(primary.needs_review) if primary else starts_at is None,
+            "timeline": primary_timeline,
+            "events": serialize_plan_day_packages(
+                [
+                    PlanDayPackage(
+                        start=s["starts_at"],
+                        end=s.get("ends_at"),
+                        title=s.get("title"),
+                        location=s.get("location"),
+                        timeline=s.get("timeline"),
+                    )
+                    for s in event_specs
+                ],
+                default_title=display_title,
+            ),
+            "event_count": len(created),
+            "needs_review": bool(primary.needs_review) if primary else False,
             "preview_only": False,
-            "message": "Đã lưu sự kiện lên Lịch hoạt động",
+            "message": (
+                f"Đã lưu {len(created)} sự kiện lên Lịch hoạt động"
+                if len(created) > 1
+                else "Đã lưu sự kiện lên Lịch hoạt động"
+            ),
         }
 
     def get_all_documents(self):
