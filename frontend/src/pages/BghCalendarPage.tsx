@@ -883,7 +883,7 @@ function TimelineModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 p-0 sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 p-0 sm:p-4 overflow-x-hidden"
       onClick={onClose}
       role="presentation"
     >
@@ -894,21 +894,21 @@ function TimelineModal({
         aria-labelledby="timeline-modal-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl outline-none max-h-[88vh] sm:max-h-[85vh] flex flex-col"
+        className="bg-white w-full max-w-full min-w-0 sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl outline-none max-h-[88vh] sm:max-h-[85vh] flex flex-col overflow-hidden"
       >
-        <div className="shrink-0 px-5 pt-4 pb-3 border-b border-gray-100">
+        <div className="shrink-0 px-4 sm:px-5 pt-4 pb-3 border-b border-gray-100">
           <div className="sm:hidden w-10 h-1 rounded-full bg-gray-300 mx-auto mb-3" />
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
+          <div className="flex items-start justify-between gap-3 min-w-0">
+            <div className="min-w-0 flex-1 overflow-hidden">
               <p className="text-xs font-medium text-primary-600 uppercase tracking-wide mb-1">
                 Lịch trình trong ngày
               </p>
-              <h2 id="timeline-modal-title" className="text-lg font-semibold text-gray-900 leading-snug">
+              <h2 id="timeline-modal-title" className="text-lg font-semibold text-gray-900 leading-snug break-words">
                 {displayPlanName(plan.plan_name)}
               </h2>
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
                 {plan.date && (
-                  <span>{formatDisplayDate(plan.date)}</span>
+                  <span className="break-words">{formatDisplayDate(plan.date)}</span>
                 )}
                 {eventTimeLabel !== '—' && (
                   <span className="tabular-nums text-primary-700 font-medium">{eventTimeLabel}</span>
@@ -931,7 +931,7 @@ function TimelineModal({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-5 py-4">
           {empty ? (
             <div className="py-10 text-center">
               <div className="text-3xl mb-3 opacity-60">🗓️</div>
@@ -941,12 +941,12 @@ function TimelineModal({
               </p>
             </div>
           ) : (
-            <ol className="relative space-y-0">
+            <ol className="relative space-y-0 min-w-0">
               {timeline.map((slot, idx) => {
                 const isLast = idx === timeline.length - 1;
                 return (
-                  <li key={`${slot.start}-${idx}`} className="relative flex gap-4">
-                    <div className="flex flex-col items-center shrink-0 w-14">
+                  <li key={`${slot.start}-${idx}`} className="relative flex gap-3 sm:gap-4 min-w-0">
+                    <div className="flex flex-col items-center shrink-0 w-12 sm:w-14">
                       <span className="text-sm font-semibold tabular-nums text-primary-700 leading-none pt-0.5">
                         {slot.start}
                       </span>
@@ -963,8 +963,8 @@ function TimelineModal({
                       )}
                     </div>
                     <div className={`flex-1 min-w-0 pb-5 ${isLast ? 'pb-1' : ''}`}>
-                      <div className="rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-2.5">
-                        <p className="text-sm text-gray-900 leading-snug">{slot.title}</p>
+                      <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 sm:px-3.5 overflow-hidden">
+                        <p className="text-sm text-gray-900 leading-snug break-words">{slot.title}</p>
                       </div>
                     </div>
                   </li>
@@ -974,7 +974,7 @@ function TimelineModal({
           )}
         </div>
 
-        <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 sm:rounded-b-2xl">
+        <div className="shrink-0 px-4 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 sm:rounded-b-2xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {!empty && (
             <p className="text-xs text-gray-500">
               {timeline.length} mục
