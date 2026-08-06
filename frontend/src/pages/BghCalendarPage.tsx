@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { calendarApi, BghCalendarPlan, Campus } from '../api/calendar';
 import { documentsApi, CalendarPreviewPayload } from '../api/documents';
 import { useAuth } from '../context/AuthContext';
@@ -887,9 +888,9 @@ function TimelineModal({
 
   const eventTimeLabel = formatPlanTimeLabel(plan);
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 p-0 sm:p-4 overflow-hidden overscroll-none"
+      className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/45 sm:p-4 overflow-hidden overscroll-none"
       onClick={onClose}
       role="presentation"
     >
@@ -900,16 +901,19 @@ function TimelineModal({
         aria-labelledby="timeline-modal-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full max-w-[100vw] min-w-0 sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl outline-none max-h-[min(88dvh,88vh)] sm:max-h-[85vh] flex flex-col overflow-hidden"
+        className="bg-white absolute inset-x-0 bottom-0 max-h-[min(90dvh,90vh)] w-auto min-w-0 sm:static sm:w-full sm:max-w-lg sm:max-h-[85vh] sm:rounded-2xl rounded-t-2xl shadow-xl outline-none flex flex-col overflow-hidden"
       >
-        <div className="shrink-0 px-3 sm:px-5 pt-3 sm:pt-4 pb-3 border-b border-gray-100">
+        <div className="shrink-0 px-4 sm:px-5 pt-3 sm:pt-4 pb-3 border-b border-gray-100">
           <div className="sm:hidden w-10 h-1 rounded-full bg-gray-300 mx-auto mb-3" />
           <div className="flex items-start justify-between gap-2 min-w-0">
-            <div className="min-w-0 flex-1 overflow-hidden pr-1">
+            <div className="min-w-0 flex-1 overflow-hidden">
               <p className="text-xs font-medium text-primary-600 uppercase tracking-wide mb-1">
                 Lịch trình trong ngày
               </p>
-              <h2 id="timeline-modal-title" className="text-base sm:text-lg font-semibold text-gray-900 leading-snug break-words [overflow-wrap:anywhere]">
+              <h2
+                id="timeline-modal-title"
+                className="text-base sm:text-lg font-semibold text-gray-900 leading-snug break-words [overflow-wrap:anywhere]"
+              >
                 {displayPlanName(plan.plan_name)}
               </h2>
               <div className="mt-2 flex flex-col gap-0.5 text-sm text-gray-500 min-w-0">
@@ -937,7 +941,7 @@ function TimelineModal({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-5 py-4">
           {empty ? (
             <div className="py-10 text-center px-2">
               <div className="text-3xl mb-3 opacity-60">🗓️</div>
@@ -947,42 +951,62 @@ function TimelineModal({
               </p>
             </div>
           ) : (
-            <ol className="relative space-y-0 min-w-0 w-full max-w-full">
-              {timeline.map((slot, idx) => {
-                const isLast = idx === timeline.length - 1;
-                return (
-                  <li key={`${slot.start}-${idx}`} className="relative flex gap-2.5 sm:gap-4 min-w-0 w-full max-w-full">
-                    <div className="flex flex-col items-end shrink-0 w-[3.25rem] sm:w-14 pt-0.5">
-                      <span className="text-xs sm:text-sm font-semibold tabular-nums text-primary-700 leading-tight">
-                        {slot.start}
-                      </span>
-                      {slot.end ? (
-                        <span className="text-[10px] sm:text-[11px] tabular-nums text-gray-400 mt-0.5 leading-tight">
-                          {slot.end}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="relative flex flex-col items-center shrink-0 w-2.5">
-                      <span className="mt-1.5 w-2 h-2 rounded-full bg-primary-500 ring-2 ring-primary-50 z-10" />
-                      {!isLast && (
-                        <span className="absolute top-3.5 bottom-0 w-px bg-primary-100" />
-                      )}
-                    </div>
-                    <div className={`flex-1 min-w-0 pb-5 ${isLast ? 'pb-1' : ''}`}>
-                      <div className="rounded-xl bg-gray-50 border border-gray-100 px-2.5 py-2 sm:px-3.5 overflow-hidden max-w-full">
-                        <p className="text-sm text-gray-900 leading-snug break-words [overflow-wrap:anywhere]">
-                          {slot.title}
-                        </p>
-                      </div>
+            <>
+              {/* Mobile: stacked cards — no side time column */}
+              <ul className="sm:hidden space-y-3">
+                {timeline.map((slot, idx) => (
+                  <li key={`m-${slot.start}-${idx}`} className="min-w-0">
+                    <p className="text-xs font-semibold tabular-nums text-primary-700 mb-1.5">
+                      {slot.start}
+                      {slot.end ? ` – ${slot.end}` : ''}
+                    </p>
+                    <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 overflow-hidden">
+                      <p className="text-sm text-gray-900 leading-snug break-words [overflow-wrap:anywhere]">
+                        {slot.title}
+                      </p>
                     </div>
                   </li>
-                );
-              })}
-            </ol>
+                ))}
+              </ul>
+
+              {/* Desktop: horizontal timeline */}
+              <ol className="relative hidden sm:block space-y-0 min-w-0 w-full">
+                {timeline.map((slot, idx) => {
+                  const isLast = idx === timeline.length - 1;
+                  return (
+                    <li key={`d-${slot.start}-${idx}`} className="relative flex gap-4 min-w-0 w-full">
+                      <div className="flex flex-col items-end shrink-0 w-14 pt-0.5">
+                        <span className="text-sm font-semibold tabular-nums text-primary-700 leading-tight">
+                          {slot.start}
+                        </span>
+                        {slot.end ? (
+                          <span className="text-[11px] tabular-nums text-gray-400 mt-0.5 leading-tight">
+                            {slot.end}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="relative flex flex-col items-center shrink-0 w-2.5">
+                        <span className="mt-1.5 w-2 h-2 rounded-full bg-primary-500 ring-2 ring-primary-50 z-10" />
+                        {!isLast && (
+                          <span className="absolute top-3.5 bottom-0 w-px bg-primary-100" />
+                        )}
+                      </div>
+                      <div className={`flex-1 min-w-0 pb-5 ${isLast ? 'pb-1' : ''}`}>
+                        <div className="rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-2.5 overflow-hidden max-w-full">
+                          <p className="text-sm text-gray-900 leading-snug break-words [overflow-wrap:anywhere]">
+                            {slot.title}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </>
           )}
         </div>
 
-        <div className="shrink-0 px-3 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 sm:rounded-b-2xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 px-4 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 sm:rounded-b-2xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {!empty && (
             <p className="text-xs text-gray-500">
               {timeline.length} mục
@@ -999,5 +1023,7 @@ function TimelineModal({
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
 
