@@ -28,6 +28,7 @@ from app.services.timetable_service import TimetableService
 from app.services.substitute_service import SubstituteService
 from app.utils.auth import get_current_user
 from app.utils.permissions import is_admin, can_access_substitutes, can_import_timetable
+from app.utils.upload_limits import read_upload_limited
 
 router = APIRouter(prefix="/substitutes", tags=["substitutes"])
 
@@ -325,7 +326,7 @@ async def import_timetable(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Chỉ chấp nhận file Excel (.xlsx)",
         )
-    content = await file.read()
+    content = await read_upload_limited(file)
     try:
         return TimetableService(db).import_excel(content)
     except ValueError as e:

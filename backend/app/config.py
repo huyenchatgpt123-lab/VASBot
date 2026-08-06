@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import List
 
 
 class Settings(BaseSettings):
@@ -9,6 +10,14 @@ class Settings(BaseSettings):
     OPENAI_ORG_ID: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    # Short-lived token for document preview/download links (not the session JWT)
+    DOC_ACCESS_TOKEN_EXPIRE_MINUTES: int = 5
+    # Comma-separated browser origins allowed for CORS
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+    # Max upload size (documents, Excel imports) — 20 MiB
+    MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
+    # Login rate limit: N requests / window (slowapi format)
+    LOGIN_RATE_LIMIT: str = "10/15minutes"
     UPLOAD_DIR: str = "./uploads"
     FAISS_DIR: str = "./faiss_data"
     STORAGE_BACKEND: str = "local"
@@ -27,5 +36,11 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
+    @property
+    def cors_origins_list(self) -> List[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
 
 settings = Settings()
+
+INSECURE_DEFAULT_SECRET = "your-super-secret-key-change-in-production"

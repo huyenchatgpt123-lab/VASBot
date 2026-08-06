@@ -22,6 +22,7 @@ from app.utils.auth import require_admin, hash_password
 from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
 from app.utils.user_serializer import serialize_user
 from app.utils.teacher_code import TeacherCodeAllocator
+from app.utils.upload_limits import read_upload_limited
 from app.models.user import User
 from app.schemas.position import PositionCreate, PositionUpdate, PositionResponse
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
@@ -348,7 +349,7 @@ async def import_users_excel(
     if not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chỉ chấp nhận file Excel (.xlsx)")
 
-    content = await file.read()
+    content = await read_upload_limited(file)
     try:
         wb = load_workbook(filename=io.BytesIO(content), read_only=True)
         ws = wb.active

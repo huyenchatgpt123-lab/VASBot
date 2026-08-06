@@ -24,7 +24,12 @@ from app.services.storage_service import (
     get_preview_url,
     get_download_url,
 )
-from app.utils.auth import get_current_user
+from app.utils.auth import (
+    get_current_user,
+    create_document_access_token,
+    resolve_document_access_user,
+    optional_security,
+)
 from app.utils.permissions import (
     can_upload,
     can_upload_to_department,
@@ -34,9 +39,12 @@ from app.utils.permissions import (
     has_scope_all_departments,
     is_admin,
 )
+from app.utils.upload_limits import read_upload_limited
 from app.models.user import User
+from fastapi.security import HTTPAuthorizationCredentials
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.campus_repository import CampusRepository
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -126,7 +134,7 @@ async def upload_document(
                 },
             )
 
-    content = await file.read()
+    content = await read_upload_limited(file)
     service = DocumentService(db)
 
     try:
@@ -426,12 +434,7 @@ def create_plan_event(
     )
 
 
-def _get_authenticated_document(doc_id: int, token: Optional[str], db: Session):
-    from app.utils.auth import get_current_user_from_token
-    user = get_current_user_from_token(token, db)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token không hợp lệ")
-
+def _load_document_file(doc_id: int, db: Session):
     repo = DocumentRepository(db)
     doc = repo.get_by_id(doc_id)
     if not doc:
@@ -441,13 +444,43 @@ def _get_authenticated_document(doc_id: int, token: Optional[str], db: Session):
     return doc
 
 
+@router.post("/{doc_id}/access-link")
+def create_document_access_link(
+    doc_id: int,
+    purpose: str = Query("preview", pattern="^(preview|download)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Issue a short-lived document access token (for opening file in a new tab)."""
+    _load_document_file(doc_id, db)
+    token = create_document_access_token(
+        user_id=current_user.id,
+        doc_id=doc_id,
+        purpose=purpose,
+    )
+    path = f"/documents/{doc_id}/{purpose}?access_token={token}"
+    return {
+        "url": path,
+        "purpose": purpose,
+        "expires_in_minutes": settings.DOC_ACCESS_TOKEN_EXPIRE_MINUTES,
+    }
+
+
 @router.get("/{doc_id}/preview")
 def preview_document(
     doc_id: int,
-    token: Optional[str] = Query(None),
+    access_token: Optional[str] = Query(None),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
     db: Session = Depends(get_db),
 ):
-    doc = _get_authenticated_document(doc_id, token, db)
+    resolve_document_access_user(
+        doc_id=doc_id,
+        purpose="preview",
+        access_token=access_token,
+        credentials=credentials,
+        db=db,
+    )
+    doc = _load_document_file(doc_id, db)
     kind, _, _ = parse_storage_ref(doc.filepath)
 
     if kind == "cloudinary":
@@ -468,10 +501,18 @@ def preview_document(
 @router.get("/{doc_id}/download")
 def download_document(
     doc_id: int,
-    token: Optional[str] = Query(None),
+    access_token: Optional[str] = Query(None),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
     db: Session = Depends(get_db),
 ):
-    doc = _get_authenticated_document(doc_id, token, db)
+    resolve_document_access_user(
+        doc_id=doc_id,
+        purpose="download",
+        access_token=access_token,
+        credentials=credentials,
+        db=db,
+    )
+    doc = _load_document_file(doc_id, db)
     kind, _, _ = parse_storage_ref(doc.filepath)
 
     if kind == "cloudinary":
@@ -492,11 +533,12 @@ def download_document(
 @router.get("/{doc_id}/view")
 def view_document(
     doc_id: int,
-    token: Optional[str] = Query(None),
+    access_token: Optional[str] = Query(None),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
     db: Session = Depends(get_db),
 ):
     """Alias for /preview (backward compatibility)."""
-    return preview_document(doc_id, token, db)
+    return preview_document(doc_id, access_token, credentials, db)
 
 
 @router.delete("/{doc_id}")

@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
+from app.config import settings, INSECURE_DEFAULT_SECRET
 from app.database import engine, Base, SessionLocal
 from app.jobs.openai_cost_scheduler import start_openai_cost_scheduler, stop_openai_cost_scheduler
 from app.routers import auth, documents, search, admin, tasks, feedback, substitutes
@@ -15,7 +19,11 @@ from app.repositories.position_repository import PositionRepository
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.campus_repository import CampusRepository
 from app.utils.auth import hash_password
+from app.utils.rate_limit import limiter
 from app.db.timetable_schema import sync_timetable_schema
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="VABot API",
@@ -23,13 +31,26 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+_cors_origins = settings.cors_origins_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if settings.SECRET_KEY == INSECURE_DEFAULT_SECRET or settings.SECRET_KEY in (
+    "vabot-secret-key-change-in-production",
+    "changeme",
+):
+    logger.warning(
+        "SECRET_KEY đang dùng giá trị mặc định/yếu. Đặt SECRET_KEY mạnh trong biến môi trường trước khi production."
+    )
 
 app.include_router(auth.router)
 app.include_router(documents.router)
