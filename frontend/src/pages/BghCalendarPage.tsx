@@ -400,10 +400,10 @@ export default function BghCalendarPage() {
   const todayKey = formatDateKey(new Date());
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1400px] mx-auto min-h-[calc(100vh-4rem)] flex flex-col">
+    <div className="p-4 sm:p-6 max-w-[1400px] mx-auto min-h-[calc(100vh-4rem)] flex flex-col min-w-0 w-full overflow-x-hidden">
       {/* Header */}
-      <div className="mb-5 shrink-0">
-        <h1 className="text-2xl font-bold text-gray-900">Lịch hoạt động</h1>
+      <div className="mb-5 shrink-0 min-w-0">
+        <h1 className="text-2xl font-bold text-gray-900 break-words">Lịch hoạt động</h1>
         <p className="text-gray-500 mt-1">
           {canManageCalendar
             ? 'Quản lí lịch hoạt động và kế hoạch diễn ra tại trường'
@@ -412,8 +412,8 @@ export default function BghCalendarPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="mb-5 shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="mb-5 shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm p-4 min-w-0 overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 min-w-0">
           <div className="flex flex-wrap gap-2">
             {([
               ['today', 'Hôm nay'],
@@ -435,31 +435,31 @@ export default function BghCalendarPage() {
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 min-w-0 w-full lg:w-auto">
+            <div className="flex items-center gap-2 min-w-0">
               <label className="text-sm text-gray-500 shrink-0">Từ</label>
               <input
                 type="date"
                 value={filterRange.start}
                 onChange={(e) => handleFilterStartDate(e.target.value)}
-                className="px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                className="min-w-0 flex-1 sm:flex-none px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <label className="text-sm text-gray-500 shrink-0">Đến</label>
               <input
                 type="date"
                 value={filterRange.end}
                 onChange={(e) => handleFilterEndDate(e.target.value)}
-                className="px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                className="min-w-0 flex-1 sm:flex-none px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <label className="text-sm text-gray-500 shrink-0">Trường</label>
               <select
                 value={campusFilter}
                 onChange={(e) => setCampusFilter(e.target.value ? Number(e.target.value) : '')}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none min-w-[120px]"
+                className="min-w-0 flex-1 sm:flex-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none sm:min-w-[120px]"
               >
                 <option value="">Tất cả</option>
                 {campuses.map((c) => (
@@ -870,12 +870,18 @@ function TimelineModal({
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevBodyOverflowX = document.body.style.overflowX;
+    const prevHtmlOverflowX = document.documentElement.style.overflowX;
     document.body.style.overflow = 'hidden';
+    document.body.style.overflowX = 'hidden';
+    document.documentElement.style.overflowX = 'hidden';
     panelRef.current?.focus();
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevBodyOverflow;
+      document.body.style.overflowX = prevBodyOverflowX;
+      document.documentElement.style.overflowX = prevHtmlOverflowX;
     };
   }, [onClose]);
 
@@ -883,7 +889,7 @@ function TimelineModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 p-0 sm:p-4 overflow-x-hidden"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 p-0 sm:p-4 overflow-hidden overscroll-none"
       onClick={onClose}
       role="presentation"
     >
@@ -894,28 +900,28 @@ function TimelineModal({
         aria-labelledby="timeline-modal-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full max-w-full min-w-0 sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl outline-none max-h-[88vh] sm:max-h-[85vh] flex flex-col overflow-hidden"
+        className="bg-white w-full max-w-[100vw] min-w-0 sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl outline-none max-h-[min(88dvh,88vh)] sm:max-h-[85vh] flex flex-col overflow-hidden"
       >
-        <div className="shrink-0 px-4 sm:px-5 pt-4 pb-3 border-b border-gray-100">
+        <div className="shrink-0 px-3 sm:px-5 pt-3 sm:pt-4 pb-3 border-b border-gray-100">
           <div className="sm:hidden w-10 h-1 rounded-full bg-gray-300 mx-auto mb-3" />
-          <div className="flex items-start justify-between gap-3 min-w-0">
-            <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-start justify-between gap-2 min-w-0">
+            <div className="min-w-0 flex-1 overflow-hidden pr-1">
               <p className="text-xs font-medium text-primary-600 uppercase tracking-wide mb-1">
                 Lịch trình trong ngày
               </p>
-              <h2 id="timeline-modal-title" className="text-lg font-semibold text-gray-900 leading-snug break-words">
+              <h2 id="timeline-modal-title" className="text-base sm:text-lg font-semibold text-gray-900 leading-snug break-words [overflow-wrap:anywhere]">
                 {displayPlanName(plan.plan_name)}
               </h2>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+              <div className="mt-2 flex flex-col gap-0.5 text-sm text-gray-500 min-w-0">
                 {plan.date && (
-                  <span className="break-words">{formatDisplayDate(plan.date)}</span>
+                  <span className="break-words [overflow-wrap:anywhere]">{formatDisplayDate(plan.date)}</span>
                 )}
                 {eventTimeLabel !== '—' && (
                   <span className="tabular-nums text-primary-700 font-medium">{eventTimeLabel}</span>
                 )}
               </div>
               {plan.location && (
-                <p className="mt-1.5 text-sm text-gray-600 break-words">
+                <p className="mt-1.5 text-sm text-gray-600 break-words [overflow-wrap:anywhere]">
                   <span className="text-gray-400">Địa điểm:</span> {plan.location}
                 </p>
               )}
@@ -931,9 +937,9 @@ function TimelineModal({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-5 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 py-4">
           {empty ? (
-            <div className="py-10 text-center">
+            <div className="py-10 text-center px-2">
               <div className="text-3xl mb-3 opacity-60">🗓️</div>
               <p className="text-sm font-medium text-gray-700">Không có lịch trình</p>
               <p className="text-sm text-gray-500 mt-1 max-w-xs mx-auto">
@@ -941,30 +947,32 @@ function TimelineModal({
               </p>
             </div>
           ) : (
-            <ol className="relative space-y-0 min-w-0">
+            <ol className="relative space-y-0 min-w-0 w-full max-w-full">
               {timeline.map((slot, idx) => {
                 const isLast = idx === timeline.length - 1;
                 return (
-                  <li key={`${slot.start}-${idx}`} className="relative flex gap-3 sm:gap-4 min-w-0">
-                    <div className="flex flex-col items-center shrink-0 w-12 sm:w-14">
-                      <span className="text-sm font-semibold tabular-nums text-primary-700 leading-none pt-0.5">
+                  <li key={`${slot.start}-${idx}`} className="relative flex gap-2.5 sm:gap-4 min-w-0 w-full max-w-full">
+                    <div className="flex flex-col items-end shrink-0 w-[3.25rem] sm:w-14 pt-0.5">
+                      <span className="text-xs sm:text-sm font-semibold tabular-nums text-primary-700 leading-tight">
                         {slot.start}
                       </span>
                       {slot.end ? (
-                        <span className="text-[11px] tabular-nums text-gray-400 mt-1 leading-none">
-                          → {slot.end}
+                        <span className="text-[10px] sm:text-[11px] tabular-nums text-gray-400 mt-0.5 leading-tight">
+                          {slot.end}
                         </span>
                       ) : null}
                     </div>
-                    <div className="relative flex flex-col items-center shrink-0 w-3">
-                      <span className="mt-1.5 w-2.5 h-2.5 rounded-full bg-primary-500 ring-4 ring-primary-50 z-10" />
+                    <div className="relative flex flex-col items-center shrink-0 w-2.5">
+                      <span className="mt-1.5 w-2 h-2 rounded-full bg-primary-500 ring-2 ring-primary-50 z-10" />
                       {!isLast && (
-                        <span className="absolute top-4 bottom-0 w-px bg-primary-100" />
+                        <span className="absolute top-3.5 bottom-0 w-px bg-primary-100" />
                       )}
                     </div>
                     <div className={`flex-1 min-w-0 pb-5 ${isLast ? 'pb-1' : ''}`}>
-                      <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 sm:px-3.5 overflow-hidden">
-                        <p className="text-sm text-gray-900 leading-snug break-words">{slot.title}</p>
+                      <div className="rounded-xl bg-gray-50 border border-gray-100 px-2.5 py-2 sm:px-3.5 overflow-hidden max-w-full">
+                        <p className="text-sm text-gray-900 leading-snug break-words [overflow-wrap:anywhere]">
+                          {slot.title}
+                        </p>
                       </div>
                     </div>
                   </li>
@@ -974,7 +982,7 @@ function TimelineModal({
           )}
         </div>
 
-        <div className="shrink-0 px-4 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 sm:rounded-b-2xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 px-3 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 sm:rounded-b-2xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {!empty && (
             <p className="text-xs text-gray-500">
               {timeline.length} mục
