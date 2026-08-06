@@ -267,7 +267,7 @@ export default function TaskExtractPreviewModal({ preview, onClose, onSaved }: P
           {preview.document_id ? (
             <button
               type="button"
-              onClick={() => window.open(documentsApi.getPreviewUrl(preview.document_id), '_blank')}
+              onClick={() => void documentsApi.openPreview(preview.document_id)}
               className="shrink-0 px-3 py-1.5 text-sm font-medium text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50"
             >
               Xem tài liệu

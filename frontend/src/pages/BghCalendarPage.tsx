@@ -139,7 +139,7 @@ function displayPlanName(name: string): string {
 }
 
 function openDocumentPreview(documentId: number) {
-  window.open(documentsApi.getPreviewUrl(documentId), '_blank');
+  void documentsApi.openPreview(documentId);
 }
 
 export default function BghCalendarPage() {

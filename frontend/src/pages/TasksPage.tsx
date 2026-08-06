@@ -731,7 +731,7 @@ export default function TasksPage() {
 
   const handlePreviewPlan = (documentId: number | null) => {
     if (!documentId) return;
-    window.open(documentsApi.getPreviewUrl(documentId), '_blank');
+    void documentsApi.openPreview(documentId);
   };
 
   const formatDate = (dateStr: string | null) => {

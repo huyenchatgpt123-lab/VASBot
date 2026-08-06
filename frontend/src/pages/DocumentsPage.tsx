@@ -244,8 +244,7 @@ export default function DocumentsPage() {
   };
 
   const handlePreview = (id: number) => {
-    const url = documentsApi.getPreviewUrl(id);
-    window.open(url, '_blank');
+    void documentsApi.openPreview(id);
   };
 
   const openReExtractChooser = (id: number) => {

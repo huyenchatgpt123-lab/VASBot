@@ -178,15 +178,35 @@ export const documentsApi = {
     const res = await api.get('/documents/departments');
     return res.data;
   },
-  getPreviewUrl: (id: number) => {
+  /** Open preview in a new tab using a short-lived access link (no session JWT in the URL). */
+  openPreview: async (id: number) => {
+    const res = await api.post<{ url: string }>(`/documents/${id}/access-link`, null, {
+      params: { purpose: 'preview' },
+    });
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const token = localStorage.getItem('token');
-    return `${baseUrl}/documents/${id}/preview?token=${token}`;
+    window.open(`${baseUrl}${res.data.url}`, '_blank');
   },
-  getDownloadUrl: (id: number) => {
+  openDownload: async (id: number) => {
+    const res = await api.post<{ url: string }>(`/documents/${id}/access-link`, null, {
+      params: { purpose: 'download' },
+    });
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const token = localStorage.getItem('token');
-    return `${baseUrl}/documents/${id}/download?token=${token}`;
+    window.open(`${baseUrl}${res.data.url}`, '_blank');
+  },
+  /** @deprecated Prefer openPreview — kept for rare callers that need a URL string after minting. */
+  getPreviewUrl: async (id: number): Promise<string> => {
+    const res = await api.post<{ url: string }>(`/documents/${id}/access-link`, null, {
+      params: { purpose: 'preview' },
+    });
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    return `${baseUrl}${res.data.url}`;
+  },
+  getDownloadUrl: async (id: number): Promise<string> => {
+    const res = await api.post<{ url: string }>(`/documents/${id}/access-link`, null, {
+      params: { purpose: 'download' },
+    });
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    return `${baseUrl}${res.data.url}`;
   },
   reExtractPlan: async (
     id: number,

@@ -3,15 +3,16 @@ services:
     image: postgres:16-alpine
     container_name: vabot-db
     environment:
-      POSTGRES_USER: vabot
-      POSTGRES_PASSWORD: vabot123
-      POSTGRES_DB: vabot
+      POSTGRES_USER: ${POSTGRES_USER:-vabot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-vabot}
+    # Do not expose Postgres publicly in production — remove ports or bind to 127.0.0.1
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vabot -d vabot"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vabot} -d ${POSTGRES_DB:-vabot}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,9 +23,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://vabot:vabot123@db:5432/vabot
-      SECRET_KEY: vabot-secret-key-change-in-production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vabot}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-vabot}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_ADMIN_API_KEY: ${OPENAI_ADMIN_API_KEY:-}
+      OPENAI_ORG_ID: ${OPENAI_ORG_ID:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-20971520}
+      LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-10/15minutes}
       UPLOAD_DIR: /app/uploads
       FAISS_DIR: /app/faiss_data
     volumes:
@@ -39,7 +45,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://localhost:8000
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     container_name: vabot-frontend
     ports:
       - "3000:80"
