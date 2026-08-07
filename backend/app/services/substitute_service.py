@@ -23,6 +23,7 @@ from app.models.timetable import (
 from app.models.user import User, UserRole
 from app.repositories.timetable_repository import TimetableRepository
 from app.services.timetable_service import TimetableService
+from app.services.notification_service import NotificationService
 from app.utils.permissions import is_admin
 
 
@@ -45,6 +46,7 @@ class SubstituteService:
         self.db = db
         self.repo = TimetableRepository(db)
         self.tt = TimetableService(db)
+        self.notifications = NotificationService(db)
 
     def list_board(
         self,
@@ -298,7 +300,9 @@ class SubstituteService:
         for aid in created:
             a = self.repo.get_assignment(aid)
             if a:
+                self.notifications.notify_substitute_assigned(a)
                 saved.append(self.tt._format_assignment(a))
+        self.db.commit()
 
         return {
             "created": len(saved),
@@ -355,6 +359,7 @@ class SubstituteService:
         item.rejection_reason = note[:500]
         item.confirmed_at = None
         item.confirmed_by_id = None
+        self.notifications.notify_substitute_rejected(item, reason=note)
         self.db.commit()
         return self.tt._format_assignment(self.repo.get_assignment(assignment_id))
 
@@ -369,6 +374,7 @@ class SubstituteService:
             return self.tt._format_assignment(item)
         item.status = SUB_STATUS_CANCELLED
         item.cancel_reason = note[:500]
+        self.notifications.notify_substitute_cancelled(item, reason=note)
         self.db.commit()
         return self.tt._format_assignment(self.repo.get_assignment(assignment_id))
 
@@ -411,11 +417,17 @@ class SubstituteService:
         item.confirmed_by_id = None
         item.rejection_reason = None
         item.cancel_reason = None
+
+        should_notify = item.date >= date.today()
+        refreshed = self.repo.get_assignment(assignment_id)
+        self.notifications.notify_substitute_reassigned(
+            refreshed,
+            previous_teacher_id=old_sub_id,
+            notify_users=should_notify,
+        )
         self.db.commit()
 
         formatted = self.tt._format_assignment(self.repo.get_assignment(assignment_id))
-        # Ngày đã qua → vẫn đổi được nhưng không coi là thông báo tới User
-        should_notify = item.date >= date.today()
         formatted["notified"] = should_notify
         formatted["previous_substitute_teacher_id"] = old_sub_id
         if should_notify:

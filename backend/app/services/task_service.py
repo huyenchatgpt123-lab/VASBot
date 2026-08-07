@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.document import Document
 from app.repositories.task_repository import TaskRepository
 from app.services.task_extractor import task_extractor
+from app.services.notification_service import NotificationService
 from app.utils.permissions import (
     is_admin,
     can_manage_task,
@@ -90,6 +91,7 @@ class TaskService:
     def __init__(self, db: Session):
         self.db = db
         self.repo = TaskRepository(db)
+        self.notifications = NotificationService(db)
 
     def _resolve_assignee(self, name: str, department: Optional[str] = None):
         from app.utils.name_matcher import resolve_assignee
@@ -227,7 +229,10 @@ class TaskService:
                 "created_by_id": user.id if user else None,
             })
 
-        return self.repo.create_many(tasks_to_create)
+        created = self.repo.create_many(tasks_to_create)
+        self.notifications.notify_tasks_assigned(created)
+        self.db.commit()
+        return created
 
     def get_tasks_for_user(
         self, user_id: int, page: int = 1, page_size: int = 20,
@@ -310,7 +315,12 @@ class TaskService:
             )
         if "assignee_id" in kwargs:
             kwargs["department"] = self._resolve_task_department(kwargs.get("assignee_id"))
-        return self.repo.update(task_id, **kwargs)
+        old_assignee = task.assignee_id
+        updated = self.repo.update(task_id, **kwargs)
+        if updated and updated.assignee_id and updated.assignee_id != old_assignee:
+            self.notifications.notify_task_assigned(updated)
+            self.db.commit()
+        return updated
 
     def delete_task(self, task_id: int, user: User) -> bool:
         task = self.repo.get_by_id(task_id)
@@ -366,6 +376,8 @@ class TaskService:
                 "created_by_id": user.id,
             }
             created.append(self.repo.create(**task_data))
+        self.notifications.notify_tasks_assigned(created)
+        self.db.commit()
         return created
 
     def sync_task_group(
@@ -412,7 +424,7 @@ class TaskService:
             assignee = self.db.query(User).filter(User.id == assignee_id).first()
             if not assignee:
                 raise PermissionError(f"Người dùng ID {assignee_id} không tồn tại")
-            self.repo.create(
+            added = self.repo.create(
                 title=title,
                 assignee_id=assignee.id,
                 assignee_name=assignee.name,
@@ -423,7 +435,9 @@ class TaskService:
                 department=self._resolve_task_department(assignee.id),
                 created_by_id=user.id,
             )
+            self.notifications.notify_task_assigned(added)
 
+        self.db.commit()
         return existing_tasks
 
     def create_task(self, user: User, task_data: dict) -> Task:
@@ -444,7 +458,10 @@ class TaskService:
                 doc = self.db.query(Document).filter(Document.id == doc_id).first()
                 if not doc or doc.department != user.department:
                     raise PermissionError("Chỉ được tạo công việc trong kế hoạch của tổ mình")
-        return self.repo.create(**task_data)
+        task = self.repo.create(**task_data)
+        self.notifications.notify_task_assigned(task)
+        self.db.commit()
+        return task
 
     def get_assignee_names(self) -> List[str]:
         return self.repo.get_all_assignee_names()

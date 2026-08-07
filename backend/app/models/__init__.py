@@ -10,3 +10,4 @@ from app.models.feedback import Feedback, FeedbackStatus
 from app.models.campus import Campus
 from app.models.plan_event import PlanEvent  # noqa: F401
 from app.models.timetable import ClassRoom, TimetableSlot, SubstituteAssignment  # noqa: F401
+from app.models.notification import Notification  # noqa: F401

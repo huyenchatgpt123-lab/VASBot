@@ -7,12 +7,13 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.config import settings, INSECURE_DEFAULT_SECRET
 from app.database import engine, Base, SessionLocal
 from app.jobs.openai_cost_scheduler import start_openai_cost_scheduler, stop_openai_cost_scheduler
-from app.routers import auth, documents, search, admin, tasks, feedback, substitutes
+from app.routers import auth, documents, search, admin, tasks, feedback, substitutes, notifications
 from app.models.user import User, UserRole
 from app.models.campus import Campus  # noqa: F401 — register ORM tables
 from app.models.openai_cost_cache import OpenAICostDaily, OpenAICostSync  # noqa: F401
 from app.models.plan_event import PlanEvent  # noqa: F401
 from app.models.timetable import ClassRoom, TimetableSlot, SubstituteAssignment  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
 from app.models.position import Position
 from app.models.department import DEFAULT_DEPARTMENTS
 from app.repositories.position_repository import PositionRepository
@@ -59,6 +60,7 @@ app.include_router(admin.router)
 app.include_router(tasks.router)
 app.include_router(feedback.router)
 app.include_router(substitutes.router)
+app.include_router(notifications.router)
 
 DEFAULT_ADMIN_EMAIL = "admin@vietanhschool.edu.vn"
 

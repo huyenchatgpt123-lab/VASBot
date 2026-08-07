@@ -1,6 +1,7 @@
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { User } from '../types';
+import NotificationBell from './NotificationBell';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -42,7 +43,8 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         </svg>
       </button>
       <div className="hidden lg:block" />
-      <div className="flex items-center gap-2 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <NotificationBell />
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="w-9 h-9 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 font-semibold text-sm shrink-0">
             {user?.name?.charAt(0).toUpperCase()}
