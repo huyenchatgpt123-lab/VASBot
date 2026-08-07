@@ -890,7 +890,7 @@ function TimelineModal({
 
   const modal = (
     <div
-      className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/45 sm:p-4 overflow-hidden overscroll-none"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-3 sm:p-4 overflow-hidden overscroll-none"
       onClick={onClose}
       role="presentation"
     >
@@ -901,10 +901,9 @@ function TimelineModal({
         aria-labelledby="timeline-modal-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white absolute inset-x-0 bottom-0 max-h-[min(90dvh,90vh)] w-auto min-w-0 sm:static sm:w-full sm:max-w-lg sm:max-h-[85vh] sm:rounded-2xl rounded-t-2xl shadow-xl outline-none flex flex-col overflow-hidden"
+        className="bg-white w-full max-w-md min-w-0 mx-auto rounded-2xl shadow-xl outline-none max-h-[min(75dvh,75vh)] sm:max-h-[min(80dvh,80vh)] flex flex-col overflow-hidden"
       >
-        <div className="shrink-0 px-4 sm:px-5 pt-3 sm:pt-4 pb-3 border-b border-gray-100">
-          <div className="sm:hidden w-10 h-1 rounded-full bg-gray-300 mx-auto mb-3" />
+        <div className="shrink-0 px-4 sm:px-5 pt-4 pb-3 border-b border-gray-100">
           <div className="flex items-start justify-between gap-2 min-w-0">
             <div className="min-w-0 flex-1 overflow-hidden">
               <p className="text-xs font-medium text-primary-600 uppercase tracking-wide mb-1">
@@ -1006,7 +1005,7 @@ function TimelineModal({
           )}
         </div>
 
-        <div className="shrink-0 px-4 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 sm:rounded-b-2xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 px-4 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 rounded-b-2xl">
           {!empty && (
             <p className="text-xs text-gray-500">
               {timeline.length} mục
