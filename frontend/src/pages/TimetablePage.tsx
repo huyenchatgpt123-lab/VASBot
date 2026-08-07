@@ -477,13 +477,18 @@ export default function TimetablePage() {
               </div>
             )}
 
-            <div className="hidden md:block overflow-x-auto border border-gray-200 rounded-xl">
-              <table className="min-w-full text-sm">
+            <div className="hidden md:block max-h-[min(70vh,720px)] overflow-auto border border-gray-200 rounded-xl overscroll-contain">
+              <table className="min-w-full text-sm border-separate border-spacing-0">
                 <thead>
                   <tr className="bg-primary-700 text-white">
-                    <th className="px-2 py-2 font-medium sticky left-0 bg-primary-700">Tiết</th>
+                    <th className="px-2 py-2 font-medium sticky top-0 left-0 z-30 bg-primary-700 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]">
+                      Tiết
+                    </th>
                     {weekDates.map((d) => (
-                      <th key={d.value} className="px-2 py-2 font-medium min-w-[110px]">
+                      <th
+                        key={d.value}
+                        className="px-2 py-2 font-medium min-w-[110px] sticky top-0 z-20 bg-primary-700 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]"
+                      >
                         <span className="block">{d.label}</span>
                         <span className="block text-[11px] font-normal opacity-80">
                           {d.dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
@@ -494,8 +499,8 @@ export default function TimetablePage() {
                 </thead>
                 <tbody>
                   {PERIODS.map((period) => (
-                    <tr key={period} className="border-t border-gray-100">
-                      <td className="px-2 py-2 text-center font-semibold text-primary-800 bg-primary-50 sticky left-0">
+                    <tr key={period}>
+                      <td className="px-2 py-2 text-center font-semibold text-primary-800 bg-primary-50 sticky left-0 z-10 border-t border-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.06)]">
                         {periodHeader(period)}
                       </td>
                       {weekDates.map((d) => {
@@ -503,7 +508,7 @@ export default function TimetablePage() {
                         const sub = subByDatePeriod.get(`${d.date}-${period}`);
                         if (sub) {
                           return (
-                            <td key={d.value} className="px-1 py-1 align-top">
+                            <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
                               <div className="min-h-[52px] rounded-lg border border-green-300 bg-green-50 px-2 py-1.5">
                                 <span className="block font-medium text-green-950 break-words">
                                   {sub.class_name || '—'}
@@ -518,7 +523,7 @@ export default function TimetablePage() {
                         }
                         if (slot) {
                           return (
-                            <td key={d.value} className="px-1 py-1 align-top">
+                            <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
                               <div className="min-h-[52px] rounded-lg border border-gray-100 bg-white px-2 py-1.5">
                                 <span className="block font-medium text-gray-900 break-words">
                                   {slot.class_name || '—'}
@@ -531,7 +536,7 @@ export default function TimetablePage() {
                           );
                         }
                         return (
-                          <td key={d.value} className="px-1 py-1 align-top">
+                          <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
                             <div className="min-h-[52px] rounded-lg bg-gray-50/60" />
                           </td>
                         );
@@ -542,7 +547,8 @@ export default function TimetablePage() {
               </table>
             </div>
 
-            <div className="md:hidden space-y-3">
+            {/* Mobile: 1 vùng scroll, tiêu đề ngày sticky */}
+            <div className="md:hidden max-h-[min(70vh,720px)] overflow-y-auto border border-gray-200 rounded-xl overscroll-contain bg-white">
               {weekDates.map((d) => {
                 const daySlots = PERIODS.map((period) => ({
                   period,
@@ -550,12 +556,15 @@ export default function TimetablePage() {
                   sub: subByDatePeriod.get(`${d.date}-${period}`),
                 })).filter((x) => x.slot || x.sub);
                 return (
-                  <div key={d.value} className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="px-3 py-2 bg-primary-700 text-white text-sm font-medium">
+                  <section key={d.value} className="border-b border-gray-100 last:border-b-0">
+                    <div className="sticky top-0 z-10 px-3 py-2 bg-primary-700 text-white text-sm font-medium shadow-sm">
                       {d.label}{' '}
                       <span className="opacity-80 font-normal">
                         {d.dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
                       </span>
+                      {daySlots.length > 0 && (
+                        <span className="ml-2 text-[11px] font-normal opacity-80">{daySlots.length} tiết</span>
+                      )}
                     </div>
                     {daySlots.length === 0 ? (
                       <p className="px-3 py-3 text-sm text-gray-400 italic">Không có tiết</p>
@@ -583,7 +592,7 @@ export default function TimetablePage() {
                         ))}
                       </ul>
                     )}
-                  </div>
+                  </section>
                 );
               })}
             </div>

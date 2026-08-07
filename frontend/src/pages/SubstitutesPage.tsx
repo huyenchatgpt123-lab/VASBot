@@ -522,13 +522,18 @@ export default function SubstitutesPage() {
         <div className="py-16 text-center text-gray-400">Đang tải...</div>
       ) : (
         <>
-          <div className="hidden md:block overflow-x-auto border border-gray-200 rounded-xl">
-            <table className="min-w-full text-sm">
+          <div className="hidden md:block max-h-[min(70vh,720px)] overflow-auto border border-gray-200 rounded-xl overscroll-contain">
+            <table className="min-w-full text-sm border-separate border-spacing-0">
               <thead>
                 <tr className="bg-primary-700 text-white">
-                  <th className="px-2 py-2 font-medium sticky left-0 bg-primary-700">Tiết</th>
+                  <th className="px-2 py-2 font-medium sticky top-0 left-0 z-30 bg-primary-700 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]">
+                    Tiết
+                  </th>
                   {weekDates.map((d) => (
-                    <th key={d.value} className="px-2 py-2 font-medium min-w-[120px]">
+                    <th
+                      key={d.value}
+                      className="px-2 py-2 font-medium min-w-[120px] sticky top-0 z-20 bg-primary-700 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]"
+                    >
                       <span className="block">{d.label}</span>
                       <span className="block text-[11px] font-normal opacity-80">
                         {d.dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
@@ -539,14 +544,14 @@ export default function SubstitutesPage() {
               </thead>
               <tbody>
                 {PERIODS.map((period) => (
-                  <tr key={period} className="border-t border-gray-100">
-                    <td className="px-2 py-2 text-center font-semibold text-primary-800 bg-primary-50 sticky left-0">
+                  <tr key={period}>
+                    <td className="px-2 py-2 text-center font-semibold text-primary-800 bg-primary-50 sticky left-0 z-10 border-t border-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.06)]">
                       {periodHeader(period)}
                     </td>
                     {weekDates.map((d) => {
                       const cells = cellMap.get(`${d.date}-${period}`) || [];
                       return (
-                        <td key={d.value} className="px-1 py-1 align-top">
+                        <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
                           {cells.length === 0 ? (
                             <div className="min-h-[48px] rounded-lg bg-gray-50/60" />
                           ) : (
@@ -575,13 +580,17 @@ export default function SubstitutesPage() {
             </table>
           </div>
 
-          <div className="md:hidden space-y-3">
+          {/* Mobile: 1 vùng scroll, tiêu đề ngày sticky khi lướt nhiều lịch */}
+          <div className="md:hidden max-h-[min(70vh,720px)] overflow-y-auto border border-gray-200 rounded-xl overscroll-contain bg-white">
             {weekDates.map((d) => {
               const dayItems = assignments.filter((a) => a.date === d.date);
               return (
-                <div key={d.value} className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="px-3 py-2 bg-primary-50 font-medium text-primary-900 text-sm">
-                    {d.label} · {d.dateObj.toLocaleDateString('vi-VN')}
+                <section key={d.value} className="border-b border-gray-100 last:border-b-0">
+                  <div className="sticky top-0 z-10 px-3 py-2 bg-primary-700 text-white text-sm font-medium shadow-sm">
+                    {d.label} · {d.dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
+                    {dayItems.length > 0 && (
+                      <span className="ml-2 text-[11px] font-normal opacity-80">{dayItems.length} lịch</span>
+                    )}
                   </div>
                   {dayItems.length === 0 ? (
                     <p className="px-3 py-4 text-sm text-gray-400 italic">Không có dạy thay</p>
@@ -601,7 +610,7 @@ export default function SubstitutesPage() {
                       ))}
                     </ul>
                   )}
-                </div>
+                </section>
               );
             })}
           </div>
@@ -685,13 +694,18 @@ export default function SubstitutesPage() {
                     <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">{slotsError}</p>
                   ) : (
                     <>
-                      <div className="overflow-x-auto border border-gray-200 rounded-xl">
-                        <table className="min-w-full text-sm">
+                      <div className="max-h-[min(48vh,420px)] overflow-auto border border-gray-200 rounded-xl overscroll-contain">
+                        <table className="min-w-full text-sm border-separate border-spacing-0">
                           <thead>
                             <tr className="bg-sky-700 text-white">
-                              <th className="px-2 py-2 font-medium sticky left-0 bg-sky-700">Tiết</th>
+                              <th className="px-2 py-2 font-medium sticky top-0 left-0 z-30 bg-sky-700 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]">
+                                Tiết
+                              </th>
                               {createWeekDates.map((d) => (
-                                <th key={d.value} className="px-2 py-2 font-medium min-w-[100px]">
+                                <th
+                                  key={d.value}
+                                  className="px-2 py-2 font-medium min-w-[100px] sticky top-0 z-20 bg-sky-700 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]"
+                                >
                                   <span className="block">{d.label}</span>
                                   <span className="block text-[11px] font-normal opacity-80">
                                     {d.dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
@@ -702,15 +716,15 @@ export default function SubstitutesPage() {
                           </thead>
                           <tbody>
                             {PERIODS.map((period) => (
-                              <tr key={period} className="border-t border-gray-100">
-                                <td className="px-2 py-1.5 text-center font-semibold text-sky-800 bg-sky-50 sticky left-0">
+                              <tr key={period}>
+                                <td className="px-2 py-1.5 text-center font-semibold text-sky-800 bg-sky-50 sticky left-0 z-10 border-t border-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.06)]">
                                   {periodHeader(period)}
                                 </td>
                                 {createWeekDates.map((d) => {
                                   const slot = teacherSlotMap.get(`${d.value}-${period}`);
                                   if (!slot) {
                                     return (
-                                      <td key={d.value} className="px-1 py-1">
+                                      <td key={d.value} className="px-1 py-1 border-t border-gray-100 bg-white">
                                         <div className="min-h-[40px] rounded-lg bg-gray-50/80" />
                                       </td>
                                     );
@@ -721,7 +735,7 @@ export default function SubstitutesPage() {
                                   const meta = metaByDate.get(key);
                                   const already = Boolean(meta?.already_assigned);
                                   return (
-                                    <td key={d.value} className="px-1 py-1">
+                                    <td key={d.value} className="px-1 py-1 border-t border-gray-100 bg-white">
                                       <button
                                         type="button"
                                         onClick={() => toggleSlotCell(d.value, period, d.date)}
