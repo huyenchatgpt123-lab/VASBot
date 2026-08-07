@@ -159,6 +159,22 @@ export const substitutesApi = {
     return res.data;
   },
 
+  reassignAssignment: async (
+    id: number,
+    substituteTeacherId: number,
+    reason?: string,
+  ): Promise<SubstituteAssignment & {
+    notified?: boolean;
+    notify_message?: string;
+    previous_substitute_teacher_id?: number | null;
+  }> => {
+    const res = await api.post(`/substitutes/assignments/${id}/reassign`, {
+      substitute_teacher_id: substituteTeacherId,
+      reason: reason || undefined,
+    });
+    return res.data;
+  },
+
   mySubstitutes: async (params?: {
     teacher_id?: number;
     from_date?: string;

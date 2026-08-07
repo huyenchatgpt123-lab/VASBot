@@ -18,6 +18,7 @@ from app.schemas.timetable import (
     SubstituteAssignmentResponse,
     RejectSubstituteRequest,
     CancelSubstituteRequest,
+    ReassignSubstituteRequest,
     AbsentPeriodsRequest,
     AbsentPeriodItem,
     SuggestTeacherItem,
@@ -225,6 +226,23 @@ def cancel_assignment(
 ):
     try:
         return SubstituteService(db).cancel(assignment_id, reason=body.reason)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/assignments/{assignment_id}/reassign", response_model=SubstituteAssignmentResponse)
+def reassign_assignment(
+    assignment_id: int,
+    body: ReassignSubstituteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_substitutes_access),
+):
+    try:
+        return SubstituteService(db).reassign(
+            assignment_id,
+            substitute_teacher_id=body.substitute_teacher_id,
+            reason=body.reason,
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

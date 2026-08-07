@@ -84,6 +84,10 @@ class SubstituteAssignmentResponse(BaseModel):
     rejection_reason: Optional[str] = None
     cancel_reason: Optional[str] = None
     created_at: Optional[datetime] = None
+    # Present on reassign response
+    notified: Optional[bool] = None
+    previous_substitute_teacher_id: Optional[int] = None
+    notify_message: Optional[str] = None
 
 
 class MySubstitutesResponse(BaseModel):
@@ -104,6 +108,11 @@ class RejectSubstituteRequest(BaseModel):
 
 class CancelSubstituteRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
+
+
+class ReassignSubstituteRequest(BaseModel):
+    substitute_teacher_id: int
+    reason: Optional[str] = Field(None, max_length=500)
 
 
 class AbsentPeriodsRequest(BaseModel):

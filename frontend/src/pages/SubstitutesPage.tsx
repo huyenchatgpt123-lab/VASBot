@@ -112,6 +112,8 @@ export default function SubstitutesPage() {
   const [loadingSuggest, setLoadingSuggest] = useState(false);
   const [saving, setSaving] = useState(false);
   const [detail, setDetail] = useState<SubstituteAssignment | null>(null);
+  const [reassignDetail, setReassignDetail] = useState<SubstituteAssignment | null>(null);
+  const [reassigning, setReassigning] = useState(false);
   const [createDeptFilter, setCreateDeptFilter] = useState('');
   const [createNameSearch, setCreateNameSearch] = useState('');
   const [showSelectedSummary, setShowSelectedSummary] = useState(false);
@@ -284,14 +286,52 @@ export default function SubstitutesPage() {
 
   const openPickForRow = (row: RowPick) => {
     if (!absentId || row.already_assigned) return;
+    setReassignDetail(null);
     setPickRow(row);
     setPickSearch('');
     setSuggestions([]);
   };
 
+  const openReassignPick = () => {
+    if (!detail) return;
+    const d = detail;
+    const day = new Date(`${d.date}T12:00:00`).getDay();
+    const dayOfWeek = day === 0 ? 7 : day + 1; // JS Sun=0 → map loosely; suggestions use date
+    setReassignDetail(d);
+    setPickRow({
+      date: d.date,
+      day_of_week: dayOfWeek >= 2 && dayOfWeek <= 7 ? dayOfWeek : 2,
+      period: d.period,
+      session: d.session,
+      period_label: d.period_label,
+      class_id: d.class_id,
+      class_name: d.class_name ?? null,
+      campus_id: d.campus_id,
+      campus_code: d.campus_code ?? null,
+      already_assigned: false,
+      existing_assignment_id: null,
+      existing_substitute_name: null,
+      key: `reassign-${d.id}`,
+      selected: true,
+      substitute_teacher_id: d.substitute_teacher_id ?? null,
+      substitute_teacher_name: d.substitute_teacher_name ?? null,
+    });
+    setPickSearch('');
+    setSuggestions([]);
+  };
+
+  const closePick = () => {
+    setPickRow(null);
+    setPickSearch('');
+    setSuggestions([]);
+    setReassignDetail(null);
+  };
+
   // Gợi ý / tìm tên trên server trong popup chọn GV
   useEffect(() => {
-    if (!pickRow || !absentId) return;
+    if (!pickRow) return;
+    const absentTeacherId = reassignDetail?.absent_teacher_id ?? (absentId ? Number(absentId) : null);
+    if (!absentTeacherId) return;
     const row = pickRow;
     const q = pickSearch.trim();
     let cancelled = false;
@@ -299,7 +339,7 @@ export default function SubstitutesPage() {
       setLoadingSuggest(true);
       try {
         const list = await substitutesApi.suggestions({
-          absent_teacher_id: Number(absentId),
+          absent_teacher_id: absentTeacherId,
           on_date: row.date,
           period: row.period,
           class_id: row.class_id,
@@ -307,11 +347,16 @@ export default function SubstitutesPage() {
           limit: q ? 100 : 30,
           q: q || undefined,
         });
-        if (!cancelled) setSuggestions(list);
+        if (!cancelled) {
+          const excludeId = reassignDetail?.substitute_teacher_id;
+          setSuggestions(
+            excludeId ? list.filter((s) => s.user_id !== excludeId) : list,
+          );
+        }
       } catch (err: unknown) {
         if (!cancelled) {
           alert(apiErrorMessage(err, 'Không lấy được gợi ý'));
-          if (!q) setPickRow(null);
+          if (!q) closePick();
         }
       } finally {
         if (!cancelled) setLoadingSuggest(false);
@@ -321,7 +366,7 @@ export default function SubstitutesPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [pickRow, pickSearch, absentId]);
+  }, [pickRow, pickSearch, absentId, reassignDetail]);
 
   const toggleSlotCell = (dayValue: number, period: number, date: string) => {
     const slot = teacherSlotMap.get(`${dayValue}-${period}`);
@@ -376,12 +421,10 @@ export default function SubstitutesPage() {
           : r,
       ),
     );
-    setPickRow(null);
-    setPickSearch('');
-    setSuggestions([]);
+    closePick();
   };
 
-  const pickSubstitute = (s: SuggestTeacherItem) => {
+  const pickSubstitute = async (s: SuggestTeacherItem) => {
     if (!pickRow) return;
     if (s.is_busy) {
       const reason = s.busy_reason || 'Có tiết dạy';
@@ -389,6 +432,23 @@ export default function SubstitutesPage() {
         return;
       }
     }
+
+    if (reassignDetail) {
+      setReassigning(true);
+      try {
+        const result = await substitutesApi.reassignAssignment(reassignDetail.id, s.user_id);
+        closePick();
+        setDetail(null);
+        await loadBoard();
+        alert(result.notify_message || 'Đã đổi giáo viên dạy thay');
+      } catch (err: unknown) {
+        alert(apiErrorMessage(err, 'Không đổi được giáo viên dạy thay'));
+      } finally {
+        setReassigning(false);
+      }
+      return;
+    }
+
     applyPick(s);
   };
 
@@ -463,8 +523,7 @@ export default function SubstitutesPage() {
   const removeRow = (key: string) => {
     setRows((prev) => prev.filter((r) => r.key !== key));
     if (pickRow?.key === key) {
-      setPickRow(null);
-      setSuggestions([]);
+      closePick();
     }
   };
 
@@ -565,7 +624,7 @@ export default function SubstitutesPage() {
                                 >
                                   <span className="block font-medium text-gray-900 break-words">{a.class_name}</span>
                                   <span className="block text-[11px] text-gray-800 truncate">{formatGvName(a.substitute_teacher_name)}</span>
-                                  <span className="block text-[10px] text-gray-500 truncate">thay {formatGvName(a.absent_teacher_name)}</span>
+                                  <span className="block text-[10px] text-gray-500 truncate">{formatGvName(a.absent_teacher_name)}</span>
                                   <span className="block text-[10px] font-medium mt-0.5">{boardStatusLabel(a.status)}</span>
                                 </button>
                               ))}
@@ -846,11 +905,18 @@ export default function SubstitutesPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 shrink-0 space-y-3">
               <div>
-                <h3 className="text-base font-semibold text-gray-900">Chọn giáo viên dạy thay</h3>
+                <h3 className="text-base font-semibold text-gray-900">
+                  {reassignDetail ? 'Đổi giáo viên dạy thay' : 'Chọn giáo viên dạy thay'}
+                </h3>
                 <p className="text-sm text-gray-500 mt-0.5">
                   {pickRow.date} · {pickRow.period_label} · {pickRow.class_name}
                   {pickRow.campus_code ? ` · ${pickRow.campus_code}` : ''}
                 </p>
+                {reassignDetail && (
+                  <p className="text-xs text-amber-800 mt-1">
+                    Hiện tại: {formatGvName(reassignDetail.substitute_teacher_name)}. Sau khi đổi, lịch về chờ xác nhận.
+                  </p>
+                )}
               </div>
               <input
                 type="search"
@@ -859,11 +925,14 @@ export default function SubstitutesPage() {
                 placeholder="Tìm tên GV (kể cả đang có tiết)..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 autoFocus
+                disabled={reassigning}
               />
             </div>
             <div className="px-3 py-3 overflow-y-auto flex-1">
-              {loadingSuggest ? (
-                <p className="text-sm text-gray-400 px-2 py-6 text-center">Đang gợi ý...</p>
+              {loadingSuggest || reassigning ? (
+                <p className="text-sm text-gray-400 px-2 py-6 text-center">
+                  {reassigning ? 'Đang đổi giáo viên...' : 'Đang gợi ý...'}
+                </p>
               ) : suggestions.length === 0 ? (
                 <p className="text-sm text-gray-500 italic px-2 py-6 text-center">
                   {pickSearch.trim()
@@ -877,6 +946,7 @@ export default function SubstitutesPage() {
                       <button
                         type="button"
                         onClick={() => pickSubstitute(s)}
+                        disabled={reassigning}
                         className={`w-full flex items-center gap-2 text-left px-3 py-2.5 rounded-lg border border-transparent ${
                           s.is_busy
                             ? 'hover:bg-amber-50 hover:border-amber-100'
@@ -910,25 +980,23 @@ export default function SubstitutesPage() {
               )}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-between gap-2 shrink-0">
+              {!reassignDetail ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    removeRow(pickRow.key);
+                  }}
+                  className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+                >
+                  Bỏ tiết này
+                </button>
+              ) : (
+                <span />
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  removeRow(pickRow.key);
-                  setPickRow(null);
-                  setPickSearch('');
-                  setSuggestions([]);
-                }}
-                className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
-              >
-                Bỏ tiết này
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPickRow(null);
-                  setPickSearch('');
-                  setSuggestions([]);
-                }}
+                onClick={closePick}
+                disabled={reassigning}
                 className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
               >
                 Đóng
@@ -962,12 +1030,19 @@ export default function SubstitutesPage() {
                 <p className="text-gray-600">Lý do hủy: {detail.cancel_reason}</p>
               )}
             </div>
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+            <div className="px-5 py-4 border-t border-gray-100 flex flex-wrap justify-end gap-2">
               {detail.status !== 'cancelled' && (
                 <button type="button" onClick={() => handleCancel(detail.id)} className="mr-auto px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">
                   Hủy lịch này
                 </button>
               )}
+              <button
+                type="button"
+                onClick={openReassignPick}
+                className="px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 rounded-lg"
+              >
+                Đổi GV dạy thay
+              </button>
               <button type="button" onClick={() => setDetail(null)} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
                 Đóng
               </button>

@@ -371,3 +371,57 @@ class SubstituteService:
         item.cancel_reason = note[:500]
         self.db.commit()
         return self.tt._format_assignment(self.repo.get_assignment(assignment_id))
+
+    def reassign(
+        self,
+        assignment_id: int,
+        *,
+        substitute_teacher_id: int,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """Đổi GV dạy thay; luôn về pending. Thông báo in-app nếu ngày chưa qua."""
+        item = self.repo.get_assignment(assignment_id)
+        if not item:
+            raise ValueError("Không tìm thấy lịch dạy thay")
+
+        new_sub_id = int(substitute_teacher_id)
+        if new_sub_id == item.absent_teacher_id:
+            raise ValueError("Không thể tự dạy thay chính mình")
+        if item.substitute_teacher_id == new_sub_id and item.status == SUB_STATUS_PENDING:
+            raise ValueError("Giáo viên này đã được xếp dạy thay (đang chờ xác nhận)")
+
+        sub = self.db.query(User).filter(User.id == new_sub_id).first()
+        if not sub:
+            raise ValueError("Giáo viên dạy thay không tồn tại")
+        if sub.campus_id is not None and sub.campus_id != item.campus_id:
+            raise ValueError("Giáo viên khác cơ sở")
+
+        conflict = self.repo.find_sub_teacher_conflict(new_sub_id, item.date, item.period)
+        if conflict and conflict.id != item.id:
+            raise ValueError("Giáo viên đã nhận dạy thay tiết này")
+
+        old_sub_id = item.substitute_teacher_id
+
+        item.substitute_teacher_id = new_sub_id
+        item.status = SUB_STATUS_PENDING
+        item.confirmed_at = None
+        item.confirmed_by_id = None
+        item.rejection_reason = None
+        item.cancel_reason = None
+        self.db.commit()
+
+        formatted = self.tt._format_assignment(self.repo.get_assignment(assignment_id))
+        # Ngày đã qua → vẫn đổi được nhưng không coi là thông báo tới User
+        should_notify = item.date >= date.today()
+        formatted["notified"] = should_notify
+        formatted["previous_substitute_teacher_id"] = old_sub_id
+        if should_notify:
+            formatted["notify_message"] = (
+                "Đã đổi GV dạy thay. Lịch về chờ xác nhận — "
+                "GV mới sẽ thấy trên Thời khóa biểu; GV cũ không còn lịch này."
+            )
+        else:
+            formatted["notify_message"] = (
+                "Đã đổi GV dạy thay (ngày đã qua — không gửi thông báo tới User)."
+            )
+        return formatted
