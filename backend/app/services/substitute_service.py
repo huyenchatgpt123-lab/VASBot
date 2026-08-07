@@ -396,6 +396,9 @@ class SubstituteService:
         if sub.campus_id is not None and sub.campus_id != item.campus_id:
             raise ValueError("Giáo viên khác cơ sở")
 
+        if item.date < date.today():
+            raise ValueError("Không thể đổi GV cho lịch dạy thay đã qua ngày")
+
         conflict = self.repo.find_sub_teacher_conflict(new_sub_id, item.date, item.period)
         if conflict and conflict.id != item.id:
             raise ValueError("Giáo viên đã nhận dạy thay tiết này")

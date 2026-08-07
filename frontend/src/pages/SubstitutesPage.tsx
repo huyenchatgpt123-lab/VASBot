@@ -113,6 +113,7 @@ export default function SubstitutesPage() {
   const [saving, setSaving] = useState(false);
   const [detail, setDetail] = useState<SubstituteAssignment | null>(null);
   const [reassignDetail, setReassignDetail] = useState<SubstituteAssignment | null>(null);
+  const [reassignDraft, setReassignDraft] = useState<{ id: number; name: string } | null>(null);
   const [reassigning, setReassigning] = useState(false);
   const [createDeptFilter, setCreateDeptFilter] = useState('');
   const [createNameSearch, setCreateNameSearch] = useState('');
@@ -294,9 +295,13 @@ export default function SubstitutesPage() {
 
   const openReassignPick = () => {
     if (!detail) return;
+    if (detail.date < toISODate(new Date())) {
+      alert('Không thể đổi GV cho lịch dạy thay đã qua ngày');
+      return;
+    }
     const d = detail;
     const day = new Date(`${d.date}T12:00:00`).getDay();
-    const dayOfWeek = day === 0 ? 7 : day + 1; // JS Sun=0 → map loosely; suggestions use date
+    const dayOfWeek = day === 0 ? 7 : day + 1;
     setReassignDetail(d);
     setPickRow({
       date: d.date,
@@ -313,8 +318,8 @@ export default function SubstitutesPage() {
       existing_substitute_name: null,
       key: `reassign-${d.id}`,
       selected: true,
-      substitute_teacher_id: d.substitute_teacher_id ?? null,
-      substitute_teacher_name: d.substitute_teacher_name ?? null,
+      substitute_teacher_id: reassignDraft?.id ?? d.substitute_teacher_id ?? null,
+      substitute_teacher_name: reassignDraft?.name ?? d.substitute_teacher_name ?? null,
     });
     setPickSearch('');
     setSuggestions([]);
@@ -325,6 +330,11 @@ export default function SubstitutesPage() {
     setPickSearch('');
     setSuggestions([]);
     setReassignDetail(null);
+  };
+
+  const closeDetail = () => {
+    setDetail(null);
+    setReassignDraft(null);
   };
 
   // Gợi ý / tìm tên trên server trong popup chọn GV
@@ -424,7 +434,7 @@ export default function SubstitutesPage() {
     closePick();
   };
 
-  const pickSubstitute = async (s: SuggestTeacherItem) => {
+  const pickSubstitute = (s: SuggestTeacherItem) => {
     if (!pickRow) return;
     if (s.is_busy) {
       const reason = s.busy_reason || 'Có tiết dạy';
@@ -433,23 +443,40 @@ export default function SubstitutesPage() {
       }
     }
 
+    // Đổi GV: chọn xong → đưa về popup chi tiết (chưa lưu API)
     if (reassignDetail) {
-      setReassigning(true);
-      try {
-        const result = await substitutesApi.reassignAssignment(reassignDetail.id, s.user_id);
-        closePick();
-        setDetail(null);
-        await loadBoard();
-        alert(result.notify_message || 'Đã đổi giáo viên dạy thay');
-      } catch (err: unknown) {
-        alert(apiErrorMessage(err, 'Không đổi được giáo viên dạy thay'));
-      } finally {
-        setReassigning(false);
-      }
+      setReassignDraft({ id: s.user_id, name: s.name });
+      closePick();
       return;
     }
 
     applyPick(s);
+  };
+
+  const handleUpdateReassign = async () => {
+    if (!detail || !reassignDraft) return;
+    if (detail.date < toISODate(new Date())) {
+      alert('Không thể đổi GV cho lịch dạy thay đã qua ngày');
+      return;
+    }
+    if (reassignDraft.id === detail.substitute_teacher_id && detail.status === 'pending') {
+      alert('Giáo viên này đã được xếp dạy thay (đang chờ xác nhận)');
+      return;
+    }
+    if (!confirm(`Cập nhật GV dạy thay thành «${reassignDraft.name}»?\nLịch sẽ về trạng thái chờ xác nhận.`)) {
+      return;
+    }
+    setReassigning(true);
+    try {
+      const result = await substitutesApi.reassignAssignment(detail.id, reassignDraft.id);
+      closeDetail();
+      await loadBoard();
+      alert(result.notify_message || 'Đã cập nhật giáo viên dạy thay');
+    } catch (err: unknown) {
+      alert(apiErrorMessage(err, 'Không cập nhật được giáo viên dạy thay'));
+    } finally {
+      setReassigning(false);
+    }
   };
 
   const handleSave = async () => {
@@ -499,7 +526,7 @@ export default function SubstitutesPage() {
     }
     try {
       await substitutesApi.cancelAssignment(id, reason.trim());
-      setDetail(null);
+      closeDetail();
       await loadBoard();
     } catch (err: unknown) {
       alert(apiErrorMessage(err, 'Không hủy được'));
@@ -619,12 +646,15 @@ export default function SubstitutesPage() {
                                 <button
                                   key={a.id}
                                   type="button"
-                                  onClick={() => setDetail(a)}
+                                  onClick={() => {
+                                    setReassignDraft(null);
+                                    setDetail(a);
+                                  }}
                                   className={`w-full text-left rounded-lg border px-2 py-1.5 ${boardStatusClass(a.status)}`}
                                 >
                                   <span className="block font-medium text-gray-900 break-words">{a.class_name}</span>
                                   <span className="block text-[11px] text-gray-800 truncate">{formatGvName(a.substitute_teacher_name)}</span>
-                                  <span className="block text-[10px] text-gray-500 truncate">{formatGvName(a.absent_teacher_name)}</span>
+                                  <span className="block text-[10px] text-gray-500 truncate">Thay {formatGvName(a.absent_teacher_name)}</span>
                                   <span className="block text-[10px] font-medium mt-0.5">{boardStatusLabel(a.status)}</span>
                                 </button>
                               ))}
@@ -657,7 +687,14 @@ export default function SubstitutesPage() {
                     <ul className="divide-y divide-gray-100">
                       {dayItems.map((a) => (
                         <li key={a.id}>
-                          <button type="button" onClick={() => setDetail(a)} className={`w-full text-left px-3 py-2.5 ${boardStatusClass(a.status)}`}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReassignDraft(null);
+                              setDetail(a);
+                            }}
+                            className={`w-full text-left px-3 py-2.5 ${boardStatusClass(a.status)}`}
+                          >
                             <span className="text-primary-700 font-semibold mr-2">{a.period_label}</span>
                             <span className="text-gray-900">{a.class_name}</span>
                             <span className="block text-xs mt-0.5">
@@ -914,7 +951,8 @@ export default function SubstitutesPage() {
                 </p>
                 {reassignDetail && (
                   <p className="text-xs text-amber-800 mt-1">
-                    Hiện tại: {formatGvName(reassignDetail.substitute_teacher_name)}. Sau khi đổi, lịch về chờ xác nhận.
+                    Hiện tại: {formatGvName(reassignDetail.substitute_teacher_name)}.
+                    Chọn GV để đưa về chi tiết, rồi bấm Cập nhật để lưu.
                   </p>
                 )}
               </div>
@@ -929,10 +967,8 @@ export default function SubstitutesPage() {
               />
             </div>
             <div className="px-3 py-3 overflow-y-auto flex-1">
-              {loadingSuggest || reassigning ? (
-                <p className="text-sm text-gray-400 px-2 py-6 text-center">
-                  {reassigning ? 'Đang đổi giáo viên...' : 'Đang gợi ý...'}
-                </p>
+              {loadingSuggest ? (
+                <p className="text-sm text-gray-400 px-2 py-6 text-center">Đang gợi ý...</p>
               ) : suggestions.length === 0 ? (
                 <p className="text-sm text-gray-500 italic px-2 py-6 text-center">
                   {pickSearch.trim()
@@ -996,10 +1032,9 @@ export default function SubstitutesPage() {
               <button
                 type="button"
                 onClick={closePick}
-                disabled={reassigning}
                 className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
               >
-                Đóng
+                {reassignDetail ? 'Hủy' : 'Đóng'}
               </button>
             </div>
           </div>
@@ -1009,8 +1044,17 @@ export default function SubstitutesPage() {
       {detail && (
         <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
               <h2 className="text-lg font-semibold text-gray-900">Chi tiết dạy thay</h2>
+              <button
+                type="button"
+                onClick={closeDetail}
+                disabled={reassigning}
+                className="shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-xl leading-none disabled:opacity-50"
+                aria-label="Đóng"
+              >
+                ×
+              </button>
             </div>
             <div className="px-5 py-4 text-sm space-y-2">
               <p><span className="text-gray-500">Ngày:</span> {detail.date}</p>
@@ -1018,10 +1062,28 @@ export default function SubstitutesPage() {
               <p><span className="text-gray-500">Lớp:</span> {detail.class_name}</p>
               <p><span className="text-gray-500">Cơ sở:</span> {detail.campus_code || '—'}</p>
               <p><span className="text-gray-500">GV nghỉ:</span> {formatGvName(detail.absent_teacher_name)}</p>
-              <p><span className="text-gray-500">GV dạy thay:</span> {formatGvName(detail.substitute_teacher_name)}</p>
+              <p>
+                <span className="text-gray-500">GV dạy thay:</span>{' '}
+                {reassignDraft ? (
+                  <>
+                    <span className="line-through text-gray-400 mr-1">
+                      {formatGvName(detail.substitute_teacher_name)}
+                    </span>
+                    <span className="font-medium text-primary-800">
+                      {formatGvName(reassignDraft.name)}
+                    </span>
+                    <span className="ml-1 text-[11px] text-amber-700">(chưa cập nhật)</span>
+                  </>
+                ) : (
+                  formatGvName(detail.substitute_teacher_name)
+                )}
+              </p>
               <p>
                 <span className="text-gray-500">Trạng thái:</span>{' '}
                 <span className="font-medium">{boardStatusLabel(detail.status)}</span>
+                {reassignDraft && (
+                  <span className="ml-1 text-[11px] text-amber-700">→ sẽ về chờ xác nhận sau khi cập nhật</span>
+                )}
               </p>
               {detail.status === 'rejected' && detail.rejection_reason && (
                 <p className="text-red-700">Lý do từ chối: {detail.rejection_reason}</p>
@@ -1029,23 +1091,45 @@ export default function SubstitutesPage() {
               {detail.status === 'cancelled' && detail.cancel_reason && (
                 <p className="text-gray-600">Lý do hủy: {detail.cancel_reason}</p>
               )}
+              {detail.date < toISODate(new Date()) && (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                  Lịch đã qua ngày — không thể đổi giáo viên dạy thay.
+                </p>
+              )}
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex flex-wrap justify-end gap-2">
               {detail.status !== 'cancelled' && (
-                <button type="button" onClick={() => handleCancel(detail.id)} className="mr-auto px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => handleCancel(detail.id)}
+                  disabled={reassigning}
+                  className="mr-auto px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                >
                   Hủy lịch này
                 </button>
               )}
-              <button
-                type="button"
-                onClick={openReassignPick}
-                className="px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 rounded-lg"
-              >
-                Đổi GV dạy thay
-              </button>
-              <button type="button" onClick={() => setDetail(null)} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                Đóng
-              </button>
+              {detail.date >= toISODate(new Date()) && (
+                <>
+                  <button
+                    type="button"
+                    onClick={openReassignPick}
+                    disabled={reassigning}
+                    className="px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 rounded-lg disabled:opacity-50"
+                  >
+                    {reassignDraft ? 'Chọn lại GV' : 'Đổi GV dạy thay'}
+                  </button>
+                  {reassignDraft && (
+                    <button
+                      type="button"
+                      onClick={handleUpdateReassign}
+                      disabled={reassigning}
+                      className="px-3.5 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50"
+                    >
+                      {reassigning ? 'Đang cập nhật...' : 'Cập nhật'}
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
