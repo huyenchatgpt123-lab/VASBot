@@ -890,7 +890,7 @@ function TimelineModal({
 
   const modal = (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-3 sm:p-4 overflow-hidden overscroll-none"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-3 sm:p-5 md:p-6 overflow-hidden overscroll-none"
       onClick={onClose}
       role="presentation"
     >
@@ -901,21 +901,21 @@ function TimelineModal({
         aria-labelledby="timeline-modal-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full max-w-md min-w-0 mx-auto rounded-2xl shadow-xl outline-none max-h-[min(75dvh,75vh)] sm:max-h-[min(80dvh,80vh)] flex flex-col overflow-hidden"
+        className="bg-white w-full min-w-0 mx-auto rounded-2xl shadow-xl outline-none flex flex-col overflow-hidden max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[min(78dvh,78vh)] sm:max-h-[min(82dvh,82vh)] md:max-h-[min(85dvh,85vh)]"
       >
-        <div className="shrink-0 px-4 sm:px-5 pt-4 pb-3 border-b border-gray-100">
-          <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="shrink-0 px-4 sm:px-5 md:px-6 pt-4 pb-3 border-b border-gray-100">
+          <div className="flex items-start justify-between gap-3 min-w-0">
             <div className="min-w-0 flex-1 overflow-hidden">
               <p className="text-xs font-medium text-primary-600 uppercase tracking-wide mb-1">
                 Lịch trình trong ngày
               </p>
               <h2
                 id="timeline-modal-title"
-                className="text-base sm:text-lg font-semibold text-gray-900 leading-snug break-words [overflow-wrap:anywhere]"
+                className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 leading-snug break-words [overflow-wrap:anywhere]"
               >
                 {displayPlanName(plan.plan_name)}
               </h2>
-              <div className="mt-2 flex flex-col gap-0.5 text-sm text-gray-500 min-w-0">
+              <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-0.5 sm:gap-x-3 sm:gap-y-1 text-sm text-gray-500 min-w-0">
                 {plan.date && (
                   <span className="break-words [overflow-wrap:anywhere]">{formatDisplayDate(plan.date)}</span>
                 )}
@@ -940,7 +940,7 @@ function TimelineModal({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-5 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-5 md:px-6 py-4">
           {empty ? (
             <div className="py-10 text-center px-2">
               <div className="text-3xl mb-3 opacity-60">🗓️</div>
@@ -951,7 +951,7 @@ function TimelineModal({
             </div>
           ) : (
             <>
-              {/* Mobile: stacked cards — no side time column */}
+              {/* Phone: stacked cards */}
               <ul className="sm:hidden space-y-3">
                 {timeline.map((slot, idx) => (
                   <li key={`m-${slot.start}-${idx}`} className="min-w-0">
@@ -968,13 +968,13 @@ function TimelineModal({
                 ))}
               </ul>
 
-              {/* Desktop: horizontal timeline */}
+              {/* Tablet / laptop / desktop: horizontal timeline */}
               <ol className="relative hidden sm:block space-y-0 min-w-0 w-full">
                 {timeline.map((slot, idx) => {
                   const isLast = idx === timeline.length - 1;
                   return (
-                    <li key={`d-${slot.start}-${idx}`} className="relative flex gap-4 min-w-0 w-full">
-                      <div className="flex flex-col items-end shrink-0 w-14 pt-0.5">
+                    <li key={`d-${slot.start}-${idx}`} className="relative flex gap-3 md:gap-4 min-w-0 w-full">
+                      <div className="flex flex-col items-end shrink-0 w-14 md:w-16 pt-0.5">
                         <span className="text-sm font-semibold tabular-nums text-primary-700 leading-tight">
                           {slot.start}
                         </span>
@@ -991,8 +991,8 @@ function TimelineModal({
                         )}
                       </div>
                       <div className={`flex-1 min-w-0 pb-5 ${isLast ? 'pb-1' : ''}`}>
-                        <div className="rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-2.5 overflow-hidden max-w-full">
-                          <p className="text-sm text-gray-900 leading-snug break-words [overflow-wrap:anywhere]">
+                        <div className="rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-2.5 md:px-4 overflow-hidden max-w-full">
+                          <p className="text-sm md:text-[15px] text-gray-900 leading-snug break-words [overflow-wrap:anywhere]">
                             {slot.title}
                           </p>
                         </div>
@@ -1005,7 +1005,7 @@ function TimelineModal({
           )}
         </div>
 
-        <div className="shrink-0 px-4 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 rounded-b-2xl">
+        <div className="shrink-0 px-4 sm:px-5 md:px-6 py-3 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50/80 rounded-b-2xl">
           {!empty && (
             <p className="text-xs text-gray-500">
               {timeline.length} mục
