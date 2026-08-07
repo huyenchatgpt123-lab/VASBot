@@ -142,17 +142,24 @@ export default function TimetablePage() {
   };
 
   const load = useCallback(async () => {
-    if (!viewingTeacherId) return;
+    if (!viewingTeacherId || !fromDate || !toDate) return;
     setLoading(true);
     setError('');
     try {
+      const subParams: {
+        teacher_id?: number;
+        from_date: string;
+        to_date: string;
+      } = {
+        from_date: fromDate,
+        to_date: toDate,
+      };
+      if (isAdmin && viewingTeacherId !== user?.id) {
+        subParams.teacher_id = Number(viewingTeacherId);
+      }
       const [tt, mine] = await Promise.all([
         substitutesApi.myTimetable(isAdmin ? Number(viewingTeacherId) : undefined),
-        substitutesApi.mySubstitutes(
-          isAdmin && viewingTeacherId !== user?.id
-            ? { teacher_id: Number(viewingTeacherId) }
-            : undefined,
-        ),
+        substitutesApi.mySubstitutes(subParams),
       ]);
       setSlots(tt);
       setSubs(mine.items || []);
@@ -162,7 +169,7 @@ export default function TimetablePage() {
     } finally {
       setLoading(false);
     }
-  }, [viewingTeacherId, isAdmin, user?.id]);
+  }, [viewingTeacherId, isAdmin, user?.id, fromDate, toDate]);
 
   const handleImport = async (file: File) => {
     if (!confirm(
@@ -223,7 +230,17 @@ export default function TimetablePage() {
     [confirmedSubs, fromDate, toDate],
   );
 
-  const pendingSubs = useMemo(() => subs.filter((a) => a.status === 'pending'), [subs]);
+  // Badge xác nhận: chỉ pending trong tuần đang xem (API đã lọc theo tuần)
+  const pendingSubs = useMemo(
+    () =>
+      subs.filter(
+        (a) =>
+          a.status === 'pending'
+          && a.date >= (fromDate || '')
+          && a.date <= (toDate || ''),
+      ),
+    [subs, fromDate, toDate],
+  );
 
   const canRespond = (item: SubstituteAssignment) => {
     if (item.status !== 'pending') return false;
@@ -275,7 +292,7 @@ export default function TimetablePage() {
           <h1 className="text-2xl font-bold text-gray-900">Thời khóa biểu</h1>
           <p className="text-sm text-gray-500 mt-1">
             Lịch dạy của {isAdmin && viewingTeacherId !== user?.id ? 'giáo viên đang chọn' : 'bạn'}
-            {' — '}chỉ tiết đã xác nhận hiện trên lưới TKB.
+            {' — '}tiết dạy thay đã xác nhận hiện trên lưới (kể cả ngày đã qua trong tuần đang xem).
             {canImportTimetable ? ' Có thể tải mẫu / import TKB.' : ''}
           </p>
         </div>
@@ -356,7 +373,7 @@ export default function TimetablePage() {
         <div className="mb-4 border border-orange-200 bg-orange-50/40 rounded-xl overflow-hidden">
           <div className="px-4 py-2.5 border-b border-orange-100 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-orange-950">
-              Xác nhận lịch dạy thay
+              Xác nhận lịch dạy thay (tuần đang xem)
             </h2>
             <span className="text-[11px] font-bold text-white bg-orange-500 px-2 py-0.5 rounded-full min-w-[20px] text-center">
               {pendingSubs.length}
@@ -452,17 +469,14 @@ export default function TimetablePage() {
 
         {loading ? (
           <div className="py-16 text-center text-gray-400">Đang tải...</div>
-        ) : slots.length === 0 ? (
-          <div className="border border-dashed border-gray-300 rounded-xl px-4 py-10 text-center text-sm text-gray-500">
-            Chưa có thời khóa biểu.
-            {pendingSubs.length > 0
-              ? ' Hãy xác nhận lịch dạy thay phía trên trước.'
-              : confirmedSubs.length > 0
-                ? ' Các tiết dạy thay đã xác nhận sẽ hiện khi có TKB mẫu.'
-                : ' Liên hệ BGH để import TKB hoặc kiểm tra mã GV trên tài khoản.'}
-          </div>
         ) : (
           <>
+            {slots.length === 0 && weekSubs.length === 0 && pendingSubs.length === 0 && (
+              <div className="mb-3 border border-dashed border-gray-300 rounded-xl px-4 py-3 text-center text-sm text-gray-500">
+                Chưa có thời khóa biểu cố định. Liên hệ BGH để import TKB hoặc kiểm tra mã GV trên tài khoản.
+              </div>
+            )}
+
             <div className="hidden md:block overflow-x-auto border border-gray-200 rounded-xl">
               <table className="min-w-full text-sm">
                 <thead>
@@ -575,7 +589,8 @@ export default function TimetablePage() {
             </div>
 
             <p className="mt-3 text-xs text-gray-500">
-              Ô xanh = tiết dạy thay đã xác nhận trong tuần đang xem. Tiết chờ xác nhận chỉ hiện ở danh sách phía trên.
+              Ô xanh = tiết dạy thay đã xác nhận trong tuần đang xem (kể cả ngày đã qua).
+              Tiết chờ xác nhận chỉ hiện ở danh sách phía trên theo tuần.
             </p>
           </>
         )}
