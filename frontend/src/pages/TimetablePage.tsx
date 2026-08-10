@@ -64,6 +64,19 @@ function formatAbsentForUser(
   return department ? `${base} · ${department}` : base;
 }
 
+function formatCoverTeacher(name: string | null | undefined): string {
+  if (!name) return '—';
+  return `GV ${name}`;
+}
+
+function statusLabelVi(status: string): string {
+  if (status === 'pending') return 'Chờ xác nhận';
+  if (status === 'confirmed') return 'Đã xác nhận';
+  if (status === 'rejected') return 'Từ chối';
+  if (status === 'cancelled') return 'Đã hủy';
+  return status;
+}
+
 export default function TimetablePage() {
   const { user, isAdmin, isBghOnly, homePath, canImportTimetable } = useAuth();
   const toast = useToast();
@@ -211,35 +224,77 @@ export default function TimetablePage() {
     return map;
   }, [slots]);
 
-  const confirmedSubs = useMemo(
-    () => subs.filter((a) => a.status === 'confirmed'),
-    [subs],
+  const viewingId = viewingTeacherId ? Number(viewingTeacherId) : null;
+
+  /** Tiết tôi (hoặc GV đang xem) đi dạy thay người khác */
+  const asSubstituteSubs = useMemo(
+    () =>
+      viewingId
+        ? subs.filter((a) => a.substitute_teacher_id === viewingId)
+        : [],
+    [subs, viewingId],
+  );
+
+  /** Tiết tôi nghỉ — người khác dạy thay */
+  const asAbsentSubs = useMemo(
+    () =>
+      viewingId
+        ? subs.filter((a) => a.absent_teacher_id === viewingId)
+        : [],
+    [subs, viewingId],
+  );
+
+  const confirmedAsSub = useMemo(
+    () => asSubstituteSubs.filter((a) => a.status === 'confirmed'),
+    [asSubstituteSubs],
   );
 
   const subByDatePeriod = useMemo(() => {
     const map = new Map<string, SubstituteAssignment>();
-    for (const a of confirmedSubs) {
+    for (const a of confirmedAsSub) {
       if (a.date < (fromDate || '') || a.date > (toDate || '')) continue;
       map.set(`${a.date}-${a.period}`, a);
     }
     return map;
-  }, [confirmedSubs, fromDate, toDate]);
+  }, [confirmedAsSub, fromDate, toDate]);
+
+  /** Cover trên tiết của mình (pending + confirmed trong tuần) */
+  const coverByDatePeriod = useMemo(() => {
+    const map = new Map<string, SubstituteAssignment>();
+    for (const a of asAbsentSubs) {
+      if (a.status !== 'pending' && a.status !== 'confirmed') continue;
+      if (a.date < (fromDate || '') || a.date > (toDate || '')) continue;
+      map.set(`${a.date}-${a.period}`, a);
+    }
+    return map;
+  }, [asAbsentSubs, fromDate, toDate]);
 
   const weekSubs = useMemo(
-    () => confirmedSubs.filter((a) => a.date >= (fromDate || '') && a.date <= (toDate || '')),
-    [confirmedSubs, fromDate, toDate],
+    () => confirmedAsSub.filter((a) => a.date >= (fromDate || '') && a.date <= (toDate || '')),
+    [confirmedAsSub, fromDate, toDate],
   );
 
-  // Badge xác nhận: chỉ pending trong tuần đang xem (API đã lọc theo tuần)
+  // Badge xác nhận: chỉ pending khi tôi là GV dạy thay
   const pendingSubs = useMemo(
     () =>
-      subs.filter(
+      asSubstituteSubs.filter(
         (a) =>
           a.status === 'pending'
           && a.date >= (fromDate || '')
           && a.date <= (toDate || ''),
       ),
-    [subs, fromDate, toDate],
+    [asSubstituteSubs, fromDate, toDate],
+  );
+
+  const myCoversThisWeek = useMemo(
+    () =>
+      asAbsentSubs.filter(
+        (a) =>
+          (a.status === 'pending' || a.status === 'confirmed')
+          && a.date >= (fromDate || '')
+          && a.date <= (toDate || ''),
+      ),
+    [asAbsentSubs, fromDate, toDate],
   );
 
   const canRespond = (item: SubstituteAssignment) => {
@@ -292,7 +347,7 @@ export default function TimetablePage() {
           <h1 className="text-2xl font-bold text-gray-900">Thời khóa biểu</h1>
           <p className="text-sm text-gray-500 mt-1">
             Lịch dạy của {isAdmin && viewingTeacherId !== user?.id ? 'giáo viên đang chọn' : 'bạn'}
-            {' — '}tiết dạy thay đã xác nhận hiện trên lưới (kể cả ngày đã qua trong tuần đang xem).
+            {' — '}tiết dạy thay đã xác nhận hiện trên lưới; khi nghỉ sẽ thấy người dạy thay kèm trạng thái.
             {canImportTimetable ? ' Có thể tải mẫu / import TKB.' : ''}
           </p>
         </div>
@@ -425,6 +480,44 @@ export default function TimetablePage() {
         </div>
       )}
 
+      {myCoversThisWeek.length > 0 && (
+        <div className="mb-4 border border-sky-200 bg-sky-50/40 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-sky-100 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-sky-950">
+              Người dạy thay khi bạn nghỉ (tuần đang xem)
+            </h2>
+            <span className="text-[11px] font-bold text-white bg-sky-600 px-2 py-0.5 rounded-full min-w-[20px] text-center">
+              {myCoversThisWeek.length}
+            </span>
+          </div>
+          <ul className="divide-y divide-sky-100 bg-white">
+            {myCoversThisWeek.map((item) => (
+              <li key={item.id} className="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm">
+                <span className="shrink-0 font-medium text-gray-900 tabular-nums">
+                  {new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN', {
+                    weekday: 'short',
+                    day: '2-digit',
+                    month: '2-digit',
+                  })}
+                </span>
+                <span className="shrink-0 font-semibold text-primary-800">{item.period_label}</span>
+                <span className="min-w-0 break-words text-gray-900">
+                  Lớp {item.class_name || '—'}
+                  {item.campus_code ? ` · ${item.campus_code}` : ''}
+                </span>
+                <span className="text-xs text-sky-900 sm:ml-auto">
+                  {formatCoverTeacher(item.substitute_teacher_name)}
+                  {' · '}
+                  <span className={item.status === 'confirmed' ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
+                    {statusLabelVi(item.status)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-3 items-center">
         <button
           type="button"
@@ -471,7 +564,7 @@ export default function TimetablePage() {
           <div className="py-16 text-center text-gray-400">Đang tải...</div>
         ) : (
           <>
-            {slots.length === 0 && weekSubs.length === 0 && pendingSubs.length === 0 && (
+            {slots.length === 0 && weekSubs.length === 0 && pendingSubs.length === 0 && myCoversThisWeek.length === 0 && (
               <div className="mb-3 border border-dashed border-gray-300 rounded-xl px-4 py-3 text-center text-sm text-gray-500">
                 Chưa có thời khóa biểu cố định. Liên hệ BGH để import TKB hoặc kiểm tra mã GV trên tài khoản.
               </div>
@@ -506,6 +599,7 @@ export default function TimetablePage() {
                       {weekDates.map((d) => {
                         const slot = slotMap.get(`${d.value}-${period}`);
                         const sub = subByDatePeriod.get(`${d.date}-${period}`);
+                        const cover = coverByDatePeriod.get(`${d.date}-${period}`);
                         if (sub) {
                           return (
                             <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
@@ -522,14 +616,37 @@ export default function TimetablePage() {
                           );
                         }
                         if (slot) {
+                          const coverPending = cover?.status === 'pending';
                           return (
                             <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
-                              <div className="min-h-[52px] rounded-lg border border-gray-100 bg-white px-2 py-1.5">
+                              <div
+                                className={`min-h-[52px] rounded-lg border px-2 py-1.5 ${
+                                  cover
+                                    ? coverPending
+                                      ? 'border-amber-300 bg-amber-50'
+                                      : 'border-sky-300 bg-sky-50'
+                                    : 'border-gray-100 bg-white'
+                                }`}
+                              >
                                 <span className="block font-medium text-gray-900 break-words">
                                   {slot.class_name || '—'}
                                 </span>
                                 {slot.campus_code && (
                                   <span className="block text-[10px] text-gray-500">{slot.campus_code}</span>
+                                )}
+                                {cover && (
+                                  <>
+                                    <span className="block text-[10px] font-semibold text-sky-900 mt-0.5">
+                                      Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name)}
+                                    </span>
+                                    <span
+                                      className={`block text-[10px] font-medium ${
+                                        coverPending ? 'text-amber-800' : 'text-green-800'
+                                      }`}
+                                    >
+                                      {statusLabelVi(cover.status)}
+                                    </span>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -554,6 +671,7 @@ export default function TimetablePage() {
                   period,
                   slot: slotMap.get(`${d.value}-${period}`),
                   sub: subByDatePeriod.get(`${d.date}-${period}`),
+                  cover: coverByDatePeriod.get(`${d.date}-${period}`),
                 })).filter((x) => x.slot || x.sub);
                 return (
                   <section key={d.value} className="border-b border-gray-100 last:border-b-0">
@@ -570,10 +688,12 @@ export default function TimetablePage() {
                       <p className="px-3 py-3 text-sm text-gray-400 italic">Không có tiết</p>
                     ) : (
                       <ul className="divide-y divide-gray-100">
-                        {daySlots.map(({ period, slot, sub }) => (
+                        {daySlots.map(({ period, slot, sub, cover }) => (
                           <li
                             key={period}
-                            className={`px-3 py-2 text-sm ${sub ? 'bg-green-50' : ''}`}
+                            className={`px-3 py-2 text-sm ${
+                              sub ? 'bg-green-50' : cover ? (cover.status === 'pending' ? 'bg-amber-50' : 'bg-sky-50') : ''
+                            }`}
                           >
                             <span className="font-semibold text-primary-800 mr-2">
                               {periodHeader(period)}
@@ -586,7 +706,18 @@ export default function TimetablePage() {
                                 </span>
                               </>
                             ) : (
-                              <span className="text-gray-900">{slot?.class_name}</span>
+                              <>
+                                <span className="text-gray-900">{slot?.class_name}</span>
+                                {cover && (
+                                  <span className="block text-xs text-sky-900 mt-0.5">
+                                    Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name)}
+                                    {' · '}
+                                    <span className={cover.status === 'confirmed' ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
+                                      {statusLabelVi(cover.status)}
+                                    </span>
+                                  </span>
+                                )}
+                              </>
                             )}
                           </li>
                         ))}
@@ -598,8 +729,8 @@ export default function TimetablePage() {
             </div>
 
             <p className="mt-3 text-xs text-gray-500">
-              Ô xanh = tiết dạy thay đã xác nhận trong tuần đang xem (kể cả ngày đã qua).
-              Tiết chờ xác nhận chỉ hiện ở danh sách phía trên theo tuần.
+              Ô xanh = tiết bạn đi dạy thay (đã xác nhận). Ô xanh dương / vàng = tiết bạn nghỉ đã có người dạy thay
+              (đã xác nhận / chờ xác nhận).
             </p>
           </>
         )}

@@ -11,6 +11,8 @@ NOTIF_SUBSTITUTE_CANCELLED = "substitute_cancelled"
 NOTIF_SUBSTITUTE_REASSIGNED = "substitute_reassigned"
 NOTIF_SUBSTITUTE_REMOVED = "substitute_removed"
 NOTIF_SUBSTITUTE_REJECTED = "substitute_rejected"
+NOTIF_SUBSTITUTE_COVERED = "substitute_covered"  # người nghỉ: đã xếp người dạy thay
+NOTIF_SUBSTITUTE_DEPT = "substitute_dept"  # tổ trưởng: lịch dạy thay liên quan tổ
 NOTIF_TASK_ASSIGNED = "task_assigned"
 
 

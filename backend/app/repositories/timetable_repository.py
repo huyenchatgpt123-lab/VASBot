@@ -194,6 +194,9 @@ class TimetableRepository:
         from_date: Optional[date] = None,
         to_date: Optional[date] = None,
     ) -> List[SubstituteAssignment]:
+        """Lịch liên quan tôi: dạy thay cho người khác HOẶC người khác dạy thay khi tôi nghỉ."""
+        from sqlalchemy import or_
+
         q = (
             self.db.query(SubstituteAssignment)
             .options(
@@ -202,7 +205,12 @@ class TimetableRepository:
                 joinedload(SubstituteAssignment.absent_teacher),
                 joinedload(SubstituteAssignment.substitute_teacher),
             )
-            .filter(SubstituteAssignment.substitute_teacher_id == teacher_id)
+            .filter(
+                or_(
+                    SubstituteAssignment.substitute_teacher_id == teacher_id,
+                    SubstituteAssignment.absent_teacher_id == teacher_id,
+                )
+            )
         )
         if from_date:
             q = q.filter(SubstituteAssignment.date >= from_date)
@@ -249,7 +257,11 @@ class TimetableRepository:
         from_date: date,
         to_date: date,
         campus_id: Optional[int] = None,
+        department: Optional[str] = None,
     ) -> List[SubstituteAssignment]:
+        from sqlalchemy import or_
+        from sqlalchemy.orm import aliased
+
         q = (
             self.db.query(SubstituteAssignment)
             .options(
@@ -266,6 +278,19 @@ class TimetableRepository:
         )
         if campus_id:
             q = q.filter(SubstituteAssignment.campus_id == campus_id)
+        if department:
+            AbsentUser = aliased(User)
+            SubUser = aliased(User)
+            q = (
+                q.join(AbsentUser, SubstituteAssignment.absent_teacher_id == AbsentUser.id)
+                .join(SubUser, SubstituteAssignment.substitute_teacher_id == SubUser.id)
+                .filter(
+                    or_(
+                        AbsentUser.department == department,
+                        SubUser.department == department,
+                    )
+                )
+            )
         return q.order_by(
             SubstituteAssignment.date,
             SubstituteAssignment.period,

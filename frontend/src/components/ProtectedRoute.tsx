@@ -51,6 +51,18 @@ export function BghRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** BGH quản lý dạy thay hoặc tổ trưởng xem read-only */
+export function SubstitutesRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, canViewSubstitutesBoard, homePath } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
+  if (!canViewSubstitutesBoard) return <Navigate to={homePath} replace />;
+
+  return <>{children}</>;
+}
+
 /** BGH không dùng module Công việc */
 export function TasksRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, isBghOnly } = useAuth();

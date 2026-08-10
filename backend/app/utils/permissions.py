@@ -63,6 +63,23 @@ def can_access_substitutes(user: User) -> bool:
     return get_permissions(user)["can_access_substitutes"]
 
 
+def is_department_team_lead(user: User) -> bool:
+    """Tổ trưởng: quản lý công việc trong tổ, không phải admin / BGH toàn trường."""
+    if is_admin(user):
+        return False
+    perms = get_permissions(user)
+    if not perms["can_manage_tasks"]:
+        return False
+    if perms["scope_all_departments"]:
+        return False
+    return bool(user.department)
+
+
+def can_view_substitutes_board(user: User) -> bool:
+    """BGH/Học vụ quản lý dạy thay, hoặc tổ trưởng xem read-only theo tổ."""
+    return can_access_substitutes(user) or is_department_team_lead(user)
+
+
 def can_manage_calendar(user: User) -> bool:
     return get_permissions(user)["can_manage_calendar"]
 

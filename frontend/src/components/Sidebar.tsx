@@ -37,7 +37,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
-  const { isAdmin, canAccessSubstitutes, canImportTimetable, isBghOnly } = useAuth();
+  const { isAdmin, canViewSubstitutesBoard, canImportTimetable, isBghOnly } = useAuth();
   const [taskCount, setTaskCount] = useState(0);
   const [subCount, setSubCount] = useState(0);
   const [hasTimetableAccess, setHasTimetableAccess] = useState(false);
@@ -138,7 +138,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         {navItems
           .filter((item) => {
             if (item.adminOnly && !isAdmin) return false;
-            if (item.substitutesOnly && !canAccessSubstitutes) return false;
+            if (item.substitutesOnly && !canViewSubstitutesBoard) return false;
             if (item.hideForBgh && isBghOnly) return false;
             if (item.path === '/tasks' && isBghOnly) return false;
             if (item.requiresTimetableAccess && !isAdmin && !canImportTimetable && !hasTimetableAccess) return false;

@@ -28,7 +28,13 @@ from app.schemas.timetable import (
 from app.services.timetable_service import TimetableService
 from app.services.substitute_service import SubstituteService
 from app.utils.auth import get_current_user
-from app.utils.permissions import is_admin, can_access_substitutes, can_import_timetable
+from app.utils.permissions import (
+    is_admin,
+    can_access_substitutes,
+    can_import_timetable,
+    can_view_substitutes_board,
+    is_department_team_lead,
+)
 from app.utils.upload_limits import read_upload_limited
 
 router = APIRouter(prefix="/substitutes", tags=["substitutes"])
@@ -42,6 +48,15 @@ def _require_substitutes_access(user: User = Depends(get_current_user)) -> User:
         )
     return user
 
+
+def _require_substitutes_board_view(user: User = Depends(get_current_user)) -> User:
+    """BGH quản lý hoặc tổ trưởng xem read-only."""
+    if not can_view_substitutes_board(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Không có quyền xem lịch dạy thay",
+        )
+    return user
 
 @router.get("/mine", response_model=MySubstitutesResponse)
 def my_substitutes(
@@ -104,11 +119,14 @@ def my_timetable(
 def list_teachers(
     campus_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_substitutes_access),
+    current_user: User = Depends(_require_substitutes_board_view),
 ):
     q = db.query(User).filter(User.role != UserRole.admin).order_by(User.name)
     if campus_id:
         q = q.filter((User.campus_id == campus_id) | (User.campus_id.is_(None)))
+    # Tổ trưởng chỉ cần danh sách tổ mình (read-only board)
+    if is_department_team_lead(current_user) and not can_access_substitutes(current_user):
+        q = q.filter(User.department == current_user.department)
     return [
         {
             "id": u.id,
@@ -127,10 +145,16 @@ def list_assignments(
     to_date: date = Query(...),
     campus_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(_require_substitutes_access),
+    current_user: User = Depends(_require_substitutes_board_view),
 ):
+    department = None
+    if is_department_team_lead(current_user) and not can_access_substitutes(current_user):
+        department = current_user.department
     return SubstituteService(db).list_board(
-        from_date=from_date, to_date=to_date, campus_id=campus_id
+        from_date=from_date,
+        to_date=to_date,
+        campus_id=campus_id,
+        department=department,
     )
 
 

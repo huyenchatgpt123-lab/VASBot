@@ -54,9 +54,13 @@ class SubstituteService:
         from_date: date,
         to_date: date,
         campus_id: Optional[int] = None,
+        department: Optional[str] = None,
     ) -> List[dict]:
         items = self.repo.list_assignments(
-            from_date=from_date, to_date=to_date, campus_id=campus_id
+            from_date=from_date,
+            to_date=to_date,
+            campus_id=campus_id,
+            department=department,
         )
         return [self.tt._format_assignment(i) for i in items]
 

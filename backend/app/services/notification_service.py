@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Set
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.notification import (
     Notification,
@@ -11,9 +11,13 @@ from app.models.notification import (
     NOTIF_SUBSTITUTE_REASSIGNED,
     NOTIF_SUBSTITUTE_REMOVED,
     NOTIF_SUBSTITUTE_REJECTED,
+    NOTIF_SUBSTITUTE_COVERED,
+    NOTIF_SUBSTITUTE_DEPT,
     NOTIF_TASK_ASSIGNED,
 )
+from app.models.position import Position
 from app.models.timetable import period_label
+from app.models.user import User, UserRole
 from app.repositories.notification_repository import NotificationRepository
 
 
@@ -78,42 +82,176 @@ class NotificationService:
             ref_id=ref_id,
         )
 
+    # ---- helpers ----
+
+    @staticmethod
+    def _status_label(status: Optional[str]) -> str:
+        mapping = {
+            "pending": "Chờ xác nhận",
+            "confirmed": "Đã xác nhận",
+            "rejected": "Từ chối",
+            "cancelled": "Đã hủy",
+        }
+        return mapping.get(status or "", status or "—")
+
+    def _assignment_context(self, assignment) -> dict:
+        class_name = assignment.class_room.name if assignment.class_room else "—"
+        pl = period_label(assignment.period)
+        absent_name = (
+            assignment.absent_teacher.name if assignment.absent_teacher else "—"
+        )
+        sub_name = (
+            assignment.substitute_teacher.name
+            if assignment.substitute_teacher
+            else "—"
+        )
+        status = getattr(assignment, "status", None) or "pending"
+        base = f"{assignment.date} · {pl} · lớp {class_name}"
+        return {
+            "class_name": class_name,
+            "pl": pl,
+            "absent_name": absent_name,
+            "sub_name": sub_name,
+            "status": status,
+            "status_label": self._status_label(status),
+            "base": base,
+        }
+
+    def _team_lead_ids(self, department: Optional[str]) -> List[int]:
+        if not department:
+            return []
+        rows = (
+            self.db.query(User)
+            .options(joinedload(User.position_obj))
+            .join(Position, User.position_id == Position.id)
+            .filter(
+                User.department == department,
+                User.role != UserRole.admin,
+                Position.can_manage_tasks.is_(True),
+                Position.scope_all_departments.is_(False),
+            )
+            .all()
+        )
+        return [u.id for u in rows]
+
+    def _notify_team_leads(
+        self,
+        assignment,
+        *,
+        title: str,
+        body: str,
+        exclude_ids: Optional[Set[int]] = None,
+    ) -> None:
+        exclude = set(exclude_ids or [])
+        depts: Set[str] = set()
+        if assignment.absent_teacher and assignment.absent_teacher.department:
+            depts.add(assignment.absent_teacher.department)
+        if assignment.substitute_teacher and assignment.substitute_teacher.department:
+            depts.add(assignment.substitute_teacher.department)
+        lead_ids: Set[int] = set()
+        for dept in depts:
+            lead_ids.update(self._team_lead_ids(dept))
+        for uid in lead_ids:
+            if uid in exclude:
+                continue
+            self.notify(
+                user_id=uid,
+                type=NOTIF_SUBSTITUTE_DEPT,
+                title=title,
+                body=body,
+                link="/substitutes",
+                ref_type="substitute",
+                ref_id=assignment.id,
+            )
+
     # ---- domain helpers ----
 
     def notify_substitute_assigned(self, assignment) -> None:
         if not assignment or not assignment.substitute_teacher_id:
             return
         if assignment.date and hasattr(assignment.date, "isoformat"):
-            # skip notify for past dates (business rule)
             from datetime import date as date_cls
             if assignment.date < date_cls.today():
                 return
-        class_name = assignment.class_room.name if assignment.class_room else "—"
-        pl = period_label(assignment.period)
+
+        ctx = self._assignment_context(assignment)
+        exclude: Set[int] = set()
+
         self.notify(
             user_id=assignment.substitute_teacher_id,
             type=NOTIF_SUBSTITUTE_ASSIGNED,
             title="Lịch dạy thay mới",
-            body=f"{assignment.date} · {pl} · lớp {class_name} — vui lòng xác nhận trên Thời khóa biểu.",
+            body=(
+                f"{ctx['base']} — thay GV {ctx['absent_name']} "
+                f"({ctx['status_label']}). Vui lòng xác nhận trên Thời khóa biểu."
+            ),
             link="/timetable",
             ref_type="substitute",
             ref_id=assignment.id,
         )
+        exclude.add(assignment.substitute_teacher_id)
+
+        if assignment.absent_teacher_id:
+            self.notify(
+                user_id=assignment.absent_teacher_id,
+                type=NOTIF_SUBSTITUTE_COVERED,
+                title="Đã xếp người dạy thay cho bạn",
+                body=(
+                    f"{ctx['base']} — GV {ctx['sub_name']} dạy thay "
+                    f"({ctx['status_label']}). Xem trên Thời khóa biểu."
+                ),
+                link="/timetable",
+                ref_type="substitute",
+                ref_id=assignment.id,
+            )
+            exclude.add(assignment.absent_teacher_id)
+
+        self._notify_team_leads(
+            assignment,
+            title="Tổ có lịch dạy thay mới",
+            body=(
+                f"{ctx['base']} — GV {ctx['sub_name']} thay GV {ctx['absent_name']} "
+                f"({ctx['status_label']})."
+            ),
+            exclude_ids=exclude,
+        )
 
     def notify_substitute_cancelled(self, assignment, reason: str = "") -> None:
-        if not assignment or not assignment.substitute_teacher_id:
+        if not assignment:
             return
-        class_name = assignment.class_room.name if assignment.class_room else "—"
-        pl = period_label(assignment.period)
+        ctx = self._assignment_context(assignment)
         note = f" Lý do: {reason}" if reason else ""
-        self.notify(
-            user_id=assignment.substitute_teacher_id,
-            type=NOTIF_SUBSTITUTE_CANCELLED,
-            title="Lịch dạy thay đã bị hủy",
-            body=f"{assignment.date} · {pl} · lớp {class_name}.{note}",
-            link="/timetable",
-            ref_type="substitute",
-            ref_id=assignment.id,
+        exclude: Set[int] = set()
+
+        if assignment.substitute_teacher_id:
+            self.notify(
+                user_id=assignment.substitute_teacher_id,
+                type=NOTIF_SUBSTITUTE_CANCELLED,
+                title="Lịch dạy thay đã bị hủy",
+                body=f"{ctx['base']}.{note}",
+                link="/timetable",
+                ref_type="substitute",
+                ref_id=assignment.id,
+            )
+            exclude.add(assignment.substitute_teacher_id)
+
+        if assignment.absent_teacher_id:
+            self.notify(
+                user_id=assignment.absent_teacher_id,
+                type=NOTIF_SUBSTITUTE_COVERED,
+                title="Lịch dạy thay cho bạn đã bị hủy",
+                body=f"{ctx['base']} — trước đó GV {ctx['sub_name']} dạy thay.{note}",
+                link="/timetable",
+                ref_type="substitute",
+                ref_id=assignment.id,
+            )
+            exclude.add(assignment.absent_teacher_id)
+
+        self._notify_team_leads(
+            assignment,
+            title="Lịch dạy thay trong tổ đã hủy",
+            body=f"{ctx['base']} — GV {ctx['sub_name']} thay GV {ctx['absent_name']}.{note}",
+            exclude_ids=exclude,
         )
 
     def notify_substitute_reassigned(
@@ -125,48 +263,100 @@ class NotificationService:
     ) -> None:
         if not notify_users or not assignment:
             return
-        class_name = assignment.class_room.name if assignment.class_room else "—"
-        pl = period_label(assignment.period)
+        ctx = self._assignment_context(assignment)
+        exclude: Set[int] = set()
+
         if previous_teacher_id and previous_teacher_id != assignment.substitute_teacher_id:
             self.notify(
                 user_id=previous_teacher_id,
                 type=NOTIF_SUBSTITUTE_REMOVED,
                 title="Lịch dạy thay đã được chuyển",
-                body=f"{assignment.date} · {pl} · lớp {class_name} — BGH đã xếp người khác.",
+                body=f"{ctx['base']} — BGH đã xếp người khác.",
                 link="/timetable",
                 ref_type="substitute",
                 ref_id=assignment.id,
             )
+            exclude.add(previous_teacher_id)
+
         if assignment.substitute_teacher_id:
             self.notify(
                 user_id=assignment.substitute_teacher_id,
                 type=NOTIF_SUBSTITUTE_REASSIGNED,
                 title="Bạn được xếp dạy thay",
-                body=f"{assignment.date} · {pl} · lớp {class_name} — vui lòng xác nhận trên Thời khóa biểu.",
+                body=(
+                    f"{ctx['base']} — thay GV {ctx['absent_name']} "
+                    f"({ctx['status_label']}). Vui lòng xác nhận trên Thời khóa biểu."
+                ),
                 link="/timetable",
                 ref_type="substitute",
                 ref_id=assignment.id,
             )
+            exclude.add(assignment.substitute_teacher_id)
+
+        if assignment.absent_teacher_id:
+            self.notify(
+                user_id=assignment.absent_teacher_id,
+                type=NOTIF_SUBSTITUTE_COVERED,
+                title="Đã đổi người dạy thay cho bạn",
+                body=(
+                    f"{ctx['base']} — GV {ctx['sub_name']} dạy thay "
+                    f"({ctx['status_label']}). Xem trên Thời khóa biểu."
+                ),
+                link="/timetable",
+                ref_type="substitute",
+                ref_id=assignment.id,
+            )
+            exclude.add(assignment.absent_teacher_id)
+
+        self._notify_team_leads(
+            assignment,
+            title="Tổ có đổi người dạy thay",
+            body=(
+                f"{ctx['base']} — GV {ctx['sub_name']} thay GV {ctx['absent_name']} "
+                f"({ctx['status_label']})."
+            ),
+            exclude_ids=exclude,
+        )
 
     def notify_substitute_rejected(self, assignment, reason: str = "") -> None:
-        if not assignment or not assignment.assigned_by_id:
+        if not assignment:
             return
-        class_name = assignment.class_room.name if assignment.class_room else "—"
-        pl = period_label(assignment.period)
-        sub_name = (
-            assignment.substitute_teacher.name
-            if assignment.substitute_teacher
-            else "GV dạy thay"
-        )
+        ctx = self._assignment_context(assignment)
         note = f" Lý do: {reason}" if reason else ""
-        self.notify(
-            user_id=assignment.assigned_by_id,
-            type=NOTIF_SUBSTITUTE_REJECTED,
-            title="Dạy thay bị từ chối",
-            body=f"{sub_name} từ chối {assignment.date} · {pl} · lớp {class_name}.{note}",
-            link="/substitutes",
-            ref_type="substitute",
-            ref_id=assignment.id,
+        exclude: Set[int] = set()
+
+        if assignment.assigned_by_id:
+            self.notify(
+                user_id=assignment.assigned_by_id,
+                type=NOTIF_SUBSTITUTE_REJECTED,
+                title="Dạy thay bị từ chối",
+                body=f"{ctx['sub_name']} từ chối {ctx['base']}.{note}",
+                link="/substitutes",
+                ref_type="substitute",
+                ref_id=assignment.id,
+            )
+            exclude.add(assignment.assigned_by_id)
+
+        if assignment.absent_teacher_id:
+            self.notify(
+                user_id=assignment.absent_teacher_id,
+                type=NOTIF_SUBSTITUTE_COVERED,
+                title="Người dạy thay từ chối lịch của bạn",
+                body=f"GV {ctx['sub_name']} từ chối {ctx['base']}.{note}",
+                link="/timetable",
+                ref_type="substitute",
+                ref_id=assignment.id,
+            )
+            exclude.add(assignment.absent_teacher_id)
+
+        if assignment.substitute_teacher_id:
+            exclude.add(assignment.substitute_teacher_id)
+
+        self._notify_team_leads(
+            assignment,
+            title="Dạy thay trong tổ bị từ chối",
+            body=f"GV {ctx['sub_name']} từ chối {ctx['base']} (thay GV {ctx['absent_name']}).{note}",
+            exclude_ids=exclude,
         )
 
     def notify_task_assigned(self, task) -> None:

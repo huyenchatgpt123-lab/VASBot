@@ -35,6 +35,9 @@ interface AuthContextType {
   canDeleteDocuments: boolean;
   scopeAllDepartments: boolean;
   canAccessSubstitutes: boolean;
+  /** Tổ trưởng: xem board dạy thay read-only theo tổ */
+  canViewSubstitutesBoard: boolean;
+  isTeamLead: boolean;
   canManageCalendar: boolean;
   canImportTimetable: boolean;
 }
@@ -97,6 +100,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = user?.role === 'admin';
   const scopeAllDepartments = isAdmin || permissions.scope_all_departments;
+  const canManageTasks = isAdmin || permissions.can_manage_tasks;
+  const canAccessSubstitutes = isAdmin || permissions.can_access_substitutes;
+  const isTeamLead = Boolean(
+    user && !isAdmin && canManageTasks && !scopeAllDepartments && user.department,
+  );
+  const canViewSubstitutesBoard = canAccessSubstitutes || isTeamLead;
   const isBghOnly = Boolean(user && !isAdmin && permissions.bgh_workspace);
   const homePath = isBghOnly ? '/bgh-calendar' : '/tasks';
 
@@ -113,10 +122,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         homePath,
         permissions,
         canUpload: isAdmin || permissions.can_upload,
-        canManageTasks: isAdmin || permissions.can_manage_tasks,
+        canManageTasks,
         canDeleteDocuments: isAdmin || permissions.can_delete_documents,
         scopeAllDepartments,
-        canAccessSubstitutes: isAdmin || permissions.can_access_substitutes,
+        canAccessSubstitutes,
+        canViewSubstitutesBoard,
+        isTeamLead,
         canManageCalendar: isAdmin || permissions.can_manage_calendar,
         canImportTimetable: isAdmin || permissions.can_import_timetable,
       }}

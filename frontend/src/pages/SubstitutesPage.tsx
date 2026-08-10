@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { documentsApi } from '../api/documents';
+import { useAuth } from '../context/AuthContext';
 import {
   substitutesApi,
   SubstituteAssignment,
@@ -90,6 +91,8 @@ function formatGvName(name: string | null | undefined): string {
 }
 
 export default function SubstitutesPage() {
+  const { user, canAccessSubstitutes, isTeamLead } = useAuth();
+  const readOnly = isTeamLead && !canAccessSubstitutes;
   const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
   const [campusId, setCampusId] = useState<number | ''>('');
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
@@ -563,19 +566,29 @@ export default function SubstitutesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dạy thay</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Lịch dạy thay đã xếp. Tạo lịch bằng nút bên phải.
+            {readOnly
+              ? `Xem lịch dạy thay liên quan tổ ${user?.department || ''} (chỉ xem).`
+              : 'Lịch dạy thay đã xếp. Tạo lịch bằng nút bên phải.'}
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={openCreate}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium w-full sm:w-auto"
-          >
-            + Tạo lịch dạy thay
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={openCreate}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium w-full sm:w-auto"
+            >
+              + Tạo lịch dạy thay
+            </button>
+          </div>
+        )}
       </div>
+
+      {readOnly && (
+        <div className="mb-4 text-sm text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+          Chế độ tổ trưởng — hiển thị tiết có tổ viên nghỉ hoặc tổ viên đi dạy thay. Không thể xếp / đổi / hủy.
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 mb-4 items-center">
         <select
@@ -717,7 +730,7 @@ export default function SubstitutesPage() {
       )}
 
       {/* Create modal */}
-      {showCreate && (
+      {!readOnly && showCreate && (
         <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 shrink-0">
@@ -1098,7 +1111,7 @@ export default function SubstitutesPage() {
               )}
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex flex-wrap justify-end gap-2">
-              {detail.status !== 'cancelled' && (
+              {!readOnly && detail.status !== 'cancelled' && (
                 <button
                   type="button"
                   onClick={() => handleCancel(detail.id)}
@@ -1108,7 +1121,7 @@ export default function SubstitutesPage() {
                   Hủy lịch này
                 </button>
               )}
-              {detail.date >= toISODate(new Date()) && (
+              {!readOnly && detail.date >= toISODate(new Date()) && (
                 <>
                   <button
                     type="button"
