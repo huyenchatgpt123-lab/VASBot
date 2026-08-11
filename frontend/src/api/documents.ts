@@ -1,5 +1,10 @@
 import api from './client';
 import { Document } from '../types';
+import {
+  closeDocumentWindowPlaceholder,
+  navigateOpenedDocumentWindow,
+  openDocumentWindowPlaceholder,
+} from '../utils/openDocumentLink';
 
 interface DocumentListResponse {
   documents: Document[];
@@ -178,20 +183,36 @@ export const documentsApi = {
     const res = await api.get('/documents/departments');
     return res.data;
   },
-  /** Open preview in a new tab using a short-lived access link (no session JWT in the URL). */
+  /**
+   * Open preview via short-lived access link.
+   * Opens about:blank synchronously (keeps user gesture), then navigates.
+   * If the browser blocks tabs (Safari / Zalo), shows a manual open sheet.
+   */
   openPreview: async (id: number) => {
-    const res = await api.post<{ url: string }>(`/documents/${id}/access-link`, null, {
-      params: { purpose: 'preview' },
-    });
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    window.open(`${baseUrl}${res.data.url}`, '_blank');
+    const win = openDocumentWindowPlaceholder();
+    try {
+      const res = await api.post<{ url: string }>(`/documents/${id}/access-link`, null, {
+        params: { purpose: 'preview' },
+      });
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      navigateOpenedDocumentWindow(win, `${baseUrl}${res.data.url}`, 'preview');
+    } catch (err) {
+      closeDocumentWindowPlaceholder(win);
+      throw err;
+    }
   },
   openDownload: async (id: number) => {
-    const res = await api.post<{ url: string }>(`/documents/${id}/access-link`, null, {
-      params: { purpose: 'download' },
-    });
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    window.open(`${baseUrl}${res.data.url}`, '_blank');
+    const win = openDocumentWindowPlaceholder();
+    try {
+      const res = await api.post<{ url: string }>(`/documents/${id}/access-link`, null, {
+        params: { purpose: 'download' },
+      });
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      navigateOpenedDocumentWindow(win, `${baseUrl}${res.data.url}`, 'download');
+    } catch (err) {
+      closeDocumentWindowPlaceholder(win);
+      throw err;
+    }
   },
   /** @deprecated Prefer openPreview — kept for rare callers that need a URL string after minting. */
   getPreviewUrl: async (id: number): Promise<string> => {

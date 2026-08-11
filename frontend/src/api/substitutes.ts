@@ -17,6 +17,7 @@ export type SubstituteAssignment = {
   absent_teacher_department?: string | null;
   substitute_teacher_id?: number | null;
   substitute_teacher_name?: string | null;
+  substitute_teacher_department?: string | null;
   status: SubstituteStatus;
   confirmed_at?: string | null;
   confirmed_by_id?: number | null;

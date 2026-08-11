@@ -74,6 +74,9 @@ class TimetableService:
             "substitute_teacher_name": (
                 item.substitute_teacher.name if item.substitute_teacher else None
             ),
+            "substitute_teacher_department": (
+                item.substitute_teacher.department if item.substitute_teacher else None
+            ),
             "status": item.status,
             "confirmed_at": item.confirmed_at,
             "confirmed_by_id": item.confirmed_by_id,

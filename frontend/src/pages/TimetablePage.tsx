@@ -64,9 +64,13 @@ function formatAbsentForUser(
   return department ? `${base} · ${department}` : base;
 }
 
-function formatCoverTeacher(name: string | null | undefined): string {
+function formatCoverTeacher(
+  name: string | null | undefined,
+  department?: string | null,
+): string {
   if (!name) return '—';
-  return `GV ${name}`;
+  const base = `GV ${name}`;
+  return department ? `${base} · ${department}` : base;
 }
 
 function statusLabelVi(status: string): string {
@@ -506,7 +510,7 @@ export default function TimetablePage() {
                   {item.campus_code ? ` · ${item.campus_code}` : ''}
                 </span>
                 <span className="text-xs text-sky-900 sm:ml-auto">
-                  {formatCoverTeacher(item.substitute_teacher_name)}
+                  {formatCoverTeacher(item.substitute_teacher_name, item.substitute_teacher_department)}
                   {' · '}
                   <span className={item.status === 'confirmed' ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
                     {statusLabelVi(item.status)}
@@ -637,7 +641,7 @@ export default function TimetablePage() {
                                 {cover && (
                                   <>
                                     <span className="block text-[10px] font-semibold text-sky-900 mt-0.5">
-                                      Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name)}
+                                      Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name, cover.substitute_teacher_department)}
                                     </span>
                                     <span
                                       className={`block text-[10px] font-medium ${
@@ -710,7 +714,7 @@ export default function TimetablePage() {
                                 <span className="text-gray-900">{slot?.class_name}</span>
                                 {cover && (
                                   <span className="block text-xs text-sky-900 mt-0.5">
-                                    Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name)}
+                                    Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name, cover.substitute_teacher_department)}
                                     {' · '}
                                     <span className={cover.status === 'confirmed' ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
                                       {statusLabelVi(cover.status)}
