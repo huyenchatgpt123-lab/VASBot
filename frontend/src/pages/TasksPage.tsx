@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { tasksApi, TaskItem, TaskUser } from '../api/tasks';
+import { tasksApi, TaskItem, TaskUser, TaskPlanOption } from '../api/tasks';
 import { documentsApi } from '../api/documents';
 
 const STATUS_OPTIONS = [
@@ -278,6 +278,8 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [assignees, setAssignees] = useState<string[]>([]);
+  const [planOptions, setPlanOptions] = useState<TaskPlanOption[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
   const [taskUsers, setTaskUsers] = useState<TaskUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
@@ -307,36 +309,43 @@ export default function TasksPage() {
 
   useEffect(() => {
     loadTasks();
-  }, [page, statusFilter, assigneeFilter]);
+  }, [page, statusFilter, assigneeFilter, planFilter, listDeptFilter]);
 
   useEffect(() => {
-    if (canManageTasks) {
-      tasksApi.getAssignees().then((res) => setAssignees(res.assignees));
-      tasksApi.getUsers().then(setTaskUsers).catch(() => {});
-    }
+    if (!canManageTasks) return;
+    const loadFilterOptions = () => {
+      tasksApi
+        .getFilterOptions()
+        .then((opts) => {
+          setAssignees(opts.assignees || []);
+          setPlanOptions(opts.plans || []);
+          setDepartmentOptions(opts.departments || []);
+        })
+        .catch(() => {
+          tasksApi.getAssignees().then((res) => setAssignees(res.assignees)).catch(() => {});
+        });
+    };
+    tasksApi.getUsers().then(setTaskUsers).catch(() => {});
+    loadFilterOptions();
   }, [canManageTasks]);
 
+  const refreshFilterOptions = () => {
+    if (!canManageTasks) return;
+    tasksApi
+      .getFilterOptions()
+      .then((opts) => {
+        setAssignees(opts.assignees || []);
+        setPlanOptions(opts.plans || []);
+        setDepartmentOptions(opts.departments || []);
+      })
+      .catch(() => {});
+  };
   useEffect(() => {
     if (viewMode === 'mine' && assigneeFilter) {
       setAssigneeFilter('');
       setPage(1);
     }
   }, [viewMode, assigneeFilter]);
-
-  const departmentOptions = useMemo(() => {
-    const depts = new Set<string>();
-    taskUsers.forEach((u) => { if (u.department) depts.add(u.department); });
-    tasks.forEach((t) => { if (t.department) depts.add(t.department); });
-    return Array.from(depts).sort((a, b) => a.localeCompare(b, 'vi'));
-  }, [taskUsers, tasks]);
-
-  const planOptions = useMemo(() => {
-    const plans = new Set<string>();
-    tasks.forEach((t) => {
-      if (t.document_id && t.document_name) plans.add(t.document_name);
-    });
-    return Array.from(plans).sort((a, b) => a.localeCompare(b, 'vi'));
-  }, [tasks]);
 
   const filteredUsers = useMemo(() => {
     const q = userSearch.trim().toLowerCase();
@@ -364,7 +373,10 @@ export default function TasksPage() {
     }
 
     if (listDeptFilter) list = list.filter((t) => getTaskDepartment(t) === listDeptFilter);
-    if (planFilter) list = list.filter((t) => t.document_name === planFilter);
+    if (planFilter) {
+      const planId = Number(planFilter);
+      list = list.filter((t) => t.document_id === planId);
+    }
     if (q) list = list.filter((t) => t.title.toLowerCase().includes(q));
     if (overdueOnly) list = list.filter(isTaskOverdue);
 
@@ -467,6 +479,8 @@ export default function TasksPage() {
       const params: Record<string, string | number> = { page, page_size: pageSize, sort_by: 'deadline', order: 'asc' };
       if (statusFilter && statusFilter !== 'overdue') params.status = statusFilter;
       if (assigneeFilter) params.assignee_name = assigneeFilter;
+      if (planFilter) params.document_id = Number(planFilter);
+      if (listDeptFilter) params.department = listDeptFilter;
       const res = await tasksApi.getAll(params);
       setTasks(res.tasks);
       setTotal(res.total);
@@ -541,9 +555,8 @@ export default function TasksPage() {
   const handleDeptCardClick = (dept: string) => {
     setListDeptFilter(dept);
     setViewMode('plan');
+    setPage(1);
     setExpandedDepts(new Set([dept]));
-    const docs = buildDocumentGroups(tasks.filter((t) => getTaskDepartment(t) === dept));
-    setExpandedDocs(getAllExpandedDocs(docs));
   };
 
   const handleSummaryClick = (filter: SummaryFilter) => {
@@ -568,6 +581,7 @@ export default function TasksPage() {
     try {
       await tasksApi.delete(taskId);
       loadTasks();
+      refreshFilterOptions();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể xóa');
     }
@@ -579,6 +593,7 @@ export default function TasksPage() {
     try {
       await tasksApi.deleteByDocument(docGroup.document_id);
       loadTasks();
+      refreshFilterOptions();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể xóa');
     }
@@ -610,6 +625,7 @@ export default function TasksPage() {
         setViewMode('manual');
       }
       loadTasks();
+      refreshFilterOptions();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể tạo');
     }
@@ -622,6 +638,7 @@ export default function TasksPage() {
       const res = await tasksApi.rematchAssignees();
       alert(`Đã gán ${res.matched}/${res.total_unassigned} công việc chưa phân công`);
       loadTasks();
+      refreshFilterOptions();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể cập nhật phân công');
     } finally {
@@ -680,6 +697,7 @@ export default function TasksPage() {
       });
       setEditingGroup(null);
       loadTasks();
+      refreshFilterOptions();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Không thể cập nhật');
     }
@@ -1137,14 +1155,24 @@ export default function TasksPage() {
         {canManageTasks && (
           <>
             {scopeAllDepartments && (
-              <select value={listDeptFilter} onChange={(e) => setListDeptFilter(e.target.value)} className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <select
+                value={listDeptFilter}
+                onChange={(e) => { setListDeptFilter(e.target.value); setPage(1); }}
+                className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
                 <option value="">Tất cả tổ</option>
                 {departmentOptions.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
             )}
-            <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <select
+              value={planFilter}
+              onChange={(e) => { setPlanFilter(e.target.value); setPage(1); }}
+              className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm max-w-full sm:max-w-xs"
+            >
               <option value="">Tất cả kế hoạch</option>
-              {planOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+              {planOptions.map((p) => (
+                <option key={p.document_id} value={String(p.document_id)}>{p.name}</option>
+              ))}
             </select>
             <select
               value={assigneeFilter}

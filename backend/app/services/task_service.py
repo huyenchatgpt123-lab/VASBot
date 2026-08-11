@@ -246,23 +246,27 @@ class TaskService:
     def get_all_tasks(
         self, page: int = 1, page_size: int = 20,
         status: Optional[str] = None, assignee_name: Optional[str] = None,
+        document_id: Optional[int] = None, department: Optional[str] = None,
         sort_by: str = "deadline", order: str = "asc"
     ) -> Tuple[List[Dict], int]:
         tasks, total = self.repo.get_paginated(
             page, page_size, status=status,
-            assignee_name=assignee_name, sort_by=sort_by, order=order
+            assignee_name=assignee_name, document_id=document_id,
+            department=department, sort_by=sort_by, order=order
         )
         return self._format_tasks(tasks), total
 
     def get_tasks_for_department(
         self, department: str, page: int = 1, page_size: int = 20,
         status: Optional[str] = None, assignee_name: Optional[str] = None,
+        document_id: Optional[int] = None, task_department: Optional[str] = None,
         sort_by: str = "deadline", order: str = "asc",
         manager_user_id: Optional[int] = None,
     ) -> Tuple[List[Dict], int]:
         tasks, total = self.repo.get_by_department_scope(
             department, page, page_size, status=status,
-            assignee_name=assignee_name, sort_by=sort_by, order=order,
+            assignee_name=assignee_name, document_id=document_id,
+            task_department=task_department, sort_by=sort_by, order=order,
             manager_user_id=manager_user_id,
         )
         return self._format_tasks(tasks), total
@@ -270,18 +274,21 @@ class TaskService:
     def get_tasks_for_manager(
         self, user: User, page: int = 1, page_size: int = 20,
         status: Optional[str] = None, assignee_name: Optional[str] = None,
+        document_id: Optional[int] = None, department: Optional[str] = None,
         sort_by: str = "deadline", order: str = "asc",
     ) -> Tuple[List[Dict], int]:
         if is_admin(user) or has_scope_all_departments(user):
             return self.get_all_tasks(
                 page, page_size, status=status,
-                assignee_name=assignee_name, sort_by=sort_by, order=order,
+                assignee_name=assignee_name, document_id=document_id,
+                department=department, sort_by=sort_by, order=order,
             )
         if not user.department:
             return [], 0
         return self.get_tasks_for_department(
             user.department, page, page_size, status=status,
-            assignee_name=assignee_name, sort_by=sort_by, order=order,
+            assignee_name=assignee_name, document_id=document_id,
+            task_department=department, sort_by=sort_by, order=order,
             manager_user_id=user.id,
         )
 
@@ -463,8 +470,56 @@ class TaskService:
         self.db.commit()
         return task
 
-    def get_assignee_names(self) -> List[str]:
-        return self.repo.get_all_assignee_names()
+    def get_assignee_names(self, user: Optional[User] = None) -> List[str]:
+        if user is None or is_admin(user) or has_scope_all_departments(user):
+            return self.repo.get_all_assignee_names()
+        if not user.department:
+            return []
+        return self.repo.get_scoped_assignee_names(
+            department=user.department,
+            manager_user_id=user.id,
+        )
+
+    def get_filter_options(self, user: User) -> Dict[str, Any]:
+        """Plans / departments / assignees for filter dropdowns (not tied to task page)."""
+        if is_admin(user) or has_scope_all_departments(user):
+            departments = self.repo.get_scoped_departments()
+            # Merge catalog departments so empty orgs still appear for Admin
+            try:
+                from app.repositories.department_repository import DepartmentRepository
+                catalog = DepartmentRepository(self.db).get_names()
+                for d in catalog:
+                    if d and d not in departments:
+                        departments.append(d)
+                departments = sorted(
+                    departments,
+                    key=lambda s: (s == UNASSIGNED_DEPARTMENT, s.lower()),
+                )
+            except Exception:
+                pass
+            return {
+                "plans": self.repo.get_scoped_plans(),
+                "departments": departments,
+                "assignees": self.repo.get_all_assignee_names(),
+            }
+
+        if not user.department:
+            return {"plans": [], "departments": [], "assignees": []}
+
+        return {
+            "plans": self.repo.get_scoped_plans(
+                department=user.department,
+                manager_user_id=user.id,
+            ),
+            "departments": self.repo.get_scoped_departments(
+                department=user.department,
+                manager_user_id=user.id,
+            ),
+            "assignees": self.repo.get_scoped_assignee_names(
+                department=user.department,
+                manager_user_id=user.id,
+            ),
+        }
 
     def rematch_assignees(self, user_id: Optional[int] = None) -> Dict[str, int]:
         tasks = self.repo.get_unassigned()

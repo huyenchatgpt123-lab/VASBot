@@ -80,6 +80,8 @@ class TaskRepository:
         status: Optional[str] = None,
         assignee_id: Optional[int] = None,
         assignee_name: Optional[str] = None,
+        document_id: Optional[int] = None,
+        department: Optional[str] = None,
         deadline_from: Optional[datetime] = None,
         deadline_to: Optional[datetime] = None,
         sort_by: str = "deadline",
@@ -93,6 +95,10 @@ class TaskRepository:
             query = query.filter(Task.assignee_id == assignee_id)
         if assignee_name:
             query = query.filter(Task.assignee_name.ilike(f"%{assignee_name}%"))
+        if document_id is not None:
+            query = query.filter(Task.document_id == document_id)
+        if department:
+            query = query.filter(Task.department == department)
         if deadline_from:
             query = query.filter(Task.deadline >= deadline_from)
         if deadline_to:
@@ -137,6 +143,8 @@ class TaskRepository:
         page_size: int = 20,
         status: Optional[str] = None,
         assignee_name: Optional[str] = None,
+        document_id: Optional[int] = None,
+        task_department: Optional[str] = None,
         sort_by: str = "deadline",
         order: str = "asc",
         manager_user_id: Optional[int] = None,
@@ -148,6 +156,10 @@ class TaskRepository:
             query = query.filter(Task.status == status)
         if assignee_name:
             query = query.filter(Task.assignee_name.ilike(f"%{assignee_name}%"))
+        if document_id is not None:
+            query = query.filter(Task.document_id == document_id)
+        if task_department:
+            query = query.filter(Task.department == task_department)
 
         total = query.count()
 
@@ -208,7 +220,80 @@ class TaskRepository:
 
     def get_all_assignee_names(self) -> List[str]:
         results = self.db.query(Task.assignee_name).distinct().all()
-        return [r[0] for r in results if r[0]]
+        return sorted([r[0] for r in results if r[0]], key=lambda s: s.lower())
+
+    def _apply_manager_scope(
+        self,
+        query,
+        *,
+        department: Optional[str] = None,
+        manager_user_id: Optional[int] = None,
+    ):
+        if department:
+            return self._department_scope_filter(query, department, manager_user_id)
+        return query
+
+    def get_scoped_assignee_names(
+        self,
+        *,
+        department: Optional[str] = None,
+        manager_user_id: Optional[int] = None,
+    ) -> List[str]:
+        query = self.db.query(Task.assignee_name)
+        query = self._apply_manager_scope(
+            query, department=department, manager_user_id=manager_user_id
+        )
+        results = query.distinct().all()
+        return sorted([r[0] for r in results if r[0]], key=lambda s: s.lower())
+
+    def get_scoped_departments(
+        self,
+        *,
+        department: Optional[str] = None,
+        manager_user_id: Optional[int] = None,
+    ) -> List[str]:
+        query = self.db.query(Task.department)
+        query = self._apply_manager_scope(
+            query, department=department, manager_user_id=manager_user_id
+        )
+        results = query.distinct().all()
+        depts = [r[0] for r in results if r[0]]
+        return sorted(depts, key=lambda s: (s == UNASSIGNED_DEPARTMENT, s.lower()))
+
+    def get_scoped_plans(
+        self,
+        *,
+        department: Optional[str] = None,
+        manager_user_id: Optional[int] = None,
+    ) -> List[dict]:
+        """Distinct documents that have tasks in scope."""
+        query = (
+            self.db.query(Document.id, Document.plan_title, Document.filename)
+            .select_from(Task)
+            .join(Document, Task.document_id == Document.id)
+        )
+        if department:
+            conditions = [
+                Task.department == department,
+                and_(
+                    Task.department == UNASSIGNED_DEPARTMENT,
+                    Document.department == department,
+                ),
+            ]
+            if manager_user_id is not None:
+                conditions.append(Task.created_by_id == manager_user_id)
+            query = query.filter(or_(*conditions))
+
+        plans: List[dict] = []
+        seen_ids = set()
+        for doc_id, plan_title, filename in query.distinct().all():
+            if doc_id in seen_ids:
+                continue
+            seen_ids.add(doc_id)
+            name = (plan_title or "").strip() or (filename or f"Tài liệu #{doc_id}")
+            plans.append({"document_id": doc_id, "name": name})
+        plans.sort(key=lambda p: p["name"].lower())
+        return plans
 
     def get_unassigned(self) -> List[Task]:
         return self.db.query(Task).filter(Task.assignee_id.is_(None)).all()

@@ -52,12 +52,25 @@ export interface TaskExtractResult {
   duplicate_count: number;
 }
 
+export interface TaskPlanOption {
+  document_id: number;
+  name: string;
+}
+
+export interface TaskFilterOptions {
+  plans: TaskPlanOption[];
+  departments: string[];
+  assignees: string[];
+}
+
 export const tasksApi = {
   getAll: async (params?: {
     page?: number;
     page_size?: number;
     status?: string;
     assignee_name?: string;
+    document_id?: number;
+    department?: string;
     sort_by?: string;
     order?: string;
   }): Promise<TaskListResponse> => {
@@ -67,6 +80,11 @@ export const tasksApi = {
 
   getAssignees: async (): Promise<{ assignees: string[] }> => {
     const res = await api.get('/tasks/assignees');
+    return res.data;
+  },
+
+  getFilterOptions: async (): Promise<TaskFilterOptions> => {
+    const res = await api.get('/tasks/filter-options');
     return res.data;
   },
 

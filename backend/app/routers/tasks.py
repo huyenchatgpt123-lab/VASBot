@@ -34,6 +34,8 @@ def get_tasks(
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),
     assignee_name: Optional[str] = Query(None),
+    document_id: Optional[int] = Query(None),
+    department: Optional[str] = Query(None),
     sort_by: str = Query("deadline"),
     order: str = Query("asc"),
     db: Session = Depends(get_db),
@@ -44,7 +46,8 @@ def get_tasks(
     if is_admin(current_user) or can_manage_tasks(current_user):
         tasks, total = service.get_tasks_for_manager(
             current_user, page, page_size, status=status,
-            assignee_name=assignee_name, sort_by=sort_by, order=order,
+            assignee_name=assignee_name, document_id=document_id,
+            department=department, sort_by=sort_by, order=order,
         )
     else:
         tasks, total = service.get_tasks_for_user(
@@ -84,8 +87,17 @@ def get_assignees(
     current_user: User = Depends(get_current_user),
 ):
     service = TaskService(db)
-    names = service.get_assignee_names()
+    names = service.get_assignee_names(current_user)
     return {"assignees": names}
+
+
+@router.get("/filter-options")
+def get_filter_options(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_task_manager),
+):
+    """Dropdown options for task filters — independent of pagination / status filter."""
+    return TaskService(db).get_filter_options(current_user)
 
 
 @router.get("/users")
