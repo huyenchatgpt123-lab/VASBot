@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import List, Optional, Set
 
 from sqlalchemy.orm import Session, joinedload
@@ -19,6 +20,9 @@ from app.models.position import Position
 from app.models.timetable import period_label
 from app.models.user import User, UserRole
 from app.repositories.notification_repository import NotificationRepository
+from app.services.email_service import is_mail_configured, send_notification_email_async
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:
@@ -69,10 +73,14 @@ class NotificationService:
         ref_type: Optional[str] = None,
         ref_id: Optional[int] = None,
     ) -> Optional[Notification]:
-        """Flush only — caller commits the surrounding transaction."""
+        """Flush only — caller commits the surrounding transaction.
+
+        Also queues an Outlook/SMTP email when MAIL_ENABLED is configured.
+        Email failures never affect in-app notification creation.
+        """
         if not user_id:
             return None
-        return self.repo.create(
+        item = self.repo.create(
             user_id=user_id,
             type=type,
             title=title,
@@ -81,6 +89,39 @@ class NotificationService:
             ref_type=ref_type,
             ref_id=ref_id,
         )
+        self._queue_notification_email(
+            user_id=user_id,
+            title=title,
+            body=body,
+            link=link or "/",
+        )
+        return item
+
+    def _queue_notification_email(
+        self,
+        *,
+        user_id: int,
+        title: str,
+        body: Optional[str],
+        link: str,
+    ) -> None:
+        if not is_mail_configured():
+            return
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            email = (user.email if user else None) or ""
+            if not email.strip():
+                return
+            send_notification_email_async(
+                to_email=email.strip(),
+                subject=title or "Thông báo VATask",
+                body=body,
+                link=link or "/",
+            )
+        except Exception:
+            logger.exception(
+                "Could not queue notification email for user_id=%s", user_id
+            )
 
     # ---- helpers ----
 

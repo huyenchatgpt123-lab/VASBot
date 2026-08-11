@@ -33,6 +33,14 @@ services:
       LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-10/15minutes}
       UPLOAD_DIR: /app/uploads
       FAISS_DIR: /app/faiss_data
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.office365.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-VATask}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     volumes:
       - upload_data:/app/uploads
       - faiss_data:/app/faiss_data

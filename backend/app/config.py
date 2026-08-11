@@ -33,12 +33,35 @@ class Settings(BaseSettings):
     CHAT_MODEL: str = "gpt-4.1"
     REWRITE_MODEL: str = "gpt-4.1-nano"
 
+    # Outlook / Microsoft 365 SMTP — off by default (no effect until configured)
+    MAIL_ENABLED: bool = False
+    MAIL_HOST: str = "smtp.office365.com"
+    MAIL_PORT: int = 587
+    MAIL_USERNAME: str = ""
+    MAIL_PASSWORD: str = ""
+    MAIL_FROM: str = ""
+    MAIL_FROM_NAME: str = "VATask"
+    # Public web URL for links in notification emails (e.g. https://vatask.example.com)
+    FRONTEND_URL: str = ""
+
     class Config:
         env_file = ".env"
 
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def mail_from_address(self) -> str:
+        return (self.MAIL_FROM or self.MAIL_USERNAME or "").strip()
+
+    @property
+    def frontend_base_url(self) -> str:
+        url = (self.FRONTEND_URL or "").strip().rstrip("/")
+        if url:
+            return url
+        origins = self.cors_origins_list
+        return origins[0].rstrip("/") if origins else ""
 
 
 settings = Settings()
