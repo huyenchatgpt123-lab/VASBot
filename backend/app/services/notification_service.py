@@ -75,7 +75,7 @@ class NotificationService:
     ) -> Optional[Notification]:
         """Flush only — caller commits the surrounding transaction.
 
-        Also queues an Outlook/SMTP email when MAIL_ENABLED is configured.
+        Also queues an email (Microsoft Graph / SMTP) when MAIL_ENABLED is configured.
         Email failures never affect in-app notification creation.
         """
         if not user_id:

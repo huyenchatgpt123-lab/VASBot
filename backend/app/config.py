@@ -33,16 +33,21 @@ class Settings(BaseSettings):
     CHAT_MODEL: str = "gpt-4.1"
     REWRITE_MODEL: str = "gpt-4.1-nano"
 
-    # Outlook / Microsoft 365 SMTP — off by default (no effect until configured)
+    # Notification email — default Microsoft Graph (HTTPS). Set MAIL_PROVIDER=smtp for SMTP.
     MAIL_ENABLED: bool = False
+    MAIL_PROVIDER: str = "graph"
+    MAIL_FROM: str = ""
+    MAIL_FROM_NAME: str = "VATask"
+    FRONTEND_URL: str = ""
+    # Microsoft Graph (application permission Mail.Send)
+    GRAPH_TENANT_ID: str = ""
+    GRAPH_CLIENT_ID: str = ""
+    GRAPH_CLIENT_SECRET: str = ""
+    # Optional SMTP fallback (Render paid / VPS that allow port 587)
     MAIL_HOST: str = "smtp.office365.com"
     MAIL_PORT: int = 587
     MAIL_USERNAME: str = ""
     MAIL_PASSWORD: str = ""
-    MAIL_FROM: str = ""
-    MAIL_FROM_NAME: str = "VATask"
-    # Public web URL for links in notification emails (e.g. https://vatask.example.com)
-    FRONTEND_URL: str = ""
 
     class Config:
         env_file = ".env"
