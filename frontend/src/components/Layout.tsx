@@ -1,16 +1,35 @@
 import { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import TaskWelcomeModal from './TaskWelcomeModal';
 import { useAuth } from '../context/AuthContext';
 import { tasksApi } from '../api/tasks';
+import { ensureServiceWorker } from '../utils/webPush';
 
 export default function Layout() {
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, isBghOnly } = useAuth();
   const [showTaskWelcome, setShowTaskWelcome] = useState(false);
   const [incompleteTaskCount, setIncompleteTaskCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    void ensureServiceWorker();
+  }, [user]);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      const path = event.data?.path;
+      if (event.data?.type === 'vatask-navigate' && typeof path === 'string') {
+        navigate(path);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [navigate]);
 
   useEffect(() => {
     if (!user || isBghOnly) return;

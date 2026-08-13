@@ -32,4 +32,24 @@ export const notificationsApi = {
     const res = await api.post('/notifications/read-all');
     return res.data;
   },
+
+  pushConfig: async (): Promise<{ enabled: boolean; public_key: string | null }> => {
+    const res = await api.get('/notifications/push/config');
+    return res.data;
+  },
+
+  pushSubscribe: async (data: {
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    user_agent?: string;
+  }): Promise<{ message: string }> => {
+    const res = await api.post('/notifications/push/subscribe', data);
+    return res.data;
+  },
+
+  pushUnsubscribe: async (endpoint: string): Promise<{ message: string; removed: boolean }> => {
+    const res = await api.post('/notifications/push/unsubscribe', { endpoint });
+    return res.data;
+  },
 };
