@@ -9,6 +9,9 @@ from app.models.task import Task
 from app.models.document import Document
 from app.models.feedback import Feedback
 from app.models.conversation import Conversation, Message
+from app.models.notification import Notification
+from app.models.push_subscription import PushSubscription
+from app.models.timetable import TimetableSlot, SubstituteAssignment
 from app.repositories.position_repository import PositionRepository
 from app.repositories.department_repository import DepartmentRepository
 from app.schemas.auth import UserCreate
@@ -148,19 +151,31 @@ class UserRepository:
         return self.db.query(User).count()
 
     def delete(self, user_id: int, reassign_documents_to: Optional[int] = None) -> bool:
+        """Remove user and related rows (option A: clean timetable / substitutes / notifs)."""
         user = self.get_by_id(user_id)
         if not user:
             return False
 
+        # Documents must keep an uploader — reassign to acting admin when possible
         doc_count = self.db.query(Document).filter(Document.uploaded_by == user_id).count()
-        if doc_count > 0 and reassign_documents_to:
+        if doc_count > 0:
+            if not reassign_documents_to or reassign_documents_to == user_id:
+                raise ValueError(
+                    "Không thể xóa: còn tài liệu do người này tải lên. "
+                    "Đăng nhập bằng admin khác rồi thử lại."
+                )
             self.db.query(Document).filter(Document.uploaded_by == user_id).update(
                 {Document.uploaded_by: reassign_documents_to},
                 synchronize_session=False,
             )
 
+        # Tasks: detach assignee / creator, keep task rows
         self.db.query(Task).filter(Task.assignee_id == user_id).update(
             {Task.assignee_id: None},
+            synchronize_session=False,
+        )
+        self.db.query(Task).filter(Task.created_by_id == user_id).update(
+            {Task.created_by_id: None},
             synchronize_session=False,
         )
 
@@ -169,7 +184,8 @@ class UserRepository:
         )
 
         conv_ids = [
-            c.id for c in self.db.query(Conversation).filter(Conversation.user_id == user_id).all()
+            c.id
+            for c in self.db.query(Conversation).filter(Conversation.user_id == user_id).all()
         ]
         if conv_ids:
             self.db.query(Message).filter(Message.conversation_id.in_(conv_ids)).delete(
@@ -178,6 +194,31 @@ class UserRepository:
             self.db.query(Conversation).filter(Conversation.id.in_(conv_ids)).delete(
                 synchronize_session=False,
             )
+
+        self.db.query(Notification).filter(Notification.user_id == user_id).delete(
+            synchronize_session=False,
+        )
+        self.db.query(PushSubscription).filter(PushSubscription.user_id == user_id).delete(
+            synchronize_session=False,
+        )
+
+        # Substitutes: remove rows where user is absent or covering teacher;
+        # clear optional actor refs
+        self.db.query(SubstituteAssignment).filter(
+            (SubstituteAssignment.absent_teacher_id == user_id)
+            | (SubstituteAssignment.substitute_teacher_id == user_id)
+        ).delete(synchronize_session=False)
+        self.db.query(SubstituteAssignment).filter(
+            SubstituteAssignment.assigned_by_id == user_id
+        ).update({SubstituteAssignment.assigned_by_id: None}, synchronize_session=False)
+        self.db.query(SubstituteAssignment).filter(
+            SubstituteAssignment.confirmed_by_id == user_id
+        ).update({SubstituteAssignment.confirmed_by_id: None}, synchronize_session=False)
+
+        # Weekly timetable slots for this teacher
+        self.db.query(TimetableSlot).filter(TimetableSlot.teacher_id == user_id).delete(
+            synchronize_session=False,
+        )
 
         try:
             self.db.delete(user)

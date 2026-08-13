@@ -247,7 +247,15 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Bạn có chắc muốn xóa người dùng này?')) return;
+    if (
+      !confirm(
+        'Xóa người dùng này?\n\n'
+        + 'Hệ thống sẽ gỡ luôn: tiết TKB, lịch dạy thay liên quan, thông báo và đăng ký push.\n'
+        + 'Tài liệu sẽ chuyển sang tài khoản admin của bạn; công việc giữ lại nhưng bỏ gán người này.',
+      )
+    ) {
+      return;
+    }
     try {
       await adminApi.deleteUser(id);
       setSelectedIds((prev) => {
@@ -271,7 +279,14 @@ export default function UsersPage() {
       .map((u) => u.name)
       .join(', ');
 
-    if (!confirm(`Xóa ${ids.length} người dùng đã chọn?\n\n${names}`)) return;
+    if (
+      !confirm(
+        `Xóa ${ids.length} người dùng đã chọn?\n\n${names}\n\n`
+        + 'TKB / dạy thay / thông báo liên quan cũng sẽ bị gỡ.',
+      )
+    ) {
+      return;
+    }
 
     setBulkDeleting(true);
     const failed: string[] = [];
