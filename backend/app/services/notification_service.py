@@ -21,6 +21,7 @@ from app.models.timetable import period_label
 from app.models.user import User, UserRole
 from app.repositories.notification_repository import NotificationRepository
 from app.services.email_service import is_mail_configured, send_notification_email_async
+from app.services.push_service import is_push_configured, send_push_to_user_async
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +76,8 @@ class NotificationService:
     ) -> Optional[Notification]:
         """Flush only — caller commits the surrounding transaction.
 
-        Also queues an email (Microsoft Graph / SMTP) when MAIL_ENABLED is configured.
-        Email failures never affect in-app notification creation.
+        Also queues email / web push when configured.
+        Channel failures never affect in-app notification creation.
         """
         if not user_id:
             return None
@@ -90,6 +91,12 @@ class NotificationService:
             ref_id=ref_id,
         )
         self._queue_notification_email(
+            user_id=user_id,
+            title=title,
+            body=body,
+            link=link or "/",
+        )
+        self._queue_notification_push(
             user_id=user_id,
             title=title,
             body=body,
@@ -121,6 +128,28 @@ class NotificationService:
         except Exception:
             logger.exception(
                 "Could not queue notification email for user_id=%s", user_id
+            )
+
+    def _queue_notification_push(
+        self,
+        *,
+        user_id: int,
+        title: str,
+        body: Optional[str],
+        link: str,
+    ) -> None:
+        if not is_push_configured():
+            return
+        try:
+            send_push_to_user_async(
+                user_id=user_id,
+                title=title or "Thông báo VATask",
+                body=body,
+                link=link or "/",
+            )
+        except Exception:
+            logger.exception(
+                "Could not queue web push for user_id=%s", user_id
             )
 
     # ---- helpers ----

@@ -26,3 +26,14 @@ class NotificationListResponse(BaseModel):
 
 class UnreadCountResponse(BaseModel):
     count: int
+
+
+class PushSubscribeRequest(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+    user_agent: Optional[str] = None
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str

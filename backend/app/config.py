@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     MAIL_USERNAME: str = ""
     MAIL_PASSWORD: str = ""
 
+    # Web Push (PWA) — off until PUSH_ENABLED=true and VAPID keys are set
+    PUSH_ENABLED: bool = False
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = "mailto:admin@vietanhschool.edu.vn"
+
     class Config:
         env_file = ".env"
 
