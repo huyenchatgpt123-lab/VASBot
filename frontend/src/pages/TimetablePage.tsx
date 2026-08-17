@@ -96,6 +96,7 @@ export default function TimetablePage() {
   const [actingId, setActingId] = useState<number | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [importResult, setImportResult] = useState<TimetableImportResult | null>(null);
+  const [lastImportedAt, setLastImportedAt] = useState<string | null>(null);
   const { progress, start, finish, fail } = useOperationProgress();
 
   const weekDates = useMemo(() => {
@@ -158,6 +159,26 @@ export default function TimetablePage() {
     setShowImport(true);
   };
 
+  const formatImportTime = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  useEffect(() => {
+    substitutesApi
+      .getTimetableLastImport()
+      .then((meta) => setLastImportedAt(meta.last_imported_at || null))
+      .catch(() => setLastImportedAt(null));
+  }, []);
+
   const load = useCallback(async () => {
     if (!viewingTeacherId || !fromDate || !toDate) return;
     setLoading(true);
@@ -190,8 +211,11 @@ export default function TimetablePage() {
 
   const handleImport = async (file: File) => {
     if (!confirm(
-      `Import TKB từ "${file.name}"?\n\nMỗi dòng cần có cột Cơ sở (VA1, VA3, EMC…). `
-      + `Tiết trùng sẽ được cập nhật, không xóa TKB cũ.`,
+      `Import TKB từ "${file.name}"?\n\n`
+      + `Hệ thống sẽ XÓA TOÀN BỘ thời khóa biểu hiện tại, `
+      + `HỦY các lịch dạy thay (pending/đã xác nhận từ hôm nay) và gửi thông báo, `
+      + `rồi import file mới.\n\n`
+      + `Mỗi dòng cần có cột Cơ sở (VA1, VA3, EMC…).`,
     )) {
       return;
     }
@@ -200,6 +224,12 @@ export default function TimetablePage() {
     try {
       const result = await substitutesApi.importTimetable(file);
       setImportResult(result);
+      if (result.last_imported_at) {
+        setLastImportedAt(result.last_imported_at);
+      } else {
+        const meta = await substitutesApi.getTimetableLastImport().catch(() => null);
+        if (meta?.last_imported_at) setLastImportedAt(meta.last_imported_at);
+      }
       await finish();
       await load();
       if (result.errors?.length) {
@@ -353,6 +383,12 @@ export default function TimetablePage() {
             Lịch dạy của {isAdmin && viewingTeacherId !== user?.id ? 'giáo viên đang chọn' : 'bạn'}
             {' — '}tiết dạy thay đã xác nhận hiện trên lưới; khi nghỉ sẽ thấy người dạy thay kèm trạng thái.
             {canImportTimetable ? ' Có thể tải mẫu / import TKB.' : ''}
+          </p>
+          <p className="text-xs text-gray-500 mt-1.5">
+            Cập nhật TKB lần cuối:{' '}
+            <span className="font-medium text-gray-700">
+              {formatImportTime(lastImportedAt) || 'Chưa có'}
+            </span>
           </p>
         </div>
         {canImportTimetable && (
@@ -751,8 +787,8 @@ export default function TimetablePage() {
             </div>
             <div className="px-5 py-4 space-y-3">
               <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                File có thể chứa <strong>nhiều cơ sở</strong> (VA1, VA3, EMC…) — mỗi dòng bắt buộc có cột Cơ sở.
-                Tiết đã có sẽ được <strong>cập nhật</strong>, không xóa toàn bộ TKB.
+                Import sẽ <strong>xóa toàn bộ TKB cũ</strong>, <strong>hủy lịch dạy thay</strong> (từ hôm nay,
+                kèm thông báo), rồi ghi file mới. File có thể chứa nhiều cơ sở — mỗi dòng bắt buộc có cột Cơ sở.
               </p>
               <input
                 type="file"

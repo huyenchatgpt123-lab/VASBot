@@ -11,12 +11,17 @@ from app.models.timetable import (
     SubstituteAssignment,
     session_for_period,
     period_label,
+    SUB_STATUS_CANCELLED,
 )
 from app.models.user import User
 from app.repositories.campus_repository import CampusRepository
 from app.repositories.timetable_repository import TimetableRepository
+from app.services.notification_service import NotificationService
 from app.utils.name_matcher import resolve_assignee_among, CONFIDENCE_NONE
 from app.utils.timetable_excel_import import parse_timetable_excel
+
+
+IMPORT_CANCEL_REASON = "Import TKB mới — hệ thống đã thay toàn bộ thời khóa biểu"
 
 
 class TimetableService:
@@ -210,7 +215,16 @@ class TimetableService:
 
     # ---- import ----
 
+    def get_last_import(self) -> dict:
+        meta = self.repo.get_import_meta()
+        return {
+            "last_imported_at": meta.last_imported_at if meta else None,
+            "last_import_message": meta.last_import_message if meta else None,
+        }
+
     def import_excel(self, content: bytes) -> dict:
+        from datetime import datetime, timezone
+
         parsed, parse_errors = parse_timetable_excel(content)
         if not parsed and parse_errors:
             raise ValueError(parse_errors[0])
@@ -262,17 +276,35 @@ class TimetableService:
                 "campuses": [],
                 "slots_created": 0,
                 "slots_updated": 0,
+                "slots_deleted": 0,
+                "substitutes_cancelled": 0,
                 "classes_created": 0,
                 "teachers_matched": 0,
                 "teachers_unmatched": unmatched,
                 "errors": errors[:50],
-                "message": "Không import được tiết nào — kiểm tra mã GV / tên / cơ sở",
+                "last_imported_at": None,
+                "message": "Không import được tiết nào — kiểm tra mã GV / tên / cơ sở. TKB cũ được giữ nguyên.",
             }
+
+        # Full replace: cancel upcoming active substitutes, wipe all slots, then insert
+        notifications = NotificationService(self.db)
+        active_subs = self.repo.list_active_assignments_from(from_date=date.today())
+        cancelled_ids: List[int] = []
+        for item in active_subs:
+            item.status = SUB_STATUS_CANCELLED
+            item.cancel_reason = IMPORT_CANCEL_REASON[:500]
+            cancelled_ids.append(item.id)
+        self.db.flush()
+        for aid in cancelled_ids:
+            refreshed = self.repo.get_assignment(aid)
+            if refreshed:
+                notifications.notify_substitute_cancelled(refreshed, reason=IMPORT_CANCEL_REASON)
+
+        slots_deleted = self.repo.delete_all_slots()
 
         classes_created = 0
         class_cache: dict = {}
         created = 0
-        updated = 0
         campuses_affected: set = set()
 
         for row in ready:
@@ -290,7 +322,7 @@ class TimetableService:
                     classes_created += 1
             room = class_cache[class_key]
 
-            slot, is_new, is_updated = self.repo.upsert_slot(
+            slot, is_new, _is_updated = self.repo.upsert_slot(
                 teacher_id=row["teacher_id"],
                 class_id=room.id,
                 campus_id=campus_id,
@@ -307,34 +339,39 @@ class TimetableService:
 
             if is_new:
                 created += 1
-            elif is_updated:
-                updated += 1
 
             teacher = next((u for u in users if u.id == row["teacher_id"]), None)
             if teacher and teacher.campus_id is None:
                 teacher.campus_id = campus_id
 
-        self.db.commit()
+        imported_at = datetime.now(timezone.utc)
         campus_list = sorted(campuses_affected)
         campus_label = ", ".join(campus_list) if campus_list else "—"
-        parts = []
-        if created:
-            parts.append(f"{created} tiết mới")
-        if updated:
-            parts.append(f"{updated} tiết cập nhật")
-        summary = " và ".join(parts) if parts else "0 tiết"
+        parts = [f"{created} tiết mới"]
+        if slots_deleted:
+            parts.append(f"đã xóa {slots_deleted} tiết cũ")
+        if cancelled_ids:
+            parts.append(f"hủy {len(cancelled_ids)} lịch dạy thay")
+        summary = ", ".join(parts)
+        message = (
+            f"Đã thay toàn bộ TKB: {summary} ({campus_label})"
+            + (f" — tạo mới {classes_created} lớp" if classes_created else "")
+        )
+        self.repo.upsert_import_meta(last_imported_at=imported_at, message=message)
+        self.db.commit()
+
         return {
             "campuses": campus_list,
             "slots_created": created,
-            "slots_updated": updated,
+            "slots_updated": 0,
+            "slots_deleted": slots_deleted,
+            "substitutes_cancelled": len(cancelled_ids),
             "classes_created": classes_created,
             "teachers_matched": len(matched_ids),
             "teachers_unmatched": unmatched,
             "errors": errors[:50],
-            "message": (
-                f"Đã import {summary} ({campus_label})"
-                + (f" — tạo mới {classes_created} lớp" if classes_created else "")
-            ),
+            "last_imported_at": imported_at,
+            "message": message,
         }
 
     # ---- my substitutes / my timetable ----

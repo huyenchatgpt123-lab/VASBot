@@ -84,6 +84,17 @@ class TimetableSlot(Base):
     campus = relationship("Campus")
 
 
+class TimetableImportMeta(Base):
+    """Singleton row (id=1) tracking last full TKB Excel import."""
+
+    __tablename__ = "timetable_import_meta"
+
+    id = Column(Integer, primary_key=True)
+    last_imported_at = Column(DateTime(timezone=True), nullable=True)
+    last_import_message = Column(String(500), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 # Active bookings that occupy a teacher/class slot
 SUB_STATUS_PENDING = "pending"
 SUB_STATUS_CONFIRMED = "confirmed"

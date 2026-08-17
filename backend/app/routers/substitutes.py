@@ -13,6 +13,7 @@ from app.schemas.timetable import (
     TimetableSlotUpdate,
     TimetableSlotResponse,
     TimetableImportResult,
+    TimetableImportMetaResponse,
     MySubstitutesResponse,
     MyTimetableSummary,
     SubstituteAssignmentResponse,
@@ -350,6 +351,14 @@ def delete_timetable_slot(
         return {"message": "Đã xóa tiết"}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/timetable/last-import", response_model=TimetableImportMetaResponse)
+def get_timetable_last_import(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return TimetableImportMetaResponse(**TimetableService(db).get_last_import())
 
 
 @router.post("/timetable/import", response_model=TimetableImportResult)

@@ -113,6 +113,50 @@ class TimetableRepository:
         self.db.flush()
         return count
 
+    def delete_all_slots(self) -> int:
+        count = self.db.query(TimetableSlot).delete(synchronize_session=False)
+        self.db.flush()
+        return count
+
+    def list_active_assignments_from(
+        self, from_date: Optional[date] = None
+    ) -> List[SubstituteAssignment]:
+        q = (
+            self.db.query(SubstituteAssignment)
+            .options(
+                joinedload(SubstituteAssignment.class_room),
+                joinedload(SubstituteAssignment.campus),
+                joinedload(SubstituteAssignment.absent_teacher),
+                joinedload(SubstituteAssignment.substitute_teacher),
+            )
+            .filter(SubstituteAssignment.status.in_(SUB_ACTIVE_STATUSES))
+        )
+        if from_date is not None:
+            q = q.filter(SubstituteAssignment.date >= from_date)
+        return q.order_by(SubstituteAssignment.date, SubstituteAssignment.period).all()
+
+    def get_import_meta(self):
+        from app.models.timetable import TimetableImportMeta
+
+        return (
+            self.db.query(TimetableImportMeta)
+            .filter(TimetableImportMeta.id == 1)
+            .first()
+        )
+
+    def upsert_import_meta(self, *, last_imported_at, message: Optional[str] = None):
+        from app.models.timetable import TimetableImportMeta
+
+        meta = self.get_import_meta()
+        if not meta:
+            meta = TimetableImportMeta(id=1)
+            self.db.add(meta)
+        meta.last_imported_at = last_imported_at
+        if message is not None:
+            meta.last_import_message = message[:500]
+        self.db.flush()
+        return meta
+
     def find_teacher_conflict(
         self, teacher_id: int, day_of_week: int, period: int, exclude_id: Optional[int] = None
     ) -> Optional[TimetableSlot]:

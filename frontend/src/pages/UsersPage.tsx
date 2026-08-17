@@ -44,6 +44,8 @@ export default function UsersPage() {
     sort_order: 0,
   });
   const [importResult, setImportResult] = useState<{ message: string; errors: string[] } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importFileName, setImportFileName] = useState('');
   const excelInputRef = useRef<HTMLInputElement>(null);
 
   const [search, setSearch] = useState('');
@@ -361,8 +363,11 @@ export default function UsersPage() {
 
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || importing) return;
 
+    setImporting(true);
+    setImportFileName(file.name);
+    setImportResult(null);
     try {
       const result = await adminApi.importExcel(file);
       setImportResult(result);
@@ -378,6 +383,8 @@ export default function UsersPage() {
     } catch (err: unknown) {
       toast.apiError(err, 'Import tài khoản thất bại');
     } finally {
+      setImporting(false);
+      setImportFileName('');
       if (excelInputRef.current) excelInputRef.current.value = '';
     }
   };
@@ -502,7 +509,39 @@ export default function UsersPage() {
         <p className="text-gray-500 mt-1">Quản lý tài khoản, tổ và phân quyền chức vụ</p>
       </div>
 
-      {importResult && (
+      {importing && (
+        <div className="mb-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
+          <div className="flex items-center gap-3">
+            <svg
+              className="animate-spin h-5 w-5 text-primary-600 shrink-0"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-primary-800">Đang import tài khoản…</p>
+              {importFileName && (
+                <p className="text-xs text-primary-600 mt-0.5 truncate" title={importFileName}>
+                  {importFileName}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 h-1.5 w-full bg-primary-100 rounded-full overflow-hidden">
+            <div className="h-full w-full bg-primary-400/70 rounded-full animate-pulse" />
+          </div>
+        </div>
+      )}
+
+      {importResult && !importing && (
         <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
           <p className="text-sm font-medium text-green-800">{importResult.message}</p>
           {importResult.errors.length > 0 && (
@@ -691,10 +730,12 @@ export default function UsersPage() {
             Tải file mẫu
           </a>
           <button
+            type="button"
+            disabled={importing}
             onClick={() => excelInputRef.current?.click()}
-            className="px-5 py-2.5 border border-primary-600 text-primary-600 rounded-lg font-medium hover:bg-primary-50 transition-colors"
+            className="px-5 py-2.5 border border-primary-600 text-primary-600 rounded-lg font-medium hover:bg-primary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Import Excel
+            {importing ? 'Đang import...' : 'Import Excel'}
           </button>
           <button
             onClick={() => { resetForm(); setShowForm(true); }}

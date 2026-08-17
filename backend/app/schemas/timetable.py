@@ -56,11 +56,19 @@ class TimetableImportResult(BaseModel):
     campuses: List[str] = []
     slots_created: int
     slots_updated: int = 0
+    slots_deleted: int = 0
+    substitutes_cancelled: int = 0
     classes_created: int
     teachers_matched: int
     teachers_unmatched: List[str] = []
     errors: List[str] = []
+    last_imported_at: Optional[datetime] = None
     message: str
+
+
+class TimetableImportMetaResponse(BaseModel):
+    last_imported_at: Optional[datetime] = None
+    last_import_message: Optional[str] = None
 
 
 class SubstituteAssignmentResponse(BaseModel):

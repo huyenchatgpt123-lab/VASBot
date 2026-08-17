@@ -90,11 +90,19 @@ export type TimetableImportResult = {
   campuses: string[];
   slots_created: number;
   slots_updated: number;
+  slots_deleted?: number;
+  substitutes_cancelled?: number;
   classes_created: number;
   teachers_matched: number;
   teachers_unmatched: string[];
   errors: string[];
+  last_imported_at?: string | null;
   message: string;
+};
+
+export type TimetableImportMeta = {
+  last_imported_at: string | null;
+  last_import_message?: string | null;
 };
 
 export const substitutesApi = {
@@ -222,6 +230,11 @@ export const substitutesApi = {
     const res = await api.post('/substitutes/timetable/import', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return res.data;
+  },
+
+  getTimetableLastImport: async (): Promise<TimetableImportMeta> => {
+    const res = await api.get('/substitutes/timetable/last-import');
     return res.data;
   },
 };
