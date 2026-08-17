@@ -26,7 +26,7 @@ interface AuthContextType {
   changePassword: (data: ChangePasswordPayload) => Promise<User>;
   logout: () => void;
   isAdmin: boolean;
-  /** Hồ sơ BGH: ẩn TKB + Công việc, home = Lịch hoạt động */
+  /** BGH thuần (không kiêm can_manage_tasks): ẩn TKB + Công việc */
   isBghOnly: boolean;
   homePath: string;
   permissions: UserPermissions;
@@ -106,8 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user && !isAdmin && canManageTasks && !scopeAllDepartments && user.department,
   );
   const canViewSubstitutesBoard = canAccessSubstitutes || isTeamLead;
-  const isBghOnly = Boolean(user && !isAdmin && permissions.bgh_workspace);
-  const homePath = isBghOnly ? '/bgh-calendar' : '/tasks';
+  const isBghOnly = Boolean(
+    user && !isAdmin && permissions.bgh_workspace && !permissions.can_manage_tasks,
+  );
+  const homePath =
+    user && !isAdmin && permissions.bgh_workspace ? '/bgh-calendar' : '/tasks';
 
   return (
     <AuthContext.Provider

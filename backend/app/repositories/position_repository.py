@@ -67,12 +67,23 @@ class PositionRepository:
         return pos
 
     def delete(self, position_id: int) -> bool:
-        from app.models.user import User
+        from app.models.user import User, user_positions
 
         pos = self.get_by_id(position_id)
         if not pos:
             return False
-        in_use = self.db.query(User).filter(User.position_id == position_id).count()
+        in_use = (
+            self.db.query(User)
+            .filter(
+                (User.position_id == position_id)
+                | (User.id.in_(
+                    self.db.query(user_positions.c.user_id).filter(
+                        user_positions.c.position_id == position_id
+                    )
+                ))
+            )
+            .count()
+        )
         if in_use > 0:
             raise ValueError(f"Không thể xóa: {in_use} người dùng đang dùng chức vụ này")
         self.db.delete(pos)
@@ -80,6 +91,14 @@ class PositionRepository:
         return True
 
     def count_users(self, position_id: int) -> int:
-        from app.models.user import User
+        from app.models.user import User, user_positions
 
-        return self.db.query(User).filter(User.position_id == position_id).count()
+        ids = {
+            r[0]
+            for r in self.db.query(user_positions.c.user_id)
+            .filter(user_positions.c.position_id == position_id)
+            .all()
+        }
+        for row in self.db.query(User.id).filter(User.position_id == position_id).all():
+            ids.add(row[0])
+        return len(ids)

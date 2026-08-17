@@ -16,14 +16,13 @@ from app.services.task_service import TaskService
 from app.repositories.user_repository import UserRepository
 from app.repositories.position_repository import PositionRepository
 from app.repositories.department_repository import DepartmentRepository
-from app.models.user import User
+from app.models.user import User, user_positions
 from app.repositories.campus_repository import CampusRepository
 from app.utils.auth import require_admin, hash_password
 from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
 from app.utils.user_serializer import serialize_user
 from app.utils.teacher_code import TeacherCodeAllocator
 from app.utils.upload_limits import read_upload_limited
-from app.models.user import User
 from app.schemas.position import PositionCreate, PositionUpdate, PositionResponse
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
 
@@ -117,18 +116,48 @@ def update_user(
         dept = dept_repo.resolve_by_name(data.department) if data.department else None
         update_fields["department_id"] = dept.id if dept else None
         update_fields["department"] = dept.name if dept else None
-    if data.position_id is not None:
+    if data.position_ids is not None:
+        pos_repo = PositionRepository(db)
+        positions = []
+        seen = set()
+        for pid in data.position_ids:
+            if pid in seen:
+                continue
+            pos = pos_repo.get_by_id(pid)
+            if not pos:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Chức vụ id={pid} không tồn tại",
+                )
+            positions.append(pos)
+            seen.add(pid)
+        if not positions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cần chọn ít nhất một chức vụ",
+            )
+        repo.set_positions(user, positions)
+        # ensure primary fields persisted with other updates
+        update_fields["position_id"] = positions[0].id
+        update_fields["position"] = positions[0].name
+    elif data.position_id is not None:
         pos_repo = PositionRepository(db)
         pos = pos_repo.get_by_id(data.position_id)
         if not pos:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chức vụ không tồn tại")
+        repo.set_positions(user, [pos])
         update_fields["position_id"] = pos.id
         update_fields["position"] = pos.name
     elif data.position is not None:
         pos_repo = PositionRepository(db)
         pos = pos_repo.resolve_by_name(data.position) if data.position else None
-        update_fields["position_id"] = pos.id if pos else None
-        update_fields["position"] = pos.name if pos else None
+        if pos:
+            repo.set_positions(user, [pos])
+            update_fields["position_id"] = pos.id
+            update_fields["position"] = pos.name
+        else:
+            update_fields["position_id"] = None
+            update_fields["position"] = None
     if data.nickname is not None:
         nickname = data.nickname.strip()
         if not nickname:
@@ -229,9 +258,21 @@ def update_position(
     pos = pos_repo.update(position_id, **data.model_dump(exclude_unset=True))
     if not pos:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chức vụ không tồn tại")
-    users_with_pos = db.query(User).filter(User.position_id == position_id).all()
+    users_with_pos = (
+        db.query(User)
+        .filter(
+            (User.position_id == position_id)
+            | (User.id.in_(
+                db.query(user_positions.c.user_id).filter(
+                    user_positions.c.position_id == position_id
+                )
+            ))
+        )
+        .all()
+    )
     for u in users_with_pos:
-        u.position = pos.name
+        if u.position_id == position_id:
+            u.position = pos.name
     db.commit()
     return _position_to_response(pos, pos_repo.count_users(pos.id))
 

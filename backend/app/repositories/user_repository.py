@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta
 from typing import Optional, List
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -12,6 +11,7 @@ from app.models.conversation import Conversation, Message
 from app.models.notification import Notification
 from app.models.push_subscription import PushSubscription
 from app.models.timetable import TimetableSlot, SubstituteAssignment
+from app.models.position import Position
 from app.repositories.position_repository import PositionRepository
 from app.repositories.department_repository import DepartmentRepository
 from app.schemas.auth import UserCreate
@@ -106,9 +106,44 @@ class UserRepository:
             return pos_repo.resolve_by_name(user_data.position)
         return pos_repo.get_default()
 
+    def _resolve_position_list(self, user_data: UserCreate) -> List:
+        pos_repo = PositionRepository(self.db)
+        ids = list(getattr(user_data, "position_ids", None) or [])
+        if not ids and user_data.position_id:
+            ids = [user_data.position_id]
+        positions = []
+        seen = set()
+        for pid in ids:
+            if pid in seen:
+                continue
+            pos = pos_repo.get_by_id(pid)
+            if pos:
+                positions.append(pos)
+                seen.add(pid)
+        if positions:
+            return positions
+        if user_data.position:
+            resolved = pos_repo.resolve_by_name(user_data.position)
+            if resolved:
+                return [resolved]
+        default = pos_repo.get_default()
+        return [default] if default else []
+
+    def set_positions(self, user: User, positions: List) -> None:
+        """Replace M2M positions; keep position_id/position as primary (first)."""
+        user.positions = list(positions or [])
+        if positions:
+            primary = positions[0]
+            user.position_id = primary.id
+            user.position = primary.name
+        else:
+            user.position_id = None
+            user.position = None
+
     def create(self, user_data: UserCreate, password_hash: str) -> User:
-        position = self._resolve_position(user_data)
+        positions = self._resolve_position_list(user_data)
         department = self._resolve_department(user_data)
+        primary = positions[0] if positions else None
         user = User(
             name=user_data.name,
             nickname=user_data.nickname.strip() if user_data.nickname else None,
@@ -117,13 +152,16 @@ class UserRepository:
             role=UserRole(user_data.role),
             department=department.name if department else user_data.department,
             department_id=department.id if department else None,
-            position=position.name if position else user_data.position,
-            position_id=position.id if position else None,
+            position=primary.name if primary else user_data.position,
+            position_id=primary.id if primary else None,
             teacher_code=(user_data.teacher_code or "").strip().upper() or None,
             campus_id=user_data.campus_id,
             must_change_password=True,
         )
         self.db.add(user)
+        self.db.flush()
+        if positions:
+            user.positions = positions
         self.db.commit()
         return self.get_by_id(user.id) or user
 

@@ -20,7 +20,7 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [form, setForm] = useState({
     name: '', nickname: '', email: '', password: '', role: 'user',
-    department_id: '', position_id: '', teacher_code: '', campus_id: '',
+    department_id: '', position_ids: [] as number[], teacher_code: '', campus_id: '',
   });
   const [positions, setPositions] = useState<Position[]>([]);
   const [departmentList, setDepartmentList] = useState<Department[]>([]);
@@ -125,7 +125,7 @@ export default function UsersPage() {
     const defaultPosition = positions.find((p) => p.name === 'Giáo viên');
     setForm({
       name: '', nickname: '', email: '', password: '', role: 'user', department_id: '',
-      position_id: defaultPosition ? String(defaultPosition.id) : '',
+      position_ids: defaultPosition ? [defaultPosition.id] : [],
       teacher_code: '', campus_id: '',
     });
     setEditingUser(null);
@@ -157,10 +157,26 @@ export default function UsersPage() {
     }
   };
 
+  const toggleFormPosition = (id: number) => {
+    setForm((prev) => {
+      const has = prev.position_ids.includes(id);
+      return {
+        ...prev,
+        position_ids: has
+          ? prev.position_ids.filter((x) => x !== id)
+          : [...prev.position_ids, id],
+      };
+    });
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.department_id) {
       toast.error('Thiếu thông tin', 'Vui lòng chọn phòng ban.');
+      return;
+    }
+    if (form.position_ids.length === 0) {
+      toast.error('Thiếu thông tin', 'Vui lòng chọn ít nhất một chức vụ.');
       return;
     }
     try {
@@ -171,7 +187,7 @@ export default function UsersPage() {
         password: form.password,
         role: form.role,
         department_id: parseInt(form.department_id),
-        position_id: form.position_id ? parseInt(form.position_id) : undefined,
+        position_ids: form.position_ids,
         teacher_code: form.teacher_code.trim().toUpperCase() || undefined,
         campus_id: form.campus_id ? parseInt(form.campus_id) : undefined,
       });
@@ -185,6 +201,12 @@ export default function UsersPage() {
 
   const handleEdit = (user: User) => {
     const deptId = resolveDepartmentId(user, departmentList);
+    const ids =
+      user.position_ids?.length
+        ? [...user.position_ids]
+        : user.position_id
+          ? [user.position_id]
+          : [];
     setEditingUser(user);
     setForm({
       name: user.name,
@@ -193,7 +215,7 @@ export default function UsersPage() {
       password: '',
       role: user.role,
       department_id: deptId ? String(deptId) : '',
-      position_id: user.position_id ? String(user.position_id) : '',
+      position_ids: ids,
       teacher_code: user.teacher_code || '',
       campus_id: user.campus_id ? String(user.campus_id) : '',
     });
@@ -207,8 +229,12 @@ export default function UsersPage() {
       toast.error('Thiếu thông tin', 'Vui lòng chọn phòng ban.');
       return;
     }
+    if (form.position_ids.length === 0) {
+      toast.error('Thiếu thông tin', 'Vui lòng chọn ít nhất một chức vụ.');
+      return;
+    }
 
-    const data: Record<string, string | number | null | undefined> = {};
+    const data: Record<string, string | number | number[] | null | undefined> = {};
     if (form.name !== editingUser.name) data.name = form.name;
     if (form.email !== editingUser.email) data.email = form.email;
     if (form.password) data.password = form.password;
@@ -223,8 +249,17 @@ export default function UsersPage() {
     const currentDeptId = resolveDepartmentId(editingUser, departmentList);
     if (newDeptId !== currentDeptId) data.department_id = newDeptId;
 
-    const newPositionId = form.position_id ? parseInt(form.position_id) : undefined;
-    if (newPositionId !== editingUser.position_id) data.position_id = newPositionId;
+    const currentIds = [
+      ...(editingUser.position_ids?.length
+        ? editingUser.position_ids
+        : editingUser.position_id
+          ? [editingUser.position_id]
+          : []),
+    ].sort((a, b) => a - b);
+    const nextIds = [...form.position_ids].sort((a, b) => a - b);
+    if (currentIds.join(',') !== nextIds.join(',')) {
+      data.position_ids = form.position_ids;
+    }
 
     const newTeacherCode = form.teacher_code.trim().toUpperCase();
     if (newTeacherCode !== (editingUser.teacher_code || '')) {
@@ -545,16 +580,25 @@ export default function UsersPage() {
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
-            <select
-              value={form.position_id}
-              onChange={(e) => setForm({ ...form, position_id: e.target.value })}
-              className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-            >
-              <option value="">-- Chọn chức vụ --</option>
-              {positions.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <div className="md:col-span-2">
+              <p className="text-sm font-medium text-gray-700 mb-2">Chức vụ (có thể chọn nhiều)</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 border border-gray-300 rounded-lg max-h-44 overflow-y-auto bg-white">
+                {positions.map((p) => (
+                  <label key={p.id} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.position_ids.includes(p.id)}
+                      onChange={() => toggleFormPosition(p.id)}
+                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="truncate">{p.name}</span>
+                  </label>
+                ))}
+              </div>
+              {form.position_ids.length === 0 && (
+                <p className="text-xs text-red-600 mt-1">Chọn ít nhất một chức vụ</p>
+              )}
+            </div>
             <input
               placeholder="Mã GV (để trống = tự sinh GV001…)"
               value={form.teacher_code}

@@ -1,6 +1,7 @@
+from typing import List, Optional
+
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional
 
 
 class UserPermissions(BaseModel):
@@ -14,6 +15,11 @@ class UserPermissions(BaseModel):
     bgh_workspace: bool = False
 
 
+class UserPositionBrief(BaseModel):
+    id: int
+    name: str
+
+
 class UserCreate(BaseModel):
     name: str
     nickname: Optional[str] = None
@@ -24,6 +30,7 @@ class UserCreate(BaseModel):
     department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
+    position_ids: Optional[List[int]] = None
     teacher_code: Optional[str] = None
     campus_id: Optional[int] = None
 
@@ -38,6 +45,7 @@ class UserUpdate(BaseModel):
     department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
+    position_ids: Optional[List[int]] = None
     teacher_code: Optional[str] = None
     campus_id: Optional[int] = None
 
@@ -52,6 +60,8 @@ class UserResponse(BaseModel):
     department_id: Optional[int] = None
     position: Optional[str] = None
     position_id: Optional[int] = None
+    positions: List[UserPositionBrief] = []
+    position_ids: List[int] = []
     teacher_code: Optional[str] = None
     campus_id: Optional[int] = None
     campus_code: Optional[str] = None
@@ -79,4 +89,3 @@ class ChangePasswordRequest(BaseModel):
     current_password: Optional[str] = None
     new_password: str
     confirm_password: str
-

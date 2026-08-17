@@ -20,27 +20,30 @@ def is_admin(user: User) -> bool:
     return user.role == UserRole.admin
 
 
-def _position(user: User):
-    return getattr(user, "position_obj", None)
+def _iter_positions(user: User):
+    """All assigned positions (M2M), fallback to primary position_obj."""
+    positions = list(getattr(user, "positions", None) or [])
+    if positions:
+        return positions
+    pos = getattr(user, "position_obj", None)
+    return [pos] if pos else []
 
 
 def get_permissions(user: User) -> dict:
     if is_admin(user):
         # Admin has all operational rights; BGH workspace is a non-admin UI profile.
         return {key: (False if key == "bgh_workspace" else True) for key in _PERM_KEYS}
-    pos = _position(user)
-    if not pos:
+
+    positions = _iter_positions(user)
+    if not positions:
         return {key: False for key in _PERM_KEYS}
-    return {
-        "can_upload": bool(pos.can_upload),
-        "can_manage_tasks": bool(pos.can_manage_tasks),
-        "can_delete_documents": bool(pos.can_delete_documents),
-        "scope_all_departments": bool(pos.scope_all_departments),
-        "can_access_substitutes": bool(getattr(pos, "can_access_substitutes", False)),
-        "can_manage_calendar": bool(getattr(pos, "can_manage_calendar", False)),
-        "can_import_timetable": bool(getattr(pos, "can_import_timetable", False)),
-        "bgh_workspace": bool(getattr(pos, "bgh_workspace", False)),
-    }
+
+    perms = {key: False for key in _PERM_KEYS}
+    for pos in positions:
+        for key in _PERM_KEYS:
+            if bool(getattr(pos, key, False)):
+                perms[key] = True
+    return perms
 
 
 def can_upload(user: User) -> bool:
@@ -64,15 +67,17 @@ def can_access_substitutes(user: User) -> bool:
 
 
 def is_department_team_lead(user: User) -> bool:
-    """Tổ trưởng: quản lý công việc trong tổ, không phải admin / BGH toàn trường."""
+    """Tổ trưởng: có chức vụ quản lý task trong tổ (không tính BGH scope-all thuần)."""
     if is_admin(user):
         return False
-    perms = get_permissions(user)
-    if not perms["can_manage_tasks"]:
+    if not user.department:
         return False
-    if perms["scope_all_departments"]:
-        return False
-    return bool(user.department)
+    for pos in _iter_positions(user):
+        if bool(getattr(pos, "can_manage_tasks", False)) and not bool(
+            getattr(pos, "scope_all_departments", False)
+        ):
+            return True
+    return False
 
 
 def can_view_substitutes_board(user: User) -> bool:
@@ -89,10 +94,18 @@ def can_import_timetable(user: User) -> bool:
 
 
 def has_bgh_workspace(user: User) -> bool:
-    """BGH UI profile: hide TKB + Công việc, home = Lịch hoạt động."""
+    """Có ít nhất một chức vụ BGH (dùng cho home /bgh-calendar)."""
     if is_admin(user):
         return False
     return get_permissions(user)["bgh_workspace"]
+
+
+def is_bgh_only_workspace(user: User) -> bool:
+    """Ẩn TKB + Công việc: BGH thuần, không kiêm chức vụ có can_manage_tasks."""
+    if is_admin(user):
+        return False
+    perms = get_permissions(user)
+    return bool(perms["bgh_workspace"]) and not bool(perms["can_manage_tasks"])
 
 
 def can_access_department(user: User, department: Optional[str]) -> bool:

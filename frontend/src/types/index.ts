@@ -16,6 +16,11 @@ export interface Department {
   user_count: number;
 }
 
+export interface UserPositionBrief {
+  id: number;
+  name: string;
+}
+
 export interface User {
   id: number;
   name: string;
@@ -26,6 +31,8 @@ export interface User {
   department_id?: number;
   position?: string;
   position_id?: number;
+  positions?: UserPositionBrief[];
+  position_ids?: number[];
   teacher_code?: string;
   campus_id?: number;
   campus_code?: string;

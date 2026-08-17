@@ -136,6 +136,20 @@ export default function SettingsPage() {
             <p className="text-gray-900 mt-1 break-all">{user?.email || 'Không có'}</p>
           </div>
           <div>
+            <label className="text-sm font-medium text-gray-500">Chức vụ</label>
+            {user?.positions && user.positions.length > 0 ? (
+              <ul className="mt-1 space-y-1">
+                {user.positions.map((p) => (
+                  <li key={p.id} className="text-gray-900">
+                    {p.name}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-900 mt-1">{user?.position?.trim() || 'Không có'}</p>
+            )}
+          </div>
+          <div>
             <label className="text-sm font-medium text-gray-500">Phòng ban</label>
             <p className="text-gray-900 mt-1">{user?.department?.trim() || 'Không có'}</p>
           </div>

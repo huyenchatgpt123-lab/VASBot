@@ -39,8 +39,8 @@ export default function LoginPage() {
         return;
       }
       const isAdmin = user.role === 'admin';
-      const isBghOnly = Boolean(user.permissions?.bgh_workspace && !isAdmin);
-      navigate(isBghOnly ? '/bgh-calendar' : '/tasks');
+      const hasBghHome = Boolean(user.permissions?.bgh_workspace && !isAdmin);
+      navigate(hasBghHome ? '/bgh-calendar' : '/tasks');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(message || 'Email hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.');

@@ -31,6 +31,7 @@ export const adminApi = {
     role: string;
     department_id?: number;
     position_id?: number;
+    position_ids?: number[];
     teacher_code?: string;
     campus_id?: number;
   }) => {
@@ -45,6 +46,7 @@ export const adminApi = {
     role?: string;
     department_id?: number;
     position_id?: number;
+    position_ids?: number[];
     teacher_code?: string | null;
     campus_id?: number | null;
   }) => {

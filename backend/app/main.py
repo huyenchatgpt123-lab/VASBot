@@ -172,6 +172,34 @@ def _migrate_user_positions(db):
     db.commit()
 
 
+def _sync_user_positions_links(db):
+    """Ensure user_positions M2M contains each user's primary position_id."""
+    from app.models.user import user_positions
+    from sqlalchemy import and_
+
+    users = db.query(User).filter(User.position_id.isnot(None)).all()
+    for user in users:
+        exists = (
+            db.query(user_positions.c.user_id)
+            .filter(
+                and_(
+                    user_positions.c.user_id == user.id,
+                    user_positions.c.position_id == user.position_id,
+                )
+            )
+            .first()
+        )
+        if exists:
+            continue
+        pos = db.query(Position).filter(Position.id == user.position_id).first()
+        if not pos:
+            continue
+        current = list(user.positions or [])
+        if pos.id not in {p.id for p in current}:
+            user.positions = current + [pos]
+    db.commit()
+
+
 def _seed_departments(db):
     dept_repo = DepartmentRepository(db)
     for i, name in enumerate(DEFAULT_DEPARTMENTS, start=1):
@@ -342,6 +370,7 @@ def startup():
         _seed_departments(db)
         CampusRepository(db).seed_defaults()
         _migrate_user_positions(db)
+        _sync_user_positions_links(db)
         _migrate_user_departments(db)
         _migrate_task_departments(db)
 

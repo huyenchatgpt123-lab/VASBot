@@ -190,19 +190,22 @@ class NotificationService:
     def _team_lead_ids(self, department: Optional[str]) -> List[int]:
         if not department:
             return []
+        from app.models.user import user_positions
+
         rows = (
-            self.db.query(User)
-            .options(joinedload(User.position_obj))
-            .join(Position, User.position_id == Position.id)
+            self.db.query(User.id)
+            .join(user_positions, user_positions.c.user_id == User.id)
+            .join(Position, Position.id == user_positions.c.position_id)
             .filter(
                 User.department == department,
                 User.role != UserRole.admin,
                 Position.can_manage_tasks.is_(True),
                 Position.scope_all_departments.is_(False),
             )
+            .distinct()
             .all()
         )
-        return [u.id for u in rows]
+        return [r[0] for r in rows]
 
     def _notify_team_leads(
         self,
