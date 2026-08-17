@@ -120,32 +120,28 @@ export default function SettingsPage() {
           <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold text-2xl">
             {user?.name?.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">{user?.name}</h2>
-            <p className="text-gray-500">{user?.email}</p>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900 truncate">{user?.name}</h2>
+            <p className="text-gray-500 truncate">{user?.email}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium text-gray-500">Họ tên</label>
-            <p className="text-gray-900 mt-1">{user?.name}</p>
+            <p className="text-gray-900 mt-1">{user?.name || 'Không có'}</p>
           </div>
           <div>
             <label className="text-sm font-medium text-gray-500">Email</label>
-            <p className="text-gray-900 mt-1">{user?.email}</p>
+            <p className="text-gray-900 mt-1 break-all">{user?.email || 'Không có'}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Vai trò</label>
-            <p className="text-gray-900 mt-1 capitalize">{user?.role}</p>
+            <label className="text-sm font-medium text-gray-500">Phòng ban</label>
+            <p className="text-gray-900 mt-1">{user?.department?.trim() || 'Không có'}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-500">Ngày tạo</label>
-            <p className="text-gray-900 mt-1">
-              {user?.created_at
-                ? new Date(user.created_at).toLocaleDateString('vi-VN')
-                : '—'}
-            </p>
+            <label className="text-sm font-medium text-gray-500">Cơ sở</label>
+            <p className="text-gray-900 mt-1">{user?.campus_name?.trim() || 'Không có'}</p>
           </div>
         </div>
       </div>

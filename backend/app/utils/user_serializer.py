@@ -22,6 +22,7 @@ def serialize_user(user: User) -> UserResponse:
         teacher_code=user.teacher_code,
         campus_id=user.campus_id,
         campus_code=campus.code if campus else None,
+        campus_name=campus.name if campus else None,
         permissions=UserPermissions(**get_permissions(user)),
         must_change_password=bool(user.must_change_password),
         created_at=user.created_at,

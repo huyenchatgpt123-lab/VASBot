@@ -55,6 +55,7 @@ class UserResponse(BaseModel):
     teacher_code: Optional[str] = None
     campus_id: Optional[int] = None
     campus_code: Optional[str] = None
+    campus_name: Optional[str] = None
     permissions: UserPermissions = UserPermissions()
     must_change_password: bool = False
     created_at: datetime

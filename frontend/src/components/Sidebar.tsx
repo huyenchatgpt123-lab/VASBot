@@ -113,28 +113,28 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200 flex flex-col h-full transform transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 lg:w-64 ${
+      className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-gray-200/80 flex flex-col h-full transform transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 lg:w-64 ${
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="VATask" className="w-10 h-10 rounded-xl object-cover" />
-          <div>
-            <h1 className="font-bold text-lg text-gray-900">VATask</h1>
-            <p className="text-xs text-gray-500">Việt Anh School</p>
+      <div className="px-4 py-4 sm:px-5 sm:py-5 border-b border-gray-100 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <img src="/logo.png" alt="VATask" className="w-9 h-9 rounded-lg object-cover shrink-0" />
+          <div className="min-w-0">
+            <h1 className="font-semibold text-base text-gray-900 tracking-tight">VATask</h1>
+            <p className="text-[11px] text-gray-500 truncate">Việt Anh School</p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="lg:hidden p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+          className="lg:hidden p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg"
           aria-label="Đóng menu"
         >
           ✕
         </button>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
         {navItems
           .filter((item) => {
             if (item.adminOnly && !isAdmin) return false;
@@ -150,30 +150,32 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               to={item.path}
               onClick={onClose}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`
               }
             >
-              <span className="text-lg">{item.icon}</span>
-              <span className="flex-1">{item.label}</span>
+              <span className="text-base w-6 text-center shrink-0" aria-hidden>
+                {item.icon}
+              </span>
+              <span className="flex-1 truncate">{item.label}</span>
               {item.showSubBadge && subCount > 0 && (
                 <span
-                  className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center"
+                  className="bg-amber-500 text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-md min-w-[1.25rem] text-center"
                   title="Tiết dạy thay"
                 >
                   {subCount > 99 ? '99+' : subCount}
                 </span>
               )}
               {item.showBadge && taskCount > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                <span className="bg-red-500 text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-md min-w-[1.25rem] text-center">
                   {taskCount > 99 ? '99+' : taskCount}
                 </span>
               )}
               {item.showFeedbackBadge && isAdmin && feedbackCount > 0 && (
-                <span className="bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                <span className="bg-orange-500 text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-md min-w-[1.25rem] text-center">
                   {feedbackCount > 99 ? '99+' : feedbackCount}
                 </span>
               )}
