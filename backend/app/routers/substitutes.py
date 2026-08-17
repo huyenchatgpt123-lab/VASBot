@@ -367,6 +367,12 @@ async def import_timetable(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from app.services.system_busy_service import (
+        JOB_IMPORT_TIMETABLE,
+        set_busy,
+        clear_busy,
+    )
+
     if not can_import_timetable(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -378,12 +384,23 @@ async def import_timetable(
             detail="Chỉ chấp nhận file Excel (.xlsx)",
         )
     content = await read_upload_limited(file)
+    set_busy(db, JOB_IMPORT_TIMETABLE, started_by_id=current_user.id)
     try:
         return TimetableService(db).import_excel(content)
     except ValueError as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi import: {e}",
         )
+    finally:
+        clear_busy(db, JOB_IMPORT_TIMETABLE)

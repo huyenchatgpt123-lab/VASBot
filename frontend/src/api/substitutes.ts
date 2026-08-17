@@ -1,4 +1,4 @@
-import api from './client';
+import api, { IMPORT_TIMEOUT_MS } from './client';
 
 export type SubstituteStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled' | string;
 
@@ -229,6 +229,7 @@ export const substitutesApi = {
     form.append('file', file);
     const res = await api.post('/substitutes/timetable/import', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: IMPORT_TIMEOUT_MS,
     });
     return res.data;
   },

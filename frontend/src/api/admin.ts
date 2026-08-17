@@ -1,4 +1,4 @@
-import api from './client';
+import api, { IMPORT_TIMEOUT_MS } from './client';
 import { DashboardStats, ActivityData, User, Position, Department } from '../types';
 
 export const adminApi = {
@@ -62,6 +62,7 @@ export const adminApi = {
     formData.append('file', file);
     const res = await api.post('/admin/users/import-excel', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: IMPORT_TIMEOUT_MS,
     });
     return res.data as { message: string; created: number; updated: number; skipped: number; errors: string[] };
   },

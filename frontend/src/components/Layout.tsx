@@ -3,7 +3,9 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import TaskWelcomeModal from './TaskWelcomeModal';
+import SystemBusyBanner from './SystemBusyBanner';
 import { useAuth } from '../context/AuthContext';
+import { useSystemStatus } from '../hooks/useSystemStatus';
 import { tasksApi } from '../api/tasks';
 import { ensureServiceWorker } from '../utils/webPush';
 
@@ -11,6 +13,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, isBghOnly } = useAuth();
+  const systemStatus = useSystemStatus();
   const [showTaskWelcome, setShowTaskWelcome] = useState(false);
   const [incompleteTaskCount, setIncompleteTaskCount] = useState(0);
 
@@ -75,6 +78,11 @@ export default function Layout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
+        <SystemBusyBanner
+          busy={systemStatus.busy}
+          message={systemStatus.message}
+          job={systemStatus.job}
+        />
         <main className="flex-1 overflow-auto bg-gray-50">
           <Outlet />
         </main>

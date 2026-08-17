@@ -22,7 +22,15 @@ const ToastContext = createContext<ToastApi | null>(null);
 let toastSeq = 0;
 
 export function extractApiError(err: unknown, fallback: string): string {
-  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  const ax = err as {
+    code?: string;
+    message?: string;
+    response?: { data?: { detail?: unknown } };
+  };
+  if (ax?.code === 'ECONNABORTED' || (typeof ax?.message === 'string' && ax.message.toLowerCase().includes('timeout'))) {
+    return 'Máy chủ không phản hồi kịp (timeout). Vui lòng thử lại.';
+  }
+  const detail = ax?.response?.data?.detail;
   if (typeof detail === 'string' && detail.trim()) return detail;
   if (Array.isArray(detail)) {
     const parts = detail

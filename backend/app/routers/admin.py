@@ -387,6 +387,12 @@ async def import_users_excel(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    from app.services.system_busy_service import (
+        JOB_IMPORT_USERS,
+        set_busy,
+        clear_busy,
+    )
+
     if not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chỉ chấp nhận file Excel (.xlsx)")
 
@@ -397,6 +403,20 @@ async def import_users_excel(
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File Excel không hợp lệ")
 
+    set_busy(db, JOB_IMPORT_USERS, started_by_id=current_user.id)
+    try:
+        return _run_users_excel_import(db, ws, current_user)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        clear_busy(db, JOB_IMPORT_USERS)
+
+
+def _run_users_excel_import(db: Session, ws, current_user: User):
     service = AuthService(db)
     repo = UserRepository(db)
     dept_repo = DepartmentRepository(db)
