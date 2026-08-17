@@ -1,3 +1,4 @@
+import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -54,6 +55,14 @@ def _optional_str(value: Any) -> Optional[str]:
     return text if text else None
 
 
+def split_position_names(raw: Optional[str]) -> List[str]:
+    """Split 'BGH, Tổ trưởng' / 'BGH; Tổ trưởng' / 'BGH / Tổ trưởng' into names."""
+    if not raw:
+        return []
+    parts = re.split(r"[,;/|]+", str(raw))
+    return [p.strip() for p in parts if p.strip()]
+
+
 def build_column_map(header_row: Tuple[Any, ...]) -> Dict[str, int]:
     normalized_aliases = {
         field: {_normalize_header(alias) for alias in aliases}
@@ -77,7 +86,7 @@ def build_column_map(header_row: Tuple[Any, ...]) -> Dict[str, int]:
     return column_map
 
 
-def parse_user_row(row: Tuple[Any, ...], column_map: Dict[str, int]) -> Dict[str, Optional[str]]:
+def parse_user_row(row: Tuple[Any, ...], column_map: Dict[str, int]) -> Dict[str, Any]:
     def get(field: str) -> Any:
         idx = column_map.get(field)
         if idx is None or idx >= len(row):
@@ -88,6 +97,7 @@ def parse_user_row(row: Tuple[Any, ...], column_map: Dict[str, int]) -> Dict[str
     if role not in ("admin", "user"):
         role = "user"
 
+    position_raw = _optional_str(get("position"))
     return {
         "name": _cell_to_str(get("name")),
         "email": _cell_to_str(get("email")),
@@ -95,7 +105,8 @@ def parse_user_row(row: Tuple[Any, ...], column_map: Dict[str, int]) -> Dict[str
         "role": role,
         "department": _optional_str(get("department")),
         "nickname": _cell_to_str(get("nickname")),
-        "position": _optional_str(get("position")),
+        "position": position_raw,
+        "positions": split_position_names(position_raw),
         "teacher_code": (_optional_str(get("teacher_code")) or "").upper() or None,
         "campus": (_optional_str(get("campus")) or "").upper() or None,
     }

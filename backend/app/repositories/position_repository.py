@@ -1,5 +1,5 @@
 import unicodedata
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -33,9 +33,10 @@ class PositionRepository:
                 return pos
         return None
 
-    def resolve_by_name(self, name: Optional[str]) -> Optional[Position]:
+    def match_by_name(self, name: str) -> Optional[Position]:
+        """Exact then fuzzy match; returns None if not found (no default)."""
         if not name:
-            return self.get_default()
+            return None
         exact = self.get_by_name(name)
         if exact:
             return exact
@@ -43,7 +44,29 @@ class PositionRepository:
         for pos in self.get_all():
             if normalized in _normalize(pos.name) or _normalize(pos.name) in normalized:
                 return pos
-        return self.get_default()
+        return None
+
+    def resolve_by_name(self, name: Optional[str]) -> Optional[Position]:
+        if not name:
+            return self.get_default()
+        matched = self.match_by_name(name)
+        return matched if matched else self.get_default()
+
+    def resolve_many_by_names(self, names: List[str]) -> Tuple[List[Position], List[str]]:
+        """Resolve multiple position names. Returns (positions, missing_names)."""
+        positions: List[Position] = []
+        missing: List[str] = []
+        seen: set = set()
+        for name in names:
+            pos = self.match_by_name(name)
+            if not pos:
+                missing.append(name)
+                continue
+            if pos.id in seen:
+                continue
+            positions.append(pos)
+            seen.add(pos.id)
+        return positions, missing
 
     def get_default(self) -> Optional[Position]:
         return self.get_by_name("Giáo viên")

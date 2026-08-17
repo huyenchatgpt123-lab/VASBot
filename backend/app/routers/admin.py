@@ -19,7 +19,7 @@ from app.repositories.department_repository import DepartmentRepository
 from app.models.user import User, user_positions
 from app.repositories.campus_repository import CampusRepository
 from app.utils.auth import require_admin, hash_password
-from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row
+from app.utils.excel_user_import import build_column_map, parse_user_row, is_empty_row, split_position_names
 from app.utils.user_serializer import serialize_user
 from app.utils.teacher_code import TeacherCodeAllocator
 from app.utils.upload_limits import read_upload_limited
@@ -448,6 +448,7 @@ async def import_users_excel(
         existing = repo.get_by_email(email)
         if existing:
             update_fields: dict = {}
+            positions_to_set = None
             if name and name != existing.name:
                 update_fields["name"] = name
 
@@ -457,11 +458,19 @@ async def import_users_excel(
                     update_fields["department_id"] = dept.id
                     update_fields["department"] = dept.name
 
-            if parsed.get("position"):
-                pos = pos_repo.resolve_by_name(parsed["position"])
-                if pos:
-                    update_fields["position_id"] = pos.id
-                    update_fields["position"] = pos.name
+            position_names = parsed.get("positions") or split_position_names(parsed.get("position"))
+            if position_names:
+                positions, missing = pos_repo.resolve_many_by_names(position_names)
+                if missing:
+                    errors.append(
+                        f"Dòng {i}: chức vụ không tồn tại: {', '.join(missing)}"
+                    )
+                    skipped += 1
+                    continue
+                if positions:
+                    positions_to_set = positions
+                    update_fields["position_id"] = positions[0].id
+                    update_fields["position"] = positions[0].name
 
             teacher_code = parsed.get("teacher_code")
             if teacher_code:
@@ -493,8 +502,16 @@ async def import_users_excel(
                     continue
                 update_fields["nickname"] = nickname
 
-            if update_fields:
-                repo.update(existing.id, **update_fields)
+            if positions_to_set is not None:
+                user_row = repo.get_by_id(existing.id)
+                if user_row:
+                    repo.set_positions(user_row, positions_to_set)
+
+            if update_fields or positions_to_set is not None:
+                if update_fields:
+                    repo.update(existing.id, **update_fields)
+                else:
+                    db.commit()
                 updated += 1
             else:
                 skipped += 1
@@ -524,6 +541,21 @@ async def import_users_excel(
             else:
                 teacher_code = code_allocator.allocate()
 
+            position_names = parsed.get("positions") or split_position_names(parsed.get("position"))
+            position_ids = None
+            primary_position_name = None
+            if position_names:
+                positions, missing = pos_repo.resolve_many_by_names(position_names)
+                if missing:
+                    errors.append(
+                        f"Dòng {i}: chức vụ không tồn tại: {', '.join(missing)}"
+                    )
+                    skipped += 1
+                    continue
+                if positions:
+                    position_ids = [p.id for p in positions]
+                    primary_position_name = positions[0].name
+
             user_data = UserCreate(
                 name=name,
                 nickname=nickname or None,
@@ -531,7 +563,8 @@ async def import_users_excel(
                 password=password,
                 role=parsed["role"] or "user",
                 department=parsed["department"],
-                position=parsed["position"],
+                position=primary_position_name,
+                position_ids=position_ids,
                 teacher_code=teacher_code,
                 campus_id=campus_id,
             )

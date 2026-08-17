@@ -18,6 +18,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [formSaving, setFormSaving] = useState(false);
   const [form, setForm] = useState({
     name: '', nickname: '', email: '', password: '', role: 'user',
     department_id: '', position_ids: [] as number[], teacher_code: '', campus_id: '',
@@ -129,6 +130,7 @@ export default function UsersPage() {
       teacher_code: '', campus_id: '',
     });
     setEditingUser(null);
+    setFormSaving(false);
     setShowForm(false);
   };
 
@@ -171,6 +173,7 @@ export default function UsersPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formSaving) return;
     if (!form.department_id) {
       toast.error('Thiếu thông tin', 'Vui lòng chọn phòng ban.');
       return;
@@ -179,6 +182,7 @@ export default function UsersPage() {
       toast.error('Thiếu thông tin', 'Vui lòng chọn ít nhất một chức vụ.');
       return;
     }
+    setFormSaving(true);
     try {
       await adminApi.createUser({
         name: form.name,
@@ -196,6 +200,8 @@ export default function UsersPage() {
       toast.success('Đã tạo tài khoản', form.name || form.email);
     } catch (err: unknown) {
       toast.apiError(err, 'Tạo người dùng thất bại');
+    } finally {
+      setFormSaving(false);
     }
   };
 
@@ -224,7 +230,7 @@ export default function UsersPage() {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingUser) return;
+    if (!editingUser || formSaving) return;
     if (!form.department_id) {
       toast.error('Thiếu thông tin', 'Vui lòng chọn phòng ban.');
       return;
@@ -271,6 +277,7 @@ export default function UsersPage() {
       data.campus_id = newCampusId;
     }
 
+    setFormSaving(true);
     try {
       await adminApi.updateUser(editingUser.id, data);
       resetForm();
@@ -278,6 +285,8 @@ export default function UsersPage() {
       toast.success('Đã cập nhật tài khoản', form.name || form.email);
     } catch (err: unknown) {
       toast.apiError(err, 'Cập nhật thất bại');
+    } finally {
+      setFormSaving(false);
     }
   };
 
@@ -616,13 +625,20 @@ export default function UsersPage() {
               ))}
             </select>
             <div className="md:col-span-2 flex gap-3">
-              <button type="submit" className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700">
-                {editingUser ? 'Cập nhật' : 'Tạo'}
+              <button
+                type="submit"
+                disabled={formSaving}
+                className="px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {formSaving
+                  ? (editingUser ? 'Đang cập nhật...' : 'Đang tạo...')
+                  : (editingUser ? 'Cập nhật' : 'Tạo')}
               </button>
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-5 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
+                disabled={formSaving}
+                className="px-5 py-2.5 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Hủy
               </button>
@@ -692,6 +708,8 @@ export default function UsersPage() {
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 break-words">
         File Excel cần các cột:{' '}
         <strong>Họ tên, Email, Mật khẩu, Vai trò, Phòng ban, Biệt danh, Chức vụ, Mã GV, Cơ sở</strong>.
+        {' '}Cột <strong>Chức vụ</strong> có thể ghi nhiều (cách nhau bằng dấu phẩy):{' '}
+        <code className="text-xs bg-blue-100/80 px-1 rounded">BGH, Tổ trưởng</code>.
         {' '}Cột <strong>Mã GV</strong> để trống sẽ tự sinh <strong>GV001, GV002…</strong>; có sẵn thì giữ nguyên.
         Email đã tồn tại sẽ được <strong>cập nhật</strong> (không tự gán mã cho user cũ thiếu mã).
         {' '}
