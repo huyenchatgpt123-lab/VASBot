@@ -212,9 +212,9 @@ export default function TimetablePage() {
   const handleImport = async (file: File) => {
     if (!confirm(
       `Import TKB từ "${file.name}"?\n\n`
-      + `Hệ thống sẽ XÓA TOÀN BỘ thời khóa biểu hiện tại, `
-      + `HỦY các lịch dạy thay (pending/đã xác nhận từ hôm nay) và gửi thông báo, `
-      + `rồi import file mới.\n\n`
+      + `Hệ thống sẽ XÓA TOÀN BỘ thời khóa biểu hiện tại rồi import file mới.\n`
+      + `Lịch dạy thay (từ hôm nay) chỉ bị HỦY nếu không còn khớp TKB mới; `
+      + `lịch vẫn đúng sẽ được giữ và có thông báo khi hủy.\n\n`
       + `Mỗi dòng cần có cột Cơ sở (VA1, VA3, EMC…).`,
     )) {
       return;
@@ -787,8 +787,9 @@ export default function TimetablePage() {
             </div>
             <div className="px-5 py-4 space-y-3">
               <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                Import sẽ <strong>xóa toàn bộ TKB cũ</strong>, <strong>hủy lịch dạy thay</strong> (từ hôm nay,
-                kèm thông báo), rồi ghi file mới. File có thể chứa nhiều cơ sở — mỗi dòng bắt buộc có cột Cơ sở.
+                Import sẽ <strong>xóa toàn bộ TKB cũ</strong> rồi ghi file mới.
+                Lịch dạy thay từ hôm nay chỉ <strong>hủy khi không còn khớp</strong> TKB mới
+                (có thông báo); lịch vẫn đúng được giữ.
               </p>
               <input
                 type="file"

@@ -21,7 +21,9 @@ from app.utils.name_matcher import resolve_assignee_among, CONFIDENCE_NONE
 from app.utils.timetable_excel_import import parse_timetable_excel
 
 
-IMPORT_CANCEL_REASON = "Import TKB mới — hệ thống đã thay toàn bộ thời khóa biểu"
+IMPORT_CANCEL_REASON = (
+    "Import TKB mới — tiết này không còn khớp thời khóa biểu mới"
+)
 
 
 class TimetableService:
@@ -286,26 +288,14 @@ class TimetableService:
                 "message": "Không import được tiết nào — kiểm tra mã GV / tên / cơ sở. TKB cũ được giữ nguyên.",
             }
 
-        # Full replace: cancel upcoming active substitutes, wipe all slots, then insert
-        notifications = NotificationService(self.db)
-        active_subs = self.repo.list_active_assignments_from(from_date=date.today())
-        cancelled_ids: List[int] = []
-        for item in active_subs:
-            item.status = SUB_STATUS_CANCELLED
-            item.cancel_reason = IMPORT_CANCEL_REASON[:500]
-            cancelled_ids.append(item.id)
-        self.db.flush()
-        for aid in cancelled_ids:
-            refreshed = self.repo.get_assignment(aid)
-            if refreshed:
-                notifications.notify_substitute_cancelled(refreshed, reason=IMPORT_CANCEL_REASON)
-
-        slots_deleted = self.repo.delete_all_slots()
+        # Full replace TKB; only cancel substitutes that no longer match new weekly slots
+        from app.services.substitute_service import date_to_day_of_week
 
         classes_created = 0
         class_cache: dict = {}
-        created = 0
         campuses_affected: set = set()
+        new_slot_keys: set = set()
+        # (teacher_id, day_of_week, period, class_id, campus_id)
 
         for row in ready:
             campus_id = row["campus_id"]
@@ -321,10 +311,50 @@ class TimetableService:
                 if is_new:
                     classes_created += 1
             room = class_cache[class_key]
+            row["class_id"] = room.id
+            new_slot_keys.add(
+                (row["teacher_id"], row["day"], row["period"], room.id, campus_id)
+            )
+
+        notifications = NotificationService(self.db)
+        active_subs = self.repo.list_active_assignments_from(from_date=date.today())
+        cancelled_ids: List[int] = []
+        kept_subs = 0
+        for item in active_subs:
+            dow = date_to_day_of_week(item.date)
+            still_valid = (
+                dow is not None
+                and (
+                    item.absent_teacher_id,
+                    dow,
+                    item.period,
+                    item.class_id,
+                    item.campus_id,
+                )
+                in new_slot_keys
+            )
+            if still_valid:
+                kept_subs += 1
+                continue
+            item.status = SUB_STATUS_CANCELLED
+            item.cancel_reason = IMPORT_CANCEL_REASON[:500]
+            cancelled_ids.append(item.id)
+        self.db.flush()
+        for aid in cancelled_ids:
+            refreshed = self.repo.get_assignment(aid)
+            if refreshed:
+                notifications.notify_substitute_cancelled(refreshed, reason=IMPORT_CANCEL_REASON)
+
+        slots_deleted = self.repo.delete_all_slots()
+
+        created = 0
+        for row in ready:
+            campus_id = row["campus_id"]
+            room_id = row["class_id"]
 
             slot, is_new, _is_updated = self.repo.upsert_slot(
                 teacher_id=row["teacher_id"],
-                class_id=room.id,
+                class_id=room_id,
                 campus_id=campus_id,
                 day_of_week=row["day"],
                 period=row["period"],
@@ -351,7 +381,9 @@ class TimetableService:
         if slots_deleted:
             parts.append(f"đã xóa {slots_deleted} tiết cũ")
         if cancelled_ids:
-            parts.append(f"hủy {len(cancelled_ids)} lịch dạy thay")
+            parts.append(f"hủy {len(cancelled_ids)} lịch dạy thay không còn khớp")
+        if kept_subs:
+            parts.append(f"giữ {kept_subs} lịch dạy thay vẫn đúng")
         summary = ", ".join(parts)
         message = (
             f"Đã thay toàn bộ TKB: {summary} ({campus_label})"
