@@ -30,6 +30,10 @@ IMPORT_CANCEL_REASON = (
     "Import TKB mới — tiết này không còn khớp thời khóa biểu mới"
 )
 
+MERGE_CANCEL_REASON = (
+    "Thêm/cập nhật TKB — tiết này không còn khớp thời khóa biểu của giáo viên"
+)
+
 _TRUSTED_NAME_MATCH = frozenset({CONFIDENCE_EXACT, CONFIDENCE_NICKNAME})
 
 
@@ -38,6 +42,81 @@ class TimetableService:
         self.db = db
         self.repo = TimetableRepository(db)
         self.campus_repo = CampusRepository(db)
+
+    def _resolve_import_rows(
+        self, parsed: List[dict], parse_errors: List[str]
+    ) -> tuple[List[dict], List[str], List[str], set, List[User]]:
+        """Match teachers + campus for parsed Excel rows. Returns ready, unmatched, errors, matched_ids, users."""
+        campus_by_code = {c.code.upper(): c for c in self.campus_repo.get_all()}
+        users = self.repo.list_users_for_match()
+        code_map = {
+            (u.teacher_code or "").upper(): u
+            for u in users
+            if u.teacher_code
+        }
+
+        unmatched: List[str] = []
+        errors = list(parse_errors)
+        ready: List[dict] = []
+        matched_ids: set = set()
+
+        for row in parsed:
+            label = row.get("teacher_code") or row.get("name") or f"dòng {row['row']}"
+
+            teacher = None
+            if row.get("teacher_code") and row["teacher_code"] in code_map:
+                teacher = code_map[row["teacher_code"]]
+            elif row.get("name"):
+                match = resolve_assignee_among(users, row["name"])
+                if match.user_id and match.confidence in _TRUSTED_NAME_MATCH:
+                    teacher = next((u for u in users if u.id == match.user_id), None)
+                elif match.confidence != CONFIDENCE_NONE:
+                    errors.append(
+                        f"Dòng {row['row']}: không khớp chắc giáo viên '{label}' "
+                        f"({match.confidence}) — điền Mã GV hoặc họ tên đầy đủ trùng hệ thống"
+                    )
+                    if label not in unmatched:
+                        unmatched.append(label)
+                    continue
+
+            if not teacher:
+                if label not in unmatched:
+                    unmatched.append(label)
+                errors.append(f"Dòng {row['row']}: không khớp giáo viên '{label}'")
+                continue
+
+            campus_code = (row.get("campus") or "").strip().upper()
+            campus = None
+            if campus_code:
+                campus = campus_by_code.get(campus_code)
+                if not campus:
+                    errors.append(
+                        f"Dòng {row['row']}: cơ sở '{campus_code}' không tồn tại"
+                    )
+                    continue
+            else:
+                campus = getattr(teacher, "campus", None)
+                if not campus and teacher.campus_id:
+                    campus = self.campus_repo.get_by_id(teacher.campus_id)
+                if not campus:
+                    errors.append(
+                        f"Dòng {row['row']}: GV '{label}' chưa gán cơ sở trên hệ thống "
+                        f"(ô Cơ sở trống)"
+                    )
+                    continue
+
+            matched_ids.add(teacher.id)
+            ready.append(
+                {
+                    **row,
+                    "teacher_id": teacher.id,
+                    "teacher_label": teacher.name or label,
+                    "campus_id": campus.id,
+                    "campus_code": campus.code,
+                }
+            )
+
+        return ready, unmatched, errors, matched_ids, users
 
     def _format_slot(self, slot: TimetableSlot) -> dict:
         teacher = slot.teacher
@@ -238,73 +317,9 @@ class TimetableService:
         if not parsed and parse_errors:
             raise ValueError(parse_errors[0])
 
-        campus_by_code = {c.code.upper(): c for c in self.campus_repo.get_all()}
-        users = self.repo.list_users_for_match()
-        code_map = {
-            (u.teacher_code or "").upper(): u
-            for u in users
-            if u.teacher_code
-        }
-
-        unmatched: List[str] = []
-        errors = list(parse_errors)
-        ready: List[dict] = []
-        matched_ids: set = set()
-
-        for row in parsed:
-            label = row.get("teacher_code") or row.get("name") or f"dòng {row['row']}"
-
-            teacher = None
-            if row.get("teacher_code") and row["teacher_code"] in code_map:
-                teacher = code_map[row["teacher_code"]]
-            elif row.get("name"):
-                match = resolve_assignee_among(users, row["name"])
-                if match.user_id and match.confidence in _TRUSTED_NAME_MATCH:
-                    teacher = next((u for u in users if u.id == match.user_id), None)
-                elif match.confidence != CONFIDENCE_NONE:
-                    errors.append(
-                        f"Dòng {row['row']}: không khớp chắc giáo viên '{label}' "
-                        f"({match.confidence}) — điền Mã GV hoặc họ tên đầy đủ trùng hệ thống"
-                    )
-                    if label not in unmatched:
-                        unmatched.append(label)
-                    continue
-
-            if not teacher:
-                if label not in unmatched:
-                    unmatched.append(label)
-                errors.append(f"Dòng {row['row']}: không khớp giáo viên '{label}'")
-                continue
-
-            campus_code = (row.get("campus") or "").strip().upper()
-            campus = None
-            if campus_code:
-                campus = campus_by_code.get(campus_code)
-                if not campus:
-                    errors.append(
-                        f"Dòng {row['row']}: cơ sở '{campus_code}' không tồn tại"
-                    )
-                    continue
-            else:
-                campus = getattr(teacher, "campus", None)
-                if not campus and teacher.campus_id:
-                    campus = self.campus_repo.get_by_id(teacher.campus_id)
-                if not campus:
-                    errors.append(
-                        f"Dòng {row['row']}: GV '{label}' chưa gán cơ sở trên hệ thống "
-                        f"(ô Cơ sở trống)"
-                    )
-                    continue
-
-            matched_ids.add(teacher.id)
-            ready.append(
-                {
-                    **row,
-                    "teacher_id": teacher.id,
-                    "campus_id": campus.id,
-                    "campus_code": campus.code,
-                }
-            )
+        ready, unmatched, errors, matched_ids, users = self._resolve_import_rows(
+            parsed, parse_errors
+        )
 
         if not ready:
             return {
@@ -420,6 +435,219 @@ class TimetableService:
         summary = ", ".join(parts)
         message = (
             f"Đã thay toàn bộ TKB: {summary} ({campus_label})"
+            + (f" — tạo mới {classes_created} lớp" if classes_created else "")
+        )
+        self.repo.upsert_import_meta(last_imported_at=imported_at, message=message)
+        self.db.commit()
+
+        return {
+            "campuses": campus_list,
+            "slots_created": created,
+            "slots_updated": 0,
+            "slots_deleted": slots_deleted,
+            "substitutes_cancelled": len(cancelled_ids),
+            "classes_created": classes_created,
+            "teachers_matched": len(matched_ids),
+            "teachers_unmatched": unmatched,
+            "errors": errors[:50],
+            "last_imported_at": imported_at,
+            "message": message,
+        }
+
+    def import_excel_merge(self, content: bytes, *, overwrite: bool = False) -> dict:
+        """Add/update TKB for teachers in the file only; leave other teachers untouched."""
+        from datetime import datetime, timezone
+
+        from app.services.substitute_service import date_to_day_of_week
+
+        parsed, parse_errors = parse_timetable_excel(content)
+        if not parsed and parse_errors:
+            raise ValueError(parse_errors[0])
+
+        ready, unmatched, errors, matched_ids, users = self._resolve_import_rows(
+            parsed, parse_errors
+        )
+
+        if not ready:
+            return {
+                "campuses": [],
+                "slots_created": 0,
+                "slots_updated": 0,
+                "slots_deleted": 0,
+                "substitutes_cancelled": 0,
+                "classes_created": 0,
+                "teachers_matched": 0,
+                "teachers_unmatched": unmatched,
+                "errors": errors[:50],
+                "last_imported_at": None,
+                "message": "Không thêm được tiết nào — kiểm tra mã GV / tên / cơ sở.",
+            }
+
+        by_teacher: dict = {}
+        teacher_labels: dict = {}
+        for row in ready:
+            tid = row["teacher_id"]
+            by_teacher.setdefault(tid, []).append(row)
+            teacher_labels[tid] = row.get("teacher_label") or str(tid)
+
+        existing_ids = self.repo.teacher_ids_having_slots(set(by_teacher.keys()))
+        skip_ids: set = set()
+        overwrite_ids: set = set()
+        new_ids: set = set()
+        for tid in by_teacher:
+            if tid in existing_ids:
+                if overwrite:
+                    overwrite_ids.add(tid)
+                else:
+                    skip_ids.add(tid)
+            else:
+                new_ids.add(tid)
+
+        write_ids = overwrite_ids | new_ids
+        write_rows = [r for r in ready if r["teacher_id"] in write_ids]
+
+        for tid in sorted(skip_ids, key=lambda i: teacher_labels.get(i, "")):
+            errors.append(
+                f"Đã bỏ qua GV '{teacher_labels.get(tid, tid)}' — đã có TKB "
+                f"(chọn ghi đè nếu muốn cập nhật)"
+            )
+
+        if not write_rows:
+            return {
+                "campuses": [],
+                "slots_created": 0,
+                "slots_updated": 0,
+                "slots_deleted": 0,
+                "substitutes_cancelled": 0,
+                "classes_created": 0,
+                "teachers_matched": len(matched_ids),
+                "teachers_unmatched": unmatched,
+                "errors": errors[:50],
+                "last_imported_at": None,
+                "message": (
+                    f"Không thêm tiết nào — đã bỏ qua {len(skip_ids)} GV đã có TKB. "
+                    "Chọn ghi đè để cập nhật."
+                ),
+            }
+
+        classes_created = 0
+        class_cache: dict = {}
+        campuses_affected: set = set()
+        new_slot_keys: set = set()
+
+        for row in write_rows:
+            campus_id = row["campus_id"]
+            campuses_affected.add(row["campus_code"])
+            class_key = (campus_id, row["class_name"])
+            if class_key not in class_cache:
+                room, is_new = self.repo.get_or_create_class(
+                    name=row["class_name"],
+                    campus_id=campus_id,
+                    grade=row.get("grade"),
+                )
+                class_cache[class_key] = room
+                if is_new:
+                    classes_created += 1
+            room = class_cache[class_key]
+            row["class_id"] = room.id
+            new_slot_keys.add(
+                (row["teacher_id"], row["day"], row["period"], room.id, campus_id)
+            )
+
+        notifications = NotificationService(self.db)
+        active_subs = self.repo.list_active_assignments_from(from_date=date.today())
+        cancelled_ids: List[int] = []
+        kept_subs = 0
+        for item in active_subs:
+            if item.absent_teacher_id not in write_ids:
+                continue
+            dow = date_to_day_of_week(item.date)
+            still_valid = (
+                dow is not None
+                and (
+                    item.absent_teacher_id,
+                    dow,
+                    item.period,
+                    item.class_id,
+                    item.campus_id,
+                )
+                in new_slot_keys
+            )
+            if still_valid:
+                kept_subs += 1
+                continue
+            item.status = SUB_STATUS_CANCELLED
+            item.cancel_reason = MERGE_CANCEL_REASON[:500]
+            cancelled_ids.append(item.id)
+        self.db.flush()
+        for aid in cancelled_ids:
+            refreshed = self.repo.get_assignment(aid)
+            if refreshed:
+                notifications.notify_substitute_cancelled(
+                    refreshed, reason=MERGE_CANCEL_REASON
+                )
+
+        slots_deleted = self.repo.delete_slots_for_teachers(list(overwrite_ids))
+
+        created = 0
+        for row in write_rows:
+            campus_id = row["campus_id"]
+            room_id = row["class_id"]
+            day = row["day"]
+            period = row["period"]
+            label = row.get("teacher_label") or row.get("name") or row.get("teacher_code")
+
+            class_conflict = self.repo.find_class_conflict(room_id, day, period)
+            if class_conflict:
+                other = class_conflict.teacher
+                other_name = other.name if other else f"#{class_conflict.teacher_id}"
+                errors.append(
+                    f"Dòng {row['row']}: lớp '{row['class_name']}' Thứ {day} tiết {period} "
+                    f"đã có GV '{other_name}' — không ghi đè"
+                )
+                continue
+
+            teacher_conflict = self.repo.find_teacher_conflict(
+                row["teacher_id"], day, period
+            )
+            if teacher_conflict:
+                errors.append(
+                    f"Dòng {row['row']}: GV '{label}' đã có tiết Thứ {day} tiết {period}"
+                )
+                continue
+
+            self.repo.create_slot(
+                teacher_id=row["teacher_id"],
+                class_id=room_id,
+                campus_id=campus_id,
+                day_of_week=day,
+                period=period,
+            )
+            created += 1
+
+            teacher = next((u for u in users if u.id == row["teacher_id"]), None)
+            if teacher and teacher.campus_id is None:
+                teacher.campus_id = campus_id
+
+        imported_at = datetime.now(timezone.utc)
+        campus_list = sorted(campuses_affected)
+        campus_label = ", ".join(campus_list) if campus_list else "—"
+        parts = [f"{created} tiết mới"]
+        if overwrite_ids:
+            parts.append(f"ghi đè {len(overwrite_ids)} GV")
+        if new_ids:
+            parts.append(f"thêm {len(new_ids)} GV mới")
+        if skip_ids:
+            parts.append(f"bỏ qua {len(skip_ids)} GV đã có TKB")
+        if slots_deleted:
+            parts.append(f"xóa {slots_deleted} tiết cũ của GV ghi đè")
+        if cancelled_ids:
+            parts.append(f"hủy {len(cancelled_ids)} lịch dạy thay không còn khớp")
+        if kept_subs:
+            parts.append(f"giữ {kept_subs} lịch dạy thay vẫn đúng")
+        summary = ", ".join(parts)
+        message = (
+            f"Đã thêm/cập nhật TKB (không xóa GV khác): {summary} ({campus_label})"
             + (f" — tạo mới {classes_created} lớp" if classes_created else "")
         )
         self.repo.upsert_import_meta(last_imported_at=imported_at, message=message)

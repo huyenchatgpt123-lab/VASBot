@@ -95,6 +95,8 @@ export default function TimetablePage() {
   const [error, setError] = useState('');
   const [actingId, setActingId] = useState<number | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [showMergeImport, setShowMergeImport] = useState(false);
+  const [mergeOverwrite, setMergeOverwrite] = useState(false);
   const [importResult, setImportResult] = useState<TimetableImportResult | null>(null);
   const [lastImportedAt, setLastImportedAt] = useState<string | null>(null);
   const { progress, start, finish, fail } = useOperationProgress();
@@ -157,6 +159,12 @@ export default function TimetablePage() {
   const openImport = () => {
     setImportResult(null);
     setShowImport(true);
+  };
+
+  const openMergeImport = () => {
+    setImportResult(null);
+    setMergeOverwrite(false);
+    setShowMergeImport(true);
   };
 
   const formatImportTime = (iso: string | null | undefined) => {
@@ -244,6 +252,46 @@ export default function TimetablePage() {
     } catch (err: unknown) {
       fail();
       toast.apiError(err, 'Import TKB thất bại');
+    }
+  };
+
+  const handleMergeImport = async (file: File) => {
+    const modeLabel = mergeOverwrite
+      ? 'GV đã có TKB sẽ bị GHI ĐÈ tiết cũ.'
+      : 'GV đã có TKB sẽ được BỎ QUA.';
+    if (!confirm(
+      `Thêm TKB từ "${file.name}"?\n\n`
+      + `Chỉ cập nhật giáo viên trong file — TKB của GV khác được giữ nguyên.\n`
+      + `${modeLabel}\n`
+      + `Trùng lớp với GV khác → báo lỗi, không ghi.\n`
+      + `Lịch dạy thay chỉ hủy nếu tiết của GV trong file đổi/mất.`,
+    )) {
+      return;
+    }
+    start('Đang thêm thời khóa biểu...');
+    setImportResult(null);
+    try {
+      const result = await substitutesApi.importTimetableMerge(file, mergeOverwrite);
+      setImportResult(result);
+      if (result.last_imported_at) {
+        setLastImportedAt(result.last_imported_at);
+      } else {
+        const meta = await substitutesApi.getTimetableLastImport().catch(() => null);
+        if (meta?.last_imported_at) setLastImportedAt(meta.last_imported_at);
+      }
+      await finish();
+      await load();
+      if (result.errors?.length) {
+        toast.error(
+          result.message || 'Thêm TKB hoàn tất có cảnh báo',
+          result.errors.slice(0, 8).join('\n'),
+        );
+      } else {
+        toast.success(result.message || 'Thêm TKB thành công');
+      }
+    } catch (err: unknown) {
+      fail();
+      toast.apiError(err, 'Thêm TKB thất bại');
     }
   };
 
@@ -407,6 +455,13 @@ export default function TimetablePage() {
               className="px-4 py-2 border border-primary-300 text-primary-700 bg-white hover:bg-primary-50 rounded-lg text-sm font-medium w-full sm:w-auto"
             >
               Import TKB
+            </button>
+            <button
+              type="button"
+              onClick={openMergeImport}
+              className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium w-full sm:w-auto"
+            >
+              Thêm TKB
             </button>
           </div>
         )}
@@ -824,6 +879,85 @@ export default function TimetablePage() {
               <button
                 type="button"
                 onClick={() => setShowImport(false)}
+                disabled={progress.visible}
+                className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMergeImport && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">Thêm TKB</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                File chỉ chứa các GV cần thêm/cập nhật. TKB của GV khác được giữ nguyên.
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-sky-900 bg-sky-50 border border-sky-100 rounded-lg px-3 py-2">
+                Không xóa toàn bộ TKB. Trùng lớp với GV khác → <strong>báo lỗi</strong>.
+                Lịch dạy thay chỉ hủy nếu tiết của GV trong file đổi/mất.
+              </p>
+              <fieldset className="text-sm space-y-2">
+                <legend className="font-medium text-gray-800">Nếu GV trong file đã có TKB</legend>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="mergeOverwrite"
+                    checked={!mergeOverwrite}
+                    onChange={() => setMergeOverwrite(false)}
+                    disabled={progress.visible}
+                    className="mt-0.5"
+                  />
+                  <span>Bỏ qua — giữ TKB cũ của GV đó</span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="mergeOverwrite"
+                    checked={mergeOverwrite}
+                    onChange={() => setMergeOverwrite(true)}
+                    disabled={progress.visible}
+                    className="mt-0.5"
+                  />
+                  <span>Ghi đè — xóa tiết cũ của đúng GV đó rồi ghi file mới</span>
+                </label>
+              </fieldset>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                disabled={progress.visible}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleMergeImport(f);
+                  e.target.value = '';
+                }}
+                className="block w-full text-sm"
+              />
+              <OperationProgressBar visible={progress.visible} percent={progress.percent} label={progress.label} />
+              {importResult && (
+                <div className="text-sm space-y-1">
+                  <p className="font-medium text-gray-900">{importResult.message}</p>
+                  {importResult.errors.length > 0 && (
+                    <details>
+                      <summary className="text-amber-800 cursor-pointer">{importResult.errors.length} cảnh báo</summary>
+                      <ul className="mt-1 list-disc pl-5 max-h-32 overflow-y-auto text-amber-800">
+                        {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowMergeImport(false)}
                 disabled={progress.visible}
                 className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
               >

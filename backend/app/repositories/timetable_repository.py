@@ -118,6 +118,28 @@ class TimetableRepository:
         self.db.flush()
         return count
 
+    def delete_slots_for_teachers(self, teacher_ids: List[int]) -> int:
+        if not teacher_ids:
+            return 0
+        count = (
+            self.db.query(TimetableSlot)
+            .filter(TimetableSlot.teacher_id.in_(teacher_ids))
+            .delete(synchronize_session=False)
+        )
+        self.db.flush()
+        return count
+
+    def teacher_ids_having_slots(self, teacher_ids: set) -> set:
+        if not teacher_ids:
+            return set()
+        rows = (
+            self.db.query(TimetableSlot.teacher_id)
+            .filter(TimetableSlot.teacher_id.in_(list(teacher_ids)))
+            .distinct()
+            .all()
+        )
+        return {r[0] for r in rows}
+
     def list_active_assignments_from(
         self, from_date: Optional[date] = None
     ) -> List[SubstituteAssignment]:

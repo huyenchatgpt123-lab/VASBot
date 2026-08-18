@@ -234,6 +234,20 @@ export const substitutesApi = {
     return res.data;
   },
 
+  importTimetableMerge: async (
+    file: File,
+    overwrite: boolean,
+  ): Promise<TimetableImportResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await api.post('/substitutes/timetable/import-merge', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { overwrite },
+      timeout: IMPORT_TIMEOUT_MS,
+    });
+    return res.data;
+  },
+
   getTimetableLastImport: async (): Promise<TimetableImportMeta> => {
     const res = await api.get('/substitutes/timetable/last-import');
     return res.data;
