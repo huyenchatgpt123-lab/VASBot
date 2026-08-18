@@ -228,7 +228,11 @@ class TimetableRepository:
         return self.db.query(User).filter(User.teacher_code == code).first()
 
     def list_users_for_match(self) -> List[User]:
-        return self.db.query(User).all()
+        return (
+            self.db.query(User)
+            .options(joinedload(User.campus))
+            .all()
+        )
 
     # ---- substitute assignments ----
 

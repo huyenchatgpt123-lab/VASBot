@@ -17,13 +17,20 @@ from app.models.user import User
 from app.repositories.campus_repository import CampusRepository
 from app.repositories.timetable_repository import TimetableRepository
 from app.services.notification_service import NotificationService
-from app.utils.name_matcher import resolve_assignee_among, CONFIDENCE_NONE
+from app.utils.name_matcher import (
+    resolve_assignee_among,
+    CONFIDENCE_NONE,
+    CONFIDENCE_EXACT,
+    CONFIDENCE_NICKNAME,
+)
 from app.utils.timetable_excel_import import parse_timetable_excel
 
 
 IMPORT_CANCEL_REASON = (
     "Import TKB mới — tiết này không còn khớp thời khóa biểu mới"
 )
+
+_TRUSTED_NAME_MATCH = frozenset({CONFIDENCE_EXACT, CONFIDENCE_NICKNAME})
 
 
 class TimetableService:
@@ -245,33 +252,59 @@ class TimetableService:
         matched_ids: set = set()
 
         for row in parsed:
-            campus_code = (row.get("campus") or "").strip().upper()
-            if not campus_code:
-                errors.append(f"Dòng {row['row']}: thiếu cơ sở")
-                continue
-
-            campus = campus_by_code.get(campus_code)
-            if not campus:
-                errors.append(f"Dòng {row['row']}: cơ sở '{campus_code}' không tồn tại")
-                continue
+            label = row.get("teacher_code") or row.get("name") or f"dòng {row['row']}"
 
             teacher = None
-            if row["teacher_code"] and row["teacher_code"] in code_map:
+            if row.get("teacher_code") and row["teacher_code"] in code_map:
                 teacher = code_map[row["teacher_code"]]
-            elif row["name"]:
+            elif row.get("name"):
                 match = resolve_assignee_among(users, row["name"])
-                if match.user_id and match.confidence != CONFIDENCE_NONE:
+                if match.user_id and match.confidence in _TRUSTED_NAME_MATCH:
                     teacher = next((u for u in users if u.id == match.user_id), None)
+                elif match.confidence != CONFIDENCE_NONE:
+                    errors.append(
+                        f"Dòng {row['row']}: không khớp chắc giáo viên '{label}' "
+                        f"({match.confidence}) — điền Mã GV hoặc họ tên đầy đủ trùng hệ thống"
+                    )
+                    if label not in unmatched:
+                        unmatched.append(label)
+                    continue
 
             if not teacher:
-                label = row["teacher_code"] or row["name"] or f"dòng {row['row']}"
                 if label not in unmatched:
                     unmatched.append(label)
                 errors.append(f"Dòng {row['row']}: không khớp giáo viên '{label}'")
                 continue
 
+            campus_code = (row.get("campus") or "").strip().upper()
+            campus = None
+            if campus_code:
+                campus = campus_by_code.get(campus_code)
+                if not campus:
+                    errors.append(
+                        f"Dòng {row['row']}: cơ sở '{campus_code}' không tồn tại"
+                    )
+                    continue
+            else:
+                campus = getattr(teacher, "campus", None)
+                if not campus and teacher.campus_id:
+                    campus = self.campus_repo.get_by_id(teacher.campus_id)
+                if not campus:
+                    errors.append(
+                        f"Dòng {row['row']}: GV '{label}' chưa gán cơ sở trên hệ thống "
+                        f"(ô Cơ sở trống)"
+                    )
+                    continue
+
             matched_ids.add(teacher.id)
-            ready.append({**row, "teacher_id": teacher.id, "campus_id": campus.id, "campus_code": campus.code})
+            ready.append(
+                {
+                    **row,
+                    "teacher_id": teacher.id,
+                    "campus_id": campus.id,
+                    "campus_code": campus.code,
+                }
+            )
 
         if not ready:
             return {

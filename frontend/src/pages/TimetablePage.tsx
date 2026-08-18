@@ -215,7 +215,8 @@ export default function TimetablePage() {
       + `Hệ thống sẽ XÓA TOÀN BỘ thời khóa biểu hiện tại rồi import file mới.\n`
       + `Lịch dạy thay (từ hôm nay) chỉ bị HỦY nếu không còn khớp TKB mới; `
       + `lịch vẫn đúng sẽ được giữ và có thông báo khi hủy.\n\n`
-      + `Mỗi dòng cần có cột Cơ sở (VA1, VA3, EMC…).`,
+      + `Giữ cột Mã GV và Cơ sở trên file. Ô trống: hệ thống lấy từ hồ sơ user `
+      + `(khớp Mã GV hoặc họ tên đầy đủ). Nên điền Mã GV nếu trùng tên.`,
     )) {
       return;
     }
@@ -782,7 +783,8 @@ export default function TimetablePage() {
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-lg font-semibold text-gray-900">Import TKB</h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                Dùng file lưới (Mã GV, Cơ sở, Giáo viên, Buổi dạy, Thứ 2–6). Tải mẫu trước khi import.
+                File lưới: Mã GV, Cơ sở, Giáo viên, Buổi dạy, Thứ 2–6. Ô Mã GV / Cơ sở trống
+                sẽ lấy từ hồ sơ user sau khi khớp.
               </p>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -790,6 +792,7 @@ export default function TimetablePage() {
                 Import sẽ <strong>xóa toàn bộ TKB cũ</strong> rồi ghi file mới.
                 Lịch dạy thay từ hôm nay chỉ <strong>hủy khi không còn khớp</strong> TKB mới
                 (có thông báo); lịch vẫn đúng được giữ.
+                {' '}Ô trống: khớp GV theo mã hoặc họ tên đầy đủ, cơ sở lấy từ hồ sơ nếu thiếu trên file.
               </p>
               <input
                 type="file"
