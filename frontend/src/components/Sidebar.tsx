@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { tasksApi } from '../api/tasks';
 import { feedbackApi } from '../api/feedback';
@@ -37,11 +37,19 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
-  const { isAdmin, canViewSubstitutesBoard, canImportTimetable, isBghOnly } = useAuth();
+  const { isAdmin, canViewSubstitutesBoard, canImportTimetable, isBghOnly, homePath } = useAuth();
+  const location = useLocation();
   const [taskCount, setTaskCount] = useState(0);
   const [subCount, setSubCount] = useState(0);
   const [hasTimetableAccess, setHasTimetableAccess] = useState(false);
   const [feedbackCount, setFeedbackCount] = useState(0);
+
+  const goHome = () => {
+    onClose();
+    if (location.pathname === homePath) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   useEffect(() => {
     if (isBghOnly) {
@@ -118,13 +126,18 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       }`}
     >
       <div className="px-4 py-4 sm:px-5 sm:py-5 border-b border-gray-100 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <img src="/logo.png" alt="VATask" className="w-9 h-9 rounded-lg object-cover shrink-0" />
-          <div className="min-w-0">
+        <Link
+          to={homePath}
+          onClick={goHome}
+          className="flex items-center gap-3 min-w-0 rounded-lg hover:bg-gray-50 transition-colors -ml-1 px-1 py-0.5"
+          aria-label="Về trang chủ"
+        >
+          <img src="/logo.png" alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" />
+          <div className="min-w-0 text-left">
             <h1 className="font-semibold text-base text-gray-900 tracking-tight">VATask</h1>
             <p className="text-[11px] text-gray-500 truncate">Việt Anh School</p>
           </div>
-        </div>
+        </Link>
         <button
           onClick={onClose}
           className="lg:hidden p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg"
