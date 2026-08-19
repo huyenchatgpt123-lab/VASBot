@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import {
+  getRememberedEmail,
+  getRememberMePreference,
+  setRememberedEmail,
+} from '../utils/authStorage';
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -19,8 +24,9 @@ function EyeIcon({ open }: { open: boolean }) {
 }
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => getRememberedEmail());
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => getRememberMePreference());
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
@@ -33,7 +39,12 @@ export default function LoginPage() {
     setShake(false);
     setLoading(true);
     try {
-      const user = await login(email, password);
+      const user = await login(email, password, rememberMe);
+      if (rememberMe) {
+        setRememberedEmail(email);
+      } else {
+        setRememberedEmail(null);
+      }
       if (user.must_change_password) {
         navigate('/change-password');
         return;
@@ -140,10 +151,19 @@ export default function LoginPage() {
                   <EyeIcon open={showPassword} />
                 </button>
               </div>
-              <div className="mt-2 text-right">
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  Ghi nhớ đăng nhập
+                </label>
                 <Link
                   to="/forgot-password"
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium whitespace-nowrap"
                 >
                   Quên mật khẩu?
                 </Link>

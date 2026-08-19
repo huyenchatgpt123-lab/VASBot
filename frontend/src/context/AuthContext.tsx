@@ -1,6 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { User, UserPermissions } from '../types';
 import { authApi } from '../api/auth';
+import {
+  clearAuthSession,
+  getToken,
+  setAuthSession,
+  setAuthUserJson,
+} from '../utils/authStorage';
 
 const defaultPermissions: UserPermissions = {
   can_upload: false,
@@ -22,7 +28,7 @@ interface ChangePasswordPayload {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string, remember?: boolean) => Promise<User>;
   changePassword: (data: ChangePasswordPayload) => Promise<User>;
   logout: () => void;
   isAdmin: boolean;
@@ -49,16 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (token) {
       authApi.getMe()
         .then((me) => {
           setUser(me);
-          localStorage.setItem('user', JSON.stringify(me));
+          setAuthUserJson(JSON.stringify(me));
         })
         .catch(() => {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+          clearAuthSession();
         })
         .finally(() => setLoading(false));
     } else {
@@ -66,10 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, remember = true) => {
     const data = await authApi.login(email, password);
-    localStorage.setItem('token', data.access_token);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    setAuthSession(data.access_token, JSON.stringify(data.user), remember);
     if (!data.user.must_change_password) {
       sessionStorage.setItem('showTaskWelcome', '1');
     }
@@ -79,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const changePassword = async (payload: ChangePasswordPayload) => {
     const updated = await authApi.changePassword(payload);
-    localStorage.setItem('user', JSON.stringify(updated));
+    setAuthUserJson(JSON.stringify(updated));
     setUser(updated);
     if (!updated.must_change_password) {
       sessionStorage.setItem('showTaskWelcome', '1');
@@ -88,8 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    clearAuthSession();
     setUser(null);
   };
 
