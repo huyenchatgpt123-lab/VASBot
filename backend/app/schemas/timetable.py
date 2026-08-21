@@ -62,6 +62,8 @@ class TimetableImportResult(BaseModel):
     teachers_matched: int
     teachers_unmatched: List[str] = []
     errors: List[str] = []
+    errors_truncated: bool = False
+    errors_omitted: int = 0
     last_imported_at: Optional[datetime] = None
     message: str
 

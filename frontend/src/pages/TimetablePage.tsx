@@ -224,7 +224,8 @@ export default function TimetablePage() {
       + `Lịch dạy thay (từ hôm nay) chỉ bị HỦY nếu không còn khớp TKB mới; `
       + `lịch vẫn đúng sẽ được giữ và có thông báo khi hủy.\n\n`
       + `Giữ cột Mã GV và Cơ sở trên file. Ô trống: hệ thống lấy từ hồ sơ user `
-      + `(khớp Mã GV hoặc họ tên đầy đủ). Nên điền Mã GV nếu trùng tên.`,
+      + `(khớp Mã GV hoặc họ tên đầy đủ). GV mới trên file: điền Mã GV hoặc để trống mã `
+      + `(không kéo mã GV phía trên). Nên điền Mã GV nếu trùng tên.`,
     )) {
       return;
     }
@@ -242,9 +243,10 @@ export default function TimetablePage() {
       await finish();
       await load();
       if (result.errors?.length) {
+        const n = result.errors.length + (result.errors_omitted || 0);
         toast.error(
           result.message || 'Import TKB hoàn tất có cảnh báo',
-          result.errors.slice(0, 8).join('\n'),
+          `Có ${n} lỗi/cảnh báo — xem panel chi tiết bên dưới.`,
         );
       } else {
         toast.success(result.message || 'Import TKB thành công');
@@ -282,9 +284,10 @@ export default function TimetablePage() {
       await finish();
       await load();
       if (result.errors?.length) {
+        const n = result.errors.length + (result.errors_omitted || 0);
         toast.error(
           result.message || 'Thêm TKB hoàn tất có cảnh báo',
-          result.errors.slice(0, 8).join('\n'),
+          `Có ${n} lỗi/cảnh báo — xem panel chi tiết bên dưới.`,
         );
       } else {
         toast.success(result.message || 'Thêm TKB thành công');
@@ -292,6 +295,31 @@ export default function TimetablePage() {
     } catch (err: unknown) {
       fail();
       toast.apiError(err, 'Thêm TKB thất bại');
+    }
+  };
+
+  const copyImportErrors = async () => {
+    if (!importResult) return;
+    const lines: string[] = [importResult.message];
+    if (importResult.campuses?.length) {
+      lines.push(`Cơ sở: ${importResult.campuses.join(', ')}`);
+    }
+    if (importResult.teachers_unmatched.length) {
+      lines.push('Chưa khớp:');
+      lines.push(...importResult.teachers_unmatched.map((n) => `- ${n}`));
+    }
+    if (importResult.errors.length) {
+      lines.push('Chi tiết lỗi:');
+      lines.push(...importResult.errors.map((e, i) => `${i + 1}. ${e}`));
+    }
+    if (importResult.errors_truncated && importResult.errors_omitted) {
+      lines.push(`… và ${importResult.errors_omitted} lỗi khác (đã cắt trên server).`);
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      toast.success('Đã sao chép lỗi vào clipboard');
+    } catch {
+      toast.error('Không sao chép được — hãy chọn và copy thủ công');
     }
   };
 
@@ -468,13 +496,76 @@ export default function TimetablePage() {
       </div>
 
       {importResult && (
-        <div className="mb-4 text-sm bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 space-y-1">
-          <p className="font-medium text-amber-900">{importResult.message}</p>
+        <div className="mb-4 text-sm bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+            <div className="min-w-0 space-y-1">
+              <p className="font-medium text-amber-950">{importResult.message}</p>
+              {importResult.campuses?.length > 0 && (
+                <p className="text-amber-800">
+                  Cơ sở trong lần import: {importResult.campuses.join(', ')}
+                </p>
+              )}
+              <p className="text-amber-800">
+                Khớp {importResult.teachers_matched} GV
+                {importResult.slots_created != null ? ` · ${importResult.slots_created} tiết mới` : ''}
+                {importResult.errors?.length
+                  ? ` · ${importResult.errors.length + (importResult.errors_omitted || 0)} lỗi/cảnh báo`
+                  : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              {(importResult.errors.length > 0 || importResult.teachers_unmatched.length > 0) && (
+                <button
+                  type="button"
+                  onClick={copyImportErrors}
+                  className="px-3 py-1.5 text-xs font-medium border border-amber-300 text-amber-900 bg-white hover:bg-amber-100 rounded-lg"
+                >
+                  Sao chép lỗi
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setImportResult(null)}
+                className="px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 rounded-lg"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+
           {importResult.teachers_unmatched.length > 0 && (
-            <p className="text-amber-800">
-              Chưa khớp: {importResult.teachers_unmatched.slice(0, 10).join(', ')}
-              {importResult.teachers_unmatched.length > 10 ? '…' : ''}
-            </p>
+            <div>
+              <p className="font-medium text-amber-900 mb-1">
+                Chưa khớp ({importResult.teachers_unmatched.length})
+              </p>
+              <ul className="list-disc pl-5 max-h-28 overflow-y-auto text-amber-900 space-y-0.5">
+                {importResult.teachers_unmatched.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {importResult.errors.length > 0 && (
+            <div>
+              <p className="font-medium text-amber-900 mb-1">
+                Chi tiết lỗi ({importResult.errors.length}
+                {importResult.errors_truncated && importResult.errors_omitted
+                  ? ` / còn cắt ${importResult.errors_omitted}`
+                  : ''}
+                )
+              </p>
+              <ul className="list-disc pl-5 max-h-56 overflow-y-auto text-amber-900 space-y-0.5 border border-amber-100 rounded-md bg-white/60 px-3 py-2">
+                {importResult.errors.map((e, i) => (
+                  <li key={`${i}-${e.slice(0, 24)}`}>{e}</li>
+                ))}
+              </ul>
+              {importResult.errors_truncated && !!importResult.errors_omitted && (
+                <p className="mt-1 text-xs text-amber-700">
+                  Server chỉ trả tối đa 200 lỗi; còn {importResult.errors_omitted} lỗi chưa hiện.
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -848,6 +939,7 @@ export default function TimetablePage() {
                 Lịch dạy thay từ hôm nay chỉ <strong>hủy khi không còn khớp</strong> TKB mới
                 (có thông báo); lịch vẫn đúng được giữ.
                 {' '}Ô trống: khớp GV theo mã hoặc họ tên đầy đủ, cơ sở lấy từ hồ sơ nếu thiếu trên file.
+                Đổi tên GV mới mà mã trống: không kéo mã / cơ sở của GV phía trên.
               </p>
               <input
                 type="file"
@@ -865,11 +957,19 @@ export default function TimetablePage() {
                 <div className="text-sm space-y-1">
                   <p className="font-medium text-gray-900">{importResult.message}</p>
                   {importResult.errors.length > 0 && (
-                    <details>
-                      <summary className="text-amber-800 cursor-pointer">{importResult.errors.length} cảnh báo</summary>
-                      <ul className="mt-1 list-disc pl-5 max-h-32 overflow-y-auto text-amber-800">
+                    <details open>
+                      <summary className="text-amber-800 cursor-pointer">
+                        {importResult.errors.length + (importResult.errors_omitted || 0)} cảnh báo
+                        (xem thêm panel trên trang)
+                      </summary>
+                      <ul className="mt-1 list-disc pl-5 max-h-48 overflow-y-auto text-amber-800">
                         {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
                       </ul>
+                      {importResult.errors_truncated && !!importResult.errors_omitted && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          Còn {importResult.errors_omitted} lỗi đã cắt — xem panel trên trang.
+                        </p>
+                      )}
                     </details>
                   )}
                 </div>
@@ -944,11 +1044,19 @@ export default function TimetablePage() {
                 <div className="text-sm space-y-1">
                   <p className="font-medium text-gray-900">{importResult.message}</p>
                   {importResult.errors.length > 0 && (
-                    <details>
-                      <summary className="text-amber-800 cursor-pointer">{importResult.errors.length} cảnh báo</summary>
-                      <ul className="mt-1 list-disc pl-5 max-h-32 overflow-y-auto text-amber-800">
+                    <details open>
+                      <summary className="text-amber-800 cursor-pointer">
+                        {importResult.errors.length + (importResult.errors_omitted || 0)} cảnh báo
+                        (xem thêm panel trên trang)
+                      </summary>
+                      <ul className="mt-1 list-disc pl-5 max-h-48 overflow-y-auto text-amber-800">
                         {importResult.errors.map((e, i) => <li key={i}>{e}</li>)}
                       </ul>
+                      {importResult.errors_truncated && !!importResult.errors_omitted && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          Còn {importResult.errors_omitted} lỗi đã cắt — xem panel trên trang.
+                        </p>
+                      )}
                     </details>
                   )}
                 </div>

@@ -96,6 +96,8 @@ export type TimetableImportResult = {
   teachers_matched: number;
   teachers_unmatched: string[];
   errors: string[];
+  errors_truncated?: boolean;
+  errors_omitted?: number;
   last_imported_at?: string | null;
   message: string;
 };

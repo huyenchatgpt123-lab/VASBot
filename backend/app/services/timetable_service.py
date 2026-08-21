@@ -34,7 +34,25 @@ MERGE_CANCEL_REASON = (
     "Thêm/cập nhật TKB — tiết này không còn khớp thời khóa biểu của giáo viên"
 )
 
+IMPORT_ERROR_LIMIT = 200
+
 _TRUSTED_NAME_MATCH = frozenset({CONFIDENCE_EXACT, CONFIDENCE_NICKNAME})
+
+
+def _pack_import_errors(errors: List[str]) -> tuple[List[str], bool, int]:
+    if len(errors) <= IMPORT_ERROR_LIMIT:
+        return errors, False, 0
+    omitted = len(errors) - IMPORT_ERROR_LIMIT
+    return errors[:IMPORT_ERROR_LIMIT], True, omitted
+
+
+def _error_payload(errors: List[str]) -> dict:
+    packed, truncated, omitted = _pack_import_errors(errors)
+    return {
+        "errors": packed,
+        "errors_truncated": truncated,
+        "errors_omitted": omitted,
+    }
 
 
 class TimetableService:
@@ -331,7 +349,7 @@ class TimetableService:
                 "classes_created": 0,
                 "teachers_matched": 0,
                 "teachers_unmatched": unmatched,
-                "errors": errors[:50],
+                **_error_payload(errors),
                 "last_imported_at": None,
                 "message": "Không import được tiết nào — kiểm tra mã GV / tên / cơ sở. TKB cũ được giữ nguyên.",
             }
@@ -449,7 +467,7 @@ class TimetableService:
             "classes_created": classes_created,
             "teachers_matched": len(matched_ids),
             "teachers_unmatched": unmatched,
-            "errors": errors[:50],
+            **_error_payload(errors),
             "last_imported_at": imported_at,
             "message": message,
         }
@@ -478,7 +496,7 @@ class TimetableService:
                 "classes_created": 0,
                 "teachers_matched": 0,
                 "teachers_unmatched": unmatched,
-                "errors": errors[:50],
+                **_error_payload(errors),
                 "last_imported_at": None,
                 "message": "Không thêm được tiết nào — kiểm tra mã GV / tên / cơ sở.",
             }
@@ -522,7 +540,7 @@ class TimetableService:
                 "classes_created": 0,
                 "teachers_matched": len(matched_ids),
                 "teachers_unmatched": unmatched,
-                "errors": errors[:50],
+                **_error_payload(errors),
                 "last_imported_at": None,
                 "message": (
                     f"Không thêm tiết nào — đã bỏ qua {len(skip_ids)} GV đã có TKB. "
@@ -662,7 +680,7 @@ class TimetableService:
             "classes_created": classes_created,
             "teachers_matched": len(matched_ids),
             "teachers_unmatched": unmatched,
-            "errors": errors[:50],
+            **_error_payload(errors),
             "last_imported_at": imported_at,
             "message": message,
         }

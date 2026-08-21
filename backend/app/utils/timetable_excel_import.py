@@ -282,21 +282,33 @@ def _parse_grid_rows(all_rows: List[Tuple[Any, ...]]) -> Tuple[List[Dict[str, An
                 return ""
             return _cell_to_str(row[col])
 
-        teacher_code = at(code_col).upper()
-        name = _strip_honorific(at(name_col))
-        campus = at(campus_col).upper()
+        teacher_code_raw = at(code_col).upper()
+        name_raw = _strip_honorific(at(name_col))
+        campus_raw = at(campus_col).upper()
         session = at(session_col)
 
-        if teacher_code:
-            last_code = teacher_code
-        else:
-            teacher_code = last_code
-        if name:
-            last_name = name
+        # New teacher row (name filled and different from previous): do not
+        # inherit previous teacher's code/campus — only Sáng→Chiều (empty name).
+        if name_raw:
+            if last_name and name_raw.casefold() != last_name.casefold():
+                if not teacher_code_raw:
+                    last_code = ""
+                if not campus_raw:
+                    last_campus = ""
+            last_name = name_raw
+            name = name_raw
         else:
             name = last_name
-        if campus:
-            last_campus = campus
+
+        if teacher_code_raw:
+            last_code = teacher_code_raw
+            teacher_code = teacher_code_raw
+        else:
+            teacher_code = last_code
+
+        if campus_raw:
+            last_campus = campus_raw
+            campus = campus_raw
         else:
             campus = last_campus
 
