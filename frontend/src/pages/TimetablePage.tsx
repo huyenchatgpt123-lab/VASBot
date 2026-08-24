@@ -11,6 +11,13 @@ import {
 import OperationProgressBar from '../components/OperationProgressBar';
 import { useOperationProgress } from '../hooks/useOperationProgress';
 import { useToast } from '../context/ToastContext';
+import {
+  periodHeader,
+  periodSessionBorderClass,
+  periodSessionLabelClass,
+  periodSessionListClass,
+  periodSessionRowClass,
+} from '../utils/periodDisplay';
 
 const DAYS = [
   { value: 2, label: 'Thứ 2' },
@@ -21,10 +28,6 @@ const DAYS = [
   { value: 7, label: 'Thứ 7' },
 ];
 const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
-
-function periodHeader(p: number): string {
-  return p <= 5 ? `S${p}` : `C${p - 5}`;
-}
 
 function toISODate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -779,17 +782,20 @@ export default function TimetablePage() {
                 </thead>
                 <tbody>
                   {PERIODS.map((period) => (
-                    <tr key={period}>
-                      <td className="px-2 py-2 text-center font-semibold text-primary-800 bg-primary-50 sticky left-0 z-10 border-t border-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.06)]">
+                    <tr key={period} className={periodSessionRowClass(period)}>
+                      <td
+                        className={`px-2 py-2 text-center font-semibold sticky left-0 z-10 shadow-[1px_0_0_0_rgba(0,0,0,0.06)] ${periodSessionLabelClass(period)} ${periodSessionBorderClass(period)}`}
+                      >
                         {periodHeader(period)}
                       </td>
                       {weekDates.map((d) => {
                         const slot = slotMap.get(`${d.value}-${period}`);
                         const sub = subByDatePeriod.get(`${d.date}-${period}`);
                         const cover = coverByDatePeriod.get(`${d.date}-${period}`);
+                        const cellBase = `px-1 py-1 align-top ${periodSessionBorderClass(period)} ${periodSessionRowClass(period)}`;
                         if (sub) {
                           return (
-                            <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
+                            <td key={d.value} className={cellBase}>
                               <div className="min-h-[52px] rounded-lg border border-green-300 bg-green-50 px-2 py-1.5">
                                 <span className="block font-medium text-green-950 break-words">
                                   {sub.class_name || '—'}
@@ -805,14 +811,14 @@ export default function TimetablePage() {
                         if (slot) {
                           const coverPending = cover?.status === 'pending';
                           return (
-                            <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
+                            <td key={d.value} className={cellBase}>
                               <div
                                 className={`min-h-[52px] rounded-lg border px-2 py-1.5 ${
                                   cover
                                     ? coverPending
                                       ? 'border-amber-300 bg-amber-50'
                                       : 'border-sky-300 bg-sky-50'
-                                    : 'border-gray-100 bg-white'
+                                    : 'border-gray-100 bg-white/80'
                                 }`}
                               >
                                 <span className="block font-medium text-gray-900 break-words">
@@ -840,8 +846,8 @@ export default function TimetablePage() {
                           );
                         }
                         return (
-                          <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
-                            <div className="min-h-[52px] rounded-lg bg-gray-50/60" />
+                          <td key={d.value} className={cellBase}>
+                            <div className="min-h-[52px] rounded-lg bg-gray-50/40" />
                           </td>
                         );
                       })}
@@ -875,39 +881,48 @@ export default function TimetablePage() {
                       <p className="px-3 py-3 text-sm text-gray-400 italic">Không có tiết</p>
                     ) : (
                       <ul className="divide-y divide-gray-100">
-                        {daySlots.map(({ period, slot, sub, cover }) => (
-                          <li
-                            key={period}
-                            className={`px-3 py-2 text-sm ${
-                              sub ? 'bg-green-50' : cover ? (cover.status === 'pending' ? 'bg-amber-50' : 'bg-sky-50') : ''
-                            }`}
-                          >
-                            <span className="font-semibold text-primary-800 mr-2">
-                              {periodHeader(period)}
-                            </span>
-                            {sub ? (
-                              <>
-                                <span className="font-medium text-green-950">{sub.class_name}</span>
-                                <span className="block text-xs text-green-800 mt-0.5">
-                                  Dạy thay · Thay {formatAbsentForUser(sub.absent_teacher_name, sub.absent_teacher_department)}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-gray-900">{slot?.class_name}</span>
-                                {cover && (
-                                  <span className="block text-xs text-sky-900 mt-0.5">
-                                    Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name, cover.substitute_teacher_department)}
-                                    {' · '}
-                                    <span className={cover.status === 'confirmed' ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
-                                      {statusLabelVi(cover.status)}
-                                    </span>
+                        {daySlots.map(({ period, slot, sub, cover }, idx) => {
+                          const prev = daySlots[idx - 1];
+                          const sessionBreak = Boolean(prev && prev.period <= 5 && period >= 6);
+                          const statusBg = sub
+                            ? 'bg-green-50'
+                            : cover
+                              ? (cover.status === 'pending' ? 'bg-amber-50' : 'bg-sky-50')
+                              : periodSessionListClass(period);
+                          return (
+                            <li
+                              key={period}
+                              className={`px-3 py-2 text-sm ${statusBg} ${
+                                sessionBreak ? 'border-t-2 border-slate-300' : ''
+                              }`}
+                            >
+                              <span className="font-semibold text-primary-800 mr-2">
+                                {periodHeader(period)}
+                              </span>
+                              {sub ? (
+                                <>
+                                  <span className="font-medium text-green-950">{sub.class_name}</span>
+                                  <span className="block text-xs text-green-800 mt-0.5">
+                                    Dạy thay · Thay {formatAbsentForUser(sub.absent_teacher_name, sub.absent_teacher_department)}
                                   </span>
-                                )}
-                              </>
-                            )}
-                          </li>
-                        ))}
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-gray-900">{slot?.class_name}</span>
+                                  {cover && (
+                                    <span className="block text-xs text-sky-900 mt-0.5">
+                                      Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name, cover.substitute_teacher_department)}
+                                      {' · '}
+                                      <span className={cover.status === 'confirmed' ? 'text-green-700 font-medium' : 'text-amber-700 font-medium'}>
+                                        {statusLabelVi(cover.status)}
+                                      </span>
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </section>

@@ -36,9 +36,7 @@ def session_for_period(period: int) -> str:
 
 
 def period_label(period: int) -> str:
-    if period in AFTERNOON_PERIODS:
-        return f"Chiều {period - 5}"
-    return f"Sáng {period}"
+    return f"tiết {period}"
 
 
 class ClassRoom(Base):

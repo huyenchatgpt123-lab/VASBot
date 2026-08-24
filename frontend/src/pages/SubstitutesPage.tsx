@@ -9,6 +9,13 @@ import {
   SuggestTeacherItem,
   TimetableSlot,
 } from '../api/substitutes';
+import {
+  periodHeader,
+  periodSessionBorderClass,
+  periodSessionLabelClass,
+  periodSessionListClass,
+  periodSessionRowClass,
+} from '../utils/periodDisplay';
 
 const DAYS = [
   { value: 2, label: 'Thứ 2' },
@@ -19,10 +26,6 @@ const DAYS = [
   { value: 7, label: 'Thứ 7' },
 ];
 const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
-
-function periodHeader(p: number): string {
-  return p <= 5 ? `S${p}` : `C${p - 5}`;
-}
 
 function apiErrorMessage(err: unknown, fallback: string): string {
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
@@ -643,16 +646,19 @@ export default function SubstitutesPage() {
               </thead>
               <tbody>
                 {PERIODS.map((period) => (
-                  <tr key={period}>
-                    <td className="px-2 py-2 text-center font-semibold text-primary-800 bg-primary-50 sticky left-0 z-10 border-t border-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.06)]">
+                  <tr key={period} className={periodSessionRowClass(period)}>
+                    <td
+                      className={`px-2 py-2 text-center font-semibold sticky left-0 z-10 shadow-[1px_0_0_0_rgba(0,0,0,0.06)] ${periodSessionLabelClass(period)} ${periodSessionBorderClass(period)}`}
+                    >
                       {periodHeader(period)}
                     </td>
                     {weekDates.map((d) => {
                       const cells = cellMap.get(`${d.date}-${period}`) || [];
+                      const cellBase = `px-1 py-1 align-top ${periodSessionBorderClass(period)} ${periodSessionRowClass(period)}`;
                       return (
-                        <td key={d.value} className="px-1 py-1 align-top border-t border-gray-100 bg-white">
+                        <td key={d.value} className={cellBase}>
                           {cells.length === 0 ? (
-                            <div className="min-h-[48px] rounded-lg bg-gray-50/60" />
+                            <div className="min-h-[48px] rounded-lg bg-gray-50/40" />
                           ) : (
                             <div className="space-y-1">
                               {cells.map((a) => (
@@ -698,25 +704,31 @@ export default function SubstitutesPage() {
                     <p className="px-3 py-4 text-sm text-gray-400 italic">Không có dạy thay</p>
                   ) : (
                     <ul className="divide-y divide-gray-100">
-                      {dayItems.map((a) => (
-                        <li key={a.id}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReassignDraft(null);
-                              setDetail(a);
-                            }}
-                            className={`w-full text-left px-3 py-2.5 ${boardStatusClass(a.status)}`}
-                          >
-                            <span className="text-primary-700 font-semibold mr-2">{a.period_label}</span>
-                            <span className="text-gray-900">{a.class_name}</span>
-                            <span className="block text-xs mt-0.5">
-                              {formatGvName(a.substitute_teacher_name)} thay {formatGvName(a.absent_teacher_name)}
-                            </span>
-                            <span className="block text-[10px] font-medium mt-0.5">{boardStatusLabel(a.status)}</span>
-                          </button>
-                        </li>
-                      ))}
+                      {dayItems.map((a, idx) => {
+                        const prev = dayItems[idx - 1];
+                        const sessionBreak = Boolean(prev && prev.period <= 5 && a.period >= 6);
+                        return (
+                          <li key={a.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReassignDraft(null);
+                                setDetail(a);
+                              }}
+                              className={`w-full text-left px-3 py-2.5 ${boardStatusClass(a.status)} ${periodSessionListClass(a.period)} ${
+                                sessionBreak ? 'border-t-2 border-slate-300' : ''
+                              }`}
+                            >
+                              <span className="text-primary-700 font-semibold mr-2">{a.period_label}</span>
+                              <span className="text-gray-900">{a.class_name}</span>
+                              <span className="block text-xs mt-0.5">
+                                {formatGvName(a.substitute_teacher_name)} thay {formatGvName(a.absent_teacher_name)}
+                              </span>
+                              <span className="block text-[10px] font-medium mt-0.5">{boardStatusLabel(a.status)}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </section>
@@ -825,16 +837,19 @@ export default function SubstitutesPage() {
                           </thead>
                           <tbody>
                             {PERIODS.map((period) => (
-                              <tr key={period}>
-                                <td className="px-2 py-1.5 text-center font-semibold text-sky-800 bg-sky-50 sticky left-0 z-10 border-t border-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.06)]">
+                              <tr key={period} className={periodSessionRowClass(period)}>
+                                <td
+                                  className={`px-2 py-1.5 text-center font-semibold sticky left-0 z-10 shadow-[1px_0_0_0_rgba(0,0,0,0.06)] ${periodSessionLabelClass(period)} ${periodSessionBorderClass(period)}`}
+                                >
                                   {periodHeader(period)}
                                 </td>
                                 {createWeekDates.map((d) => {
                                   const slot = teacherSlotMap.get(`${d.value}-${period}`);
+                                  const cellBase = `px-1 py-1 ${periodSessionBorderClass(period)} ${periodSessionRowClass(period)}`;
                                   if (!slot) {
                                     return (
-                                      <td key={d.value} className="px-1 py-1 border-t border-gray-100 bg-white">
-                                        <div className="min-h-[40px] rounded-lg bg-gray-50/80" />
+                                      <td key={d.value} className={cellBase}>
+                                        <div className="min-h-[40px] rounded-lg bg-gray-50/50" />
                                       </td>
                                     );
                                   }
@@ -844,7 +859,7 @@ export default function SubstitutesPage() {
                                   const meta = metaByDate.get(key);
                                   const already = Boolean(meta?.already_assigned);
                                   return (
-                                    <td key={d.value} className="px-1 py-1 border-t border-gray-100 bg-white">
+                                    <td key={d.value} className={cellBase}>
                                       <button
                                         type="button"
                                         onClick={() => toggleSlotCell(d.value, period, d.date)}
