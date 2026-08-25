@@ -85,6 +85,41 @@ def upload_document_file(file_content: bytes, filename: str) -> str:
     return filepath
 
 
+def _resource_type_for_feedback(filename: str) -> str:
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        return "image"
+    if ext in {".mp4", ".webm", ".mov", ".m4v"}:
+        return "video"
+    return "raw"
+
+
+def upload_feedback_file(file_content: bytes, filename: str) -> str:
+    """Store feedback evidence under vabot/feedback — separate from documents."""
+    if use_cloudinary():
+        _configure_cloudinary()
+        resource_type = _resource_type_for_feedback(filename)
+        base_name = os.path.splitext(filename)[0]
+        public_id = f"{uuid.uuid4()}_{base_name}"
+        result = cloudinary.uploader.upload(
+            file_content,
+            folder="vabot/feedback",
+            public_id=public_id,
+            resource_type=resource_type,
+            overwrite=True,
+        )
+        stored_type = result.get("resource_type", resource_type)
+        return storage_ref(stored_type, result["public_id"])
+
+    feedback_dir = os.path.join(settings.UPLOAD_DIR, "feedback")
+    os.makedirs(feedback_dir, exist_ok=True)
+    safe_filename = f"{uuid.uuid4()}_{filename}"
+    filepath = os.path.join(feedback_dir, safe_filename)
+    with open(filepath, "wb") as f:
+        f.write(file_content)
+    return filepath
+
+
 def delete_stored_file(filepath: str) -> None:
     kind, resource_type, ref = parse_storage_ref(filepath)
     if kind == "cloudinary":

@@ -1,5 +1,47 @@
 import { useState, useEffect } from 'react';
-import { feedbackApi, FeedbackItem } from '../api/feedback';
+import { feedbackApi, FeedbackItem, formatFileSize } from '../api/feedback';
+
+function FeedbackAttachments({
+  feedbackId,
+  attachments,
+}: {
+  feedbackId: number;
+  attachments?: FeedbackItem['attachments'];
+}) {
+  if (!attachments?.length) return null;
+  return (
+    <ul className="mt-2 space-y-1">
+      {attachments.map((a) => {
+        const isMedia = (a.content_type || '').startsWith('image/') || (a.content_type || '').startsWith('video/')
+          || /\.(jpe?g|png|webp|gif|mp4|webm|mov|m4v)$/i.test(a.filename);
+        return (
+          <li key={a.id} className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-gray-700 truncate max-w-[240px]" title={a.filename}>
+              📎 {a.filename}
+            </span>
+            <span className="text-gray-400">{formatFileSize(a.size_bytes)}</span>
+            {isMedia && (
+              <button
+                type="button"
+                onClick={() => feedbackApi.openAttachment(feedbackId, a.id).catch(() => alert('Không mở được file'))}
+                className="text-primary-600 hover:underline font-medium"
+              >
+                Xem
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => feedbackApi.downloadAttachment(feedbackId, a.id, a.filename).catch(() => alert('Không tải được file'))}
+              className="text-primary-600 hover:underline font-medium"
+            >
+              Tải
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export default function AdminFeedbackView() {
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
@@ -68,6 +110,7 @@ export default function AdminFeedbackView() {
                       )}
                     </div>
                     <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{fb.content}</p>
+                    <FeedbackAttachments feedbackId={fb.id} attachments={fb.attachments} />
                     <p className="text-xs text-gray-400 mt-2">
                       {new Date(fb.created_at).toLocaleString('vi-VN')}
                     </p>

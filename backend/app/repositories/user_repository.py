@@ -217,6 +217,26 @@ class UserRepository:
             synchronize_session=False,
         )
 
+        # Feedback + evidence files
+        from app.models.feedback import FeedbackAttachment
+        from app.services.storage_service import delete_stored_file
+
+        user_feedbacks = self.db.query(Feedback).filter(Feedback.user_id == user_id).all()
+        fb_ids = [f.id for f in user_feedbacks]
+        if fb_ids:
+            attachments = (
+                self.db.query(FeedbackAttachment)
+                .filter(FeedbackAttachment.feedback_id.in_(fb_ids))
+                .all()
+            )
+            for att in attachments:
+                try:
+                    delete_stored_file(att.storage_path)
+                except Exception:
+                    pass
+            self.db.query(FeedbackAttachment).filter(
+                FeedbackAttachment.feedback_id.in_(fb_ids)
+            ).delete(synchronize_session=False)
         self.db.query(Feedback).filter(Feedback.user_id == user_id).delete(
             synchronize_session=False,
         )
