@@ -256,7 +256,7 @@ export default function SubstitutesPage() {
         <span className="min-w-0 flex-1">
           <span className="block font-medium text-gray-900 text-xs leading-snug truncate">
             {a.class_name || '—'}
-            <span className="font-normal text-gray-600"> · {formatGvName(a.substitute_teacher_name)}</span>
+            <span className="font-normal text-gray-600"> · {formatGvName(a.absent_teacher_name)}</span>
           </span>
         </span>
       </span>
@@ -779,11 +779,11 @@ export default function SubstitutesPage() {
                                 <span className="text-primary-700 font-semibold">{a.period_label}</span>
                                 <span className="text-gray-900 truncate">
                                   {a.class_name}
-                                  <span className="text-gray-600 font-normal"> · {formatGvName(a.substitute_teacher_name)}</span>
+                                  <span className="text-gray-600 font-normal"> · {formatGvName(a.absent_teacher_name)}</span>
                                 </span>
                               </span>
                               <span className="block text-[10px] text-gray-500 mt-0.5 pl-3">
-                                {boardStatusLabel(a.status)} · Thay {formatGvName(a.absent_teacher_name)}
+                                {boardStatusLabel(a.status)}
                               </span>
                             </button>
                           </li>
@@ -1159,11 +1159,11 @@ export default function SubstitutesPage() {
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${boardStatusDot(a.status)}`} aria-hidden />
                       <span className="font-medium text-gray-900 text-sm">
                         {a.class_name}
-                        <span className="font-normal text-gray-600"> · {formatGvName(a.substitute_teacher_name)}</span>
+                        <span className="font-normal text-gray-600"> · {formatGvName(a.absent_teacher_name)}</span>
                       </span>
                     </span>
                     <span className="block text-[11px] text-gray-500 mt-0.5 pl-3">
-                      {boardStatusLabel(a.status)} · Thay {formatGvName(a.absent_teacher_name)}
+                      {boardStatusLabel(a.status)}
                     </span>
                   </button>
                 </li>
@@ -1194,20 +1194,20 @@ export default function SubstitutesPage() {
               <p><span className="text-gray-500">Lớp:</span> {detail.class_name}</p>
               <p><span className="text-gray-500">Cơ sở:</span> {detail.campus_code || '—'}</p>
               <p><span className="text-gray-500">GV nghỉ:</span> {formatGvName(detail.absent_teacher_name)}</p>
-              <p>
-                <span className="text-gray-500">GV dạy thay:</span>{' '}
+              <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sky-950">
+                <span className="text-sky-700">GV dạy thay:</span>{' '}
                 {reassignDraft ? (
                   <>
-                    <span className="line-through text-gray-400 mr-1">
+                    <span className="line-through text-sky-400/80 mr-1">
                       {formatGvName(detail.substitute_teacher_name)}
                     </span>
-                    <span className="font-medium text-primary-800">
+                    <span className="font-semibold">
                       {formatGvName(reassignDraft.name)}
                     </span>
                     <span className="ml-1 text-[11px] text-amber-700">(chưa cập nhật)</span>
                   </>
                 ) : (
-                  formatGvName(detail.substitute_teacher_name)
+                  <span className="font-semibold">{formatGvName(detail.substitute_teacher_name)}</span>
                 )}
               </p>
               <p>
