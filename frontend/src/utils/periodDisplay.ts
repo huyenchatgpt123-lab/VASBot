@@ -1,7 +1,7 @@
 /** Display helpers for weekly period rows (1–5 morning, 6–8 afternoon). */
 
 export function periodHeader(p: number): string {
-  return `tiết ${p}`;
+  return `Tiết ${p}`;
 }
 
 export function isAfternoonPeriod(p: number): boolean {

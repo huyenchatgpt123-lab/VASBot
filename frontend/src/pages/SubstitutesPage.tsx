@@ -98,8 +98,13 @@ export default function SubstitutesPage() {
   const readOnly = isTeamLead && !canAccessSubstitutes;
   const [campuses, setCampuses] = useState<{ id: number; code: string; name: string }[]>([]);
   const [campusId, setCampusId] = useState<number | ''>('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'pending' | 'confirmed' | 'rejected'>('');
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [assignments, setAssignments] = useState<SubstituteAssignment[]>([]);
+  const [cellOverflow, setCellOverflow] = useState<{
+    label: string;
+    items: SubstituteAssignment[];
+  } | null>(null);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -196,13 +201,67 @@ export default function SubstitutesPage() {
   const cellMap = useMemo(() => {
     const map = new Map<string, SubstituteAssignment[]>();
     for (const a of assignments) {
+      if (statusFilter && a.status !== statusFilter) continue;
       const key = `${a.date}-${a.period}`;
       const list = map.get(key) || [];
       list.push(a);
       map.set(key, list);
     }
     return map;
-  }, [assignments]);
+  }, [assignments, statusFilter]);
+
+  const boardAssignments = useMemo(
+    () => (statusFilter ? assignments.filter((a) => a.status === statusFilter) : assignments),
+    [assignments, statusFilter],
+  );
+
+  const CELL_PREVIEW = 3;
+
+  const openAssignmentDetail = (a: SubstituteAssignment) => {
+    setReassignDraft(null);
+    setCellOverflow(null);
+    setDetail(a);
+  };
+
+  const boardStatusClass = (status: string) => {
+    if (status === 'pending') return 'border-l-orange-400 border-orange-200 bg-orange-50/90 hover:bg-orange-100';
+    if (status === 'confirmed') return 'border-l-green-500 border-green-200 bg-green-50/90 hover:bg-green-100';
+    if (status === 'rejected') return 'border-l-red-400 border-red-200 bg-red-50/90 hover:bg-red-100';
+    return 'border-l-gray-300 border-gray-200 bg-gray-50 hover:bg-gray-100';
+  };
+
+  const boardStatusDot = (status: string) => {
+    if (status === 'pending') return 'bg-orange-400';
+    if (status === 'confirmed') return 'bg-green-500';
+    if (status === 'rejected') return 'bg-red-400';
+    return 'bg-gray-400';
+  };
+
+  const boardStatusLabel = (status: string) => {
+    if (status === 'pending') return 'Chờ xác nhận';
+    if (status === 'confirmed') return 'Đã xác nhận';
+    if (status === 'rejected') return 'Từ chối';
+    return status;
+  };
+
+  const CompactBoardCard = ({ a }: { a: SubstituteAssignment }) => (
+    <button
+      type="button"
+      onClick={() => openAssignmentDetail(a)}
+      title={`${a.class_name} · ${formatGvName(a.substitute_teacher_name)} · ${boardStatusLabel(a.status)}`}
+      className={`w-full text-left rounded-md border border-l-4 px-1.5 py-1 ${boardStatusClass(a.status)}`}
+    >
+      <span className="flex items-start gap-1.5 min-w-0">
+        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${boardStatusDot(a.status)}`} aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium text-gray-900 text-xs leading-snug truncate">
+            {a.class_name || '—'}
+            <span className="font-normal text-gray-600"> · {formatGvName(a.substitute_teacher_name)}</span>
+          </span>
+        </span>
+      </span>
+    </button>
+  );
 
   const teacherSlotMap = useMemo(() => {
     const map = new Map<string, TimetableSlot>();
@@ -539,20 +598,6 @@ export default function SubstitutesPage() {
     }
   };
 
-  const boardStatusClass = (status: string) => {
-    if (status === 'pending') return 'border-orange-300 bg-orange-50 hover:bg-orange-100';
-    if (status === 'confirmed') return 'border-green-300 bg-green-50 hover:bg-green-100';
-    if (status === 'rejected') return 'border-red-300 bg-red-50 hover:bg-red-100';
-    return 'border-gray-200 bg-gray-50 hover:bg-gray-100';
-  };
-
-  const boardStatusLabel = (status: string) => {
-    if (status === 'pending') return 'Chờ xác nhận';
-    if (status === 'confirmed') return 'Đã xác nhận';
-    if (status === 'rejected') return 'Từ chối';
-    return status;
-  };
-
   const removeRow = (key: string) => {
     setRows((prev) => prev.filter((r) => r.key !== key));
     if (pickRow?.key === key) {
@@ -603,6 +648,16 @@ export default function SubstitutesPage() {
           {campuses.map((c) => (
             <option key={c.id} value={c.id}>{c.code}</option>
           ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as '' | 'pending' | 'confirmed' | 'rejected')}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+        >
+          <option value="">Tất cả trạng thái</option>
+          <option value="pending">Chờ xác nhận</option>
+          <option value="confirmed">Đã xác nhận</option>
+          <option value="rejected">Từ chối</option>
         </select>
         <button type="button" onClick={() => setWeekStart((w) => addDays(w, -7))} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
           ← Tuần trước
@@ -655,28 +710,31 @@ export default function SubstitutesPage() {
                     {weekDates.map((d) => {
                       const cells = cellMap.get(`${d.date}-${period}`) || [];
                       const cellBase = `px-1 py-1 align-top ${periodSessionBorderClass(period)} ${periodSessionRowClass(period)}`;
+                      const visible = cells.slice(0, CELL_PREVIEW);
+                      const overflow = cells.length - visible.length;
                       return (
                         <td key={d.value} className={cellBase}>
                           {cells.length === 0 ? (
                             <div className="min-h-[48px] rounded-lg bg-gray-50/40" />
                           ) : (
                             <div className="space-y-1">
-                              {cells.map((a) => (
-                                <button
-                                  key={a.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setReassignDraft(null);
-                                    setDetail(a);
-                                  }}
-                                  className={`w-full text-left rounded-lg border px-2 py-1.5 ${boardStatusClass(a.status)}`}
-                                >
-                                  <span className="block font-medium text-gray-900 break-words">{a.class_name}</span>
-                                  <span className="block text-[11px] text-gray-800 truncate">{formatGvName(a.substitute_teacher_name)}</span>
-                                  <span className="block text-[10px] text-gray-500 truncate">Thay {formatGvName(a.absent_teacher_name)}</span>
-                                  <span className="block text-[10px] font-medium mt-0.5">{boardStatusLabel(a.status)}</span>
-                                </button>
+                              {visible.map((a) => (
+                                <CompactBoardCard key={a.id} a={a} />
                               ))}
+                              {overflow > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCellOverflow({
+                                      label: `${d.label} · ${periodHeader(period)} · ${d.dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`,
+                                      items: cells,
+                                    })
+                                  }
+                                  className="w-full text-center text-[11px] font-semibold text-primary-700 bg-white/80 border border-primary-200 rounded-md py-1 hover:bg-primary-50"
+                                >
+                                  +{overflow} lịch nữa
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>
@@ -691,7 +749,7 @@ export default function SubstitutesPage() {
           {/* Mobile: 1 vùng scroll, tiêu đề ngày sticky khi lướt nhiều lịch */}
           <div className="md:hidden max-h-[min(70vh,720px)] overflow-y-auto border border-gray-200 rounded-xl overscroll-contain bg-white">
             {weekDates.map((d) => {
-              const dayItems = assignments.filter((a) => a.date === d.date);
+              const dayItems = boardAssignments.filter((a) => a.date === d.date);
               return (
                 <section key={d.value} className="border-b border-gray-100 last:border-b-0">
                   <div className="sticky top-0 z-10 px-3 py-2 bg-primary-700 text-white text-sm font-medium shadow-sm">
@@ -711,20 +769,22 @@ export default function SubstitutesPage() {
                           <li key={a.id}>
                             <button
                               type="button"
-                              onClick={() => {
-                                setReassignDraft(null);
-                                setDetail(a);
-                              }}
-                              className={`w-full text-left px-3 py-2.5 ${boardStatusClass(a.status)} ${periodSessionListClass(a.period)} ${
+                              onClick={() => openAssignmentDetail(a)}
+                              className={`w-full text-left px-3 py-2 border-l-4 ${boardStatusClass(a.status)} ${periodSessionListClass(a.period)} ${
                                 sessionBreak ? 'border-t-2 border-slate-300' : ''
                               }`}
                             >
-                              <span className="text-primary-700 font-semibold mr-2">{a.period_label}</span>
-                              <span className="text-gray-900">{a.class_name}</span>
-                              <span className="block text-xs mt-0.5">
-                                {formatGvName(a.substitute_teacher_name)} thay {formatGvName(a.absent_teacher_name)}
+                              <span className="flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${boardStatusDot(a.status)}`} aria-hidden />
+                                <span className="text-primary-700 font-semibold">{a.period_label}</span>
+                                <span className="text-gray-900 truncate">
+                                  {a.class_name}
+                                  <span className="text-gray-600 font-normal"> · {formatGvName(a.substitute_teacher_name)}</span>
+                                </span>
                               </span>
-                              <span className="block text-[10px] font-medium mt-0.5">{boardStatusLabel(a.status)}</span>
+                              <span className="block text-[10px] text-gray-500 mt-0.5 pl-3">
+                                {boardStatusLabel(a.status)} · Thay {formatGvName(a.absent_teacher_name)}
+                              </span>
                             </button>
                           </li>
                         );
@@ -736,7 +796,7 @@ export default function SubstitutesPage() {
             })}
           </div>
           <p className="mt-3 text-xs text-gray-500">
-            Cam = chờ xác nhận · Xanh = đã xác nhận · Đỏ = từ chối. Bấm ô để xem / hủy.
+            Cam = chờ xác nhận · Xanh = đã xác nhận · Đỏ = từ chối. Ô đông: hiện 3 lịch, bấm +N để xem hết. Bấm ô để xem / hủy.
           </p>
         </>
       )}
@@ -1065,6 +1125,50 @@ export default function SubstitutesPage() {
                 {reassignDetail ? 'Hủy' : 'Đóng'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {cellOverflow && (
+        <div className="fixed inset-0 z-[64] flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden max-h-[85vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3 shrink-0">
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-gray-900">Lịch trong ô</h2>
+                <p className="text-sm text-gray-500 mt-0.5 truncate">{cellOverflow.label}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{cellOverflow.items.length} lịch</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCellOverflow(null)}
+                className="shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 text-xl leading-none"
+                aria-label="Đóng"
+              >
+                ×
+              </button>
+            </div>
+            <ul className="overflow-y-auto px-3 py-3 space-y-1.5">
+              {cellOverflow.items.map((a) => (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => openAssignmentDetail(a)}
+                    className={`w-full text-left rounded-lg border border-l-4 px-3 py-2 ${boardStatusClass(a.status)}`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${boardStatusDot(a.status)}`} aria-hidden />
+                      <span className="font-medium text-gray-900 text-sm">
+                        {a.class_name}
+                        <span className="font-normal text-gray-600"> · {formatGvName(a.substitute_teacher_name)}</span>
+                      </span>
+                    </span>
+                    <span className="block text-[11px] text-gray-500 mt-0.5 pl-3">
+                      {boardStatusLabel(a.status)} · Thay {formatGvName(a.absent_teacher_name)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}

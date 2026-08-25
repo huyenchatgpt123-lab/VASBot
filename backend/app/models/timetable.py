@@ -36,7 +36,7 @@ def session_for_period(period: int) -> str:
 
 
 def period_label(period: int) -> str:
-    return f"tiết {period}"
+    return f"Tiết {period}"
 
 
 class ClassRoom(Base):
