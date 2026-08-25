@@ -833,9 +833,11 @@ export default function TimetablePage() {
                                       Người dạy thay: {formatCoverTeacher(cover.substitute_teacher_name, cover.substitute_teacher_department)}
                                     </span>
                                     <span
-                                      className={`block text-[10px] font-medium ${
-                                        coverPending ? 'text-amber-800' : 'text-green-800'
-                                      }`}
+                                      className={
+                                        coverPending
+                                          ? 'block text-[10px] font-medium text-amber-800'
+                                          : 'block text-[10px] font-medium text-green-800'
+                                      }
                                     >
                                       {statusLabelVi(cover.status)}
                                     </span>
